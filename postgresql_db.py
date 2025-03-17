@@ -1,10 +1,13 @@
 import streamlit as st
 import psycopg2
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 def get_connection():
     """Function to establish a connection to the Heroku PostgreSQL database."""
-    DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://u6vgnrtb422bju:p593a702cae233b84c4a2a29ad9f8f13116fa3a407ea6b2ed91d97280a5e17d9c@c8lj070d5ubs83.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/d67n79bcvb33fq")  
+    DATABASE_URL = os.getenv("pulseai-db-url")  
     try:
         # Enforce SSL mode for Heroku PostgreSQL
         conn = psycopg2.connect(DATABASE_URL, sslmode='require')
@@ -19,9 +22,9 @@ def create_indisponibility_tables():
         try:
             cursor = conn.cursor()
             
-            # Create indisponibility_solina table
+            # Create indisponibility_kahraman table
             cursor.execute('''
-                CREATE TABLE IF NOT EXISTS indisponibility_solina (
+                CREATE TABLE IF NOT EXISTS indisponibility_kahraman (
                     id SERIAL PRIMARY KEY,
                     type VARCHAR(255) NOT NULL,
                     start_date DATE NOT NULL,
@@ -31,33 +34,7 @@ def create_indisponibility_tables():
                     limitation_percentage FLOAT NOT NULL
                 );
             ''')
-            
-            # Create indisponibility_astro table
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS indisponibility_astro (
-                    id SERIAL PRIMARY KEY,
-                    type VARCHAR(255) NOT NULL,
-                    start_date DATE NOT NULL,
-                    end_date DATE NOT NULL,
-                    interval_from INT NOT NULL,
-                    interval_to INT NOT NULL,
-                    limitation_percentage FLOAT NOT NULL
-                );
-            ''')
-            
-            # Create indisponibility_imperial table
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS indisponibility_imperial (
-                    id SERIAL PRIMARY KEY,
-                    type VARCHAR(255) NOT NULL,
-                    start_date DATE NOT NULL,
-                    end_date DATE NOT NULL,
-                    interval_from INT NOT NULL,
-                    interval_to INT NOT NULL,
-                    limitation_percentage FLOAT NOT NULL
-                );
-            ''')
-            
+
             conn.commit()
             cursor.close()
             conn.close()

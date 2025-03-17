@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 import os
 from dotenv import load_dotenv
 import wapi
@@ -16,6 +16,7 @@ import zipfile
 import joblib
 import xlsxwriter
 from datetime import date
+import pytz
 
 # ================================================================================VOLUE data==================================================================================
 
@@ -589,22 +590,28 @@ def process_file_consumption_transelectrica(file_path):
 def process_file_production_transelectrica(file_path):
 	# Read the CSV, skipping initial rows to get to the actual data
 	data_cleaned = pd.read_excel(file_path, skiprows=4)
-	
+	st.write(data_cleaned)
 	# Drop the unnecessary first two columns (index and "Update day")
 	data_cleaned.drop(columns=data_cleaned.columns[:2], inplace=True)
 	
 	# Rename the first column to 'Date' for clarity
 	data_cleaned.rename(columns={data_cleaned.columns[0]: 'Date'}, inplace=True)
 	
-	# Melt the dataframe to transform it from wide to long format
-	data_long = data_cleaned.melt(id_vars=["Date"], var_name="Interval", value_name="Value")
+	# Determine the number of intervals (subtracting the Date column)
+	num_intervals = len(data_cleaned.columns) - 1
 	
-	# Extract interval numbers from the Interval column (e.g., "int1" -> 1)
-	data_long["Interval"] = data_long["Interval"].str.extract('(\d+)').astype(int)
+	# Generate interval identifiers
+	interval_identifiers = list(range(1, num_intervals + 1))
+	
+	# Melt the dataframe with generated interval identifiers
+	data_long = pd.melt(data_cleaned, id_vars=["Date"], value_vars=data_cleaned.columns[1:], var_name="Interval", value_name="Value")
+	
+	# Replace the interval column with the generated interval identifiers
+	data_long['Interval'] = data_long.groupby('Date').cumcount() + 1
 	
 	# Sort values to ensure they are ordered by Date and then by Interval
 	data_long_sorted = data_long.sort_values(by=["Date", "Interval"]).reset_index(drop=True)
-	
+	st.write(data_long_sorted)
 	return data_long_sorted
 
 def zip_files(folder_path, zip_name):
@@ -616,7 +623,7 @@ def zip_files(folder_path, zip_name):
 					file_path = os.path.join(root, file)
 					arcname = os.path.relpath(file_path, folder_path)  # Relative path within the zip file
 					zipf.write(file_path, arcname)
-#====================================================================================ENTSOE data=======================================================================================
+#====================================================================================ENTSOE newAPI data=======================================================================================
 api_key_entsoe = os.getenv("api_key_entsoe")
 client = EntsoePandasClient(api_key=api_key_entsoe)
 
@@ -765,7 +772,6 @@ def process_imbalance_volumes(start_date, end_date, zip_filepath='./data_fetchin
 	os.remove(xml_filename)
 
 	return df_imbalance
-
 
 def fetch_imbalance_prices(start_date, end_date):
 	# Setting up the start and end dates (today and tomorrow)
@@ -1063,7 +1069,6 @@ def fetch_process_wind_notified(start_date, end_date):
 	except requests.exceptions.RequestException as e:
 		print(f"An error occurred: {e}")
 		return pd.DataFrame()
-
 
 def fetch_process_wind_actual_production(start_date, end_date):
 	"""
@@ -2006,140 +2011,132 @@ def combine_consumption_data(df_forecast, df_actual):
 
 # ===========================Activation Energy=======================================================================================
 
-def fetch_process_balancing_activation_energy(start_date, end_date):
+def fetch_intraday_balancing_activations(start_date, end_date):
     """
-    Fetch and process balancing activation energy data from ENTSO-E API for a given date range.
+    Fetch activated balancing energy data (aFRR & mFRR) from Transelectrica API
+    for a user-defined date range.
     """
-    # Convert start_date and end_date to CET timestamps
-    start_cet = pd.Timestamp(start_date.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-1)
-    end_cet = pd.Timestamp((end_date + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
 
-    # Format the start and end dates to match the API requirements (yyyymmddhhmm)
-    period_start = start_cet.strftime('%Y%m%d%H%M')
-    period_end = end_cet.strftime('%Y%m%d%H%M')
+    # Define CET timezone
+    cet_timezone = pytz.timezone("Europe/Berlin")
 
-    url = "https://web-api.tp.entsoe.eu/api"
+    # Adjust `start_date` to include the last quarter of the previous day (23:45)
+    start_cet_adjusted = datetime.combine(start_date - timedelta(days=1), time(23, 45)).replace(tzinfo=cet_timezone)
+    end_cet_midnight = datetime.combine(end_date, datetime.min.time()).replace(tzinfo=cet_timezone) + timedelta(days=1)
 
-    params = {
-        "securityToken": api_key_entsoe,  # Replace with your actual API key
-        "documentType": "A83",  # Document type for activated balancing quantities
-        "controlArea_Domain": "10YRO-TEL------P",  # EIC code for Romania
-        "periodStart": period_start,
-        "periodEnd": period_end,
-        "businessType": "A97",  # A96 corresponds to Automatic Frequency Restoration Reserve (aFRR)
-    }
+    # Convert CET times to UTC (API operates in UTC)
+    start_utc = start_cet_adjusted.astimezone(pytz.utc)
+    end_utc = end_cet_midnight.astimezone(pytz.utc)
 
-    headers = {
-        "Content-Type": "application/xml",
-        "Accept": "application/xml",
-    }
+    # Format timestamps for API request
+    from_time = start_utc.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    to_time = end_utc.strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
-    try:
-        # Make the API request
-        response = requests.get(url, params=params, headers=headers)
-        response.raise_for_status()
-        st.text(response.content)
-        # Parse the XML response
-        root = ET.fromstring(response.content)
+    # ✅ Debugging: Print time range
+    print(f"\n🔍 Requesting data from {from_time} UTC to {to_time} UTC")
 
-        # Extract namespace dynamically
-        ns_match = root.tag[root.tag.find("{"):root.tag.find("}")+1]
-        namespaces = {'ns': ns_match.strip("{}")} if ns_match else {}
+    # ✅ API Request (Transelectrica)
+    url = f"https://newmarkets.transelectrica.ro/usy-durom-publicreportg01/00121002500000000000000000000100/publicReport/activatedBalancingEnergyOverview?timeInterval.from={from_time}&timeInterval.to={to_time}&pageInfo.pageSize=3000"
+    
+    response = requests.get(url)
 
-        # Initialize lists to store parsed data
-        timestamps_utc = []
-        quantities = []
-        directions = []  # Flow direction (A01 for Excedent, A02 for Deficit)
+    # ✅ Check response status
+    if response.status_code != 200:
+        print(f"❌ Failed to fetch data. Status code: {response.status_code}")
+        return pd.DataFrame()
 
-        # Iterate over TimeSeries to extract the points
-        for timeseries in root.findall('ns:TimeSeries', namespaces):
-            flow_direction = timeseries.find('ns:flowDirection.direction', namespaces)
-            if flow_direction is None:
-                continue
-            direction = flow_direction.text
+    # ✅ Parse JSON response
+    data = response.json()
+    items = data.get("itemList", [])
 
-            for period in timeseries.findall('ns:Period', namespaces):
-                start = period.find('ns:timeInterval/ns:start', namespaces)
-                resolution = period.find('ns:resolution', namespaces)
+    if not items:
+        print(f"⚠️ No data found for the selected date range ({start_date} to {end_date}).")
+        return pd.DataFrame()
 
-                if start is None or resolution is None:
-                    continue
+    print(f"✅ Successfully fetched {len(items)} records from API.")
 
-                # Extract the start time and resolution
-                start_time_utc = datetime.strptime(start.text, '%Y-%m-%dT%H:%MZ')  # Start time is in UTC
+    # ✅ Process and convert timestamps
+    rows = []
+    for item in items:
+        try:
+            # Convert timestamps from UTC to CET
+            utc_from = datetime.fromisoformat(item['timeInterval']['from'].replace('Z', '+00:00'))
+            cet_from = utc_from.astimezone(cet_timezone)
 
-                for point in period.findall('ns:Point', namespaces):
-                    position_tag = point.find('ns:position', namespaces)
-                    quantity_tag = point.find('ns:quantity', namespaces)
+            # **✅ Round timestamps to the nearest minute**
+            cet_from = cet_from.replace(second=0, microsecond=0)
 
-                    if position_tag is None or quantity_tag is None:
-                        continue
+            # ✅ Extract energy values (convert None to 0)
+            afrr_up = item.get("aFRR_Up", 0) or 0
+            afrr_down = item.get("aFRR_Down", 0) or 0
+            mfrr_up = item.get("mFRR_Up", 0) or 0
+            mfrr_down = item.get("mFRR_Down", 0) or 0
 
-                    try:
-                        position = int(position_tag.text)
-                        quantity = float(quantity_tag.text)
-                    except ValueError:
-                        continue
+            # ✅ Store processed row
+            rows.append([cet_from, afrr_up, afrr_down, mfrr_up, mfrr_down])
 
-                    # Calculate timestamp for the point based on position in UTC
-                    point_time_utc = start_time_utc + timedelta(minutes=15 * (position - 1))
-                    timestamps_utc.append(point_time_utc)
-                    quantities.append(quantity)
-                    directions.append(direction)
+        except Exception as e:
+            print(f"❌ Error processing record: {e}")
 
-        # Create DataFrame from the parsed data
-        df_balancing = pd.DataFrame({
-            'Timestamp_UTC': timestamps_utc,
-            'Quantity (MWh)': quantities,
-            'Direction': directions,
-        })
+    # ✅ Convert to DataFrame
+    df = pd.DataFrame(rows, columns=["Timestamp (CET)", "aFRR Up (MW)", "aFRR Down (MW)", "mFRR Up (MW)", "mFRR Down (MW)"])
 
-        # Convert UTC to CET
-        df_balancing['Timestamp_UTC'] = pd.to_datetime(df_balancing['Timestamp_UTC'])
-        df_balancing['Timestamp_CET'] = df_balancing['Timestamp_UTC'].dt.tz_localize('UTC').dt.tz_convert('Europe/Berlin')
-        df_balancing.drop(columns=['Timestamp_UTC'], inplace=True)
-        df_balancing.rename(columns={'Timestamp_CET': 'Timestamp'}, inplace=True)
+    # ✅ Ensure timestamps are in the correct format and remove extra precision
+    df["Timestamp (CET)"] = pd.to_datetime(df["Timestamp (CET)"]).dt.floor("min")
 
-        # Separate data into Excedent and Deficit
-        df_balancing['Excedent (MWh)'] = df_balancing.apply(
-            lambda row: row['Quantity (MWh)'] if row['Direction'] == 'A01' else 0, axis=1
-        )
-        df_balancing['Deficit (MWh)'] = df_balancing.apply(
-            lambda row: row['Quantity (MWh)'] if row['Direction'] == 'A02' else 0, axis=1
-        )
-        df_balancing.drop(columns=['Quantity (MWh)', 'Direction'], inplace=True)
-
-        # Filter by user-provided date range
+    # ✅ Adjust start/end times based on the extracted data
+    if not df.empty:
+        start_cet = df["Timestamp (CET)"].min()  # Get earliest timestamp from extracted data
+        end_cet = df["Timestamp (CET)"].max()  # Get latest timestamp from extracted data
+    else:
+        print("⚠️ DataFrame is empty, using default time range!")
         start_cet = pd.Timestamp(start_date.strftime('%Y-%m-%dT00:00:00'), tz='Europe/Berlin')
         end_cet = pd.Timestamp(end_date.strftime('%Y-%m-%dT23:45:00'), tz='Europe/Berlin')
 
-        # Create a complete index for 15-minute intervals
-        full_index_cet = pd.date_range(start=start_cet, end=end_cet, freq='15T', tz='Europe/Berlin')
+    # ✅ Generate the corrected timestamp index
+    full_index_cet = pd.date_range(start=start_cet, end=end_cet, freq='15T', tz='Europe/Berlin')
 
-        # Merge balancing data with the full index to ensure all intervals are covered
-        df_full = pd.DataFrame({'Timestamp': full_index_cet}).set_index('Timestamp')
-        df_balancing = df_full.merge(
-            df_balancing.set_index('Timestamp'),
-            how='left',
-            left_index=True,
-            right_index=True
-        )
-        df_balancing.fillna(0, inplace=True)  # Replace missing values with 0
-        df_balancing.reset_index(inplace=True)
+    # ✅ Merge with real data, keeping extracted values
+    df_full = pd.DataFrame({'Timestamp (CET)': full_index_cet}).set_index("Timestamp (CET)")
+    df = df.set_index("Timestamp (CET)")
 
-        # Write the DataFrame to Excel
-        df_balancing_excel = df_balancing.copy()
-        df_balancing_excel['Timestamp'] = df_balancing_excel['Timestamp'].dt.tz_localize(None)
-        df_balancing_excel.to_excel("./data_fetching/Entsoe/Balancing_Activation_Energy.xlsx", index=False)
+    # ✅ Merge instead of reindexing to prevent overwriting
+    df = df_full.merge(df, how='left', left_index=True, right_index=True)
 
-        return df_balancing
+    # ✅ Fill missing values *only* where data was not present
+    df.fillna(0, inplace=True)
 
-    except requests.exceptions.RequestException as e:
-        print(f"An error occurred: {e}")
-        return pd.DataFrame()
+    # Reset index
+    df.reset_index(inplace=True)
 
+    # ✅ Ensure first quarter (`00:00`) is included
+    if df["Timestamp (CET)"].iloc[0].time() != time(0, 0):
+        print("⚠️ Missing 00:00 quarter, adding it manually.")
+        first_quarter = pd.DataFrame([[datetime.combine(start_date, time(0, 0)), 0, 0, 0, 0]],
+                                     columns=df.columns)
+        df = pd.concat([first_quarter, df], ignore_index=True)
 
+    # ✅ Debug: Print first and last timestamps to verify range
+    if not df.empty:
+        print("\n✅ First Timestamp in DataFrame:", df.iloc[0]["Timestamp (CET)"])
+        print("✅ Last Timestamp in DataFrame:", df.iloc[-1]["Timestamp (CET)"])
 
+    print("📊 Processed DataFrame:")
+    print(df.head())
+
+    # Remove timezone information from the 'Timestamp' column
+    df['Timestamp (CET)'] = df['Timestamp (CET)'].dt.tz_localize(None)
+
+    # Add a "Quarter" column based on the Timestamp column
+    df['Quarter'] = ((df.index % 96) + 1)
+
+    # Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
+    df['Lookup'] = df["Timestamp (CET)"].dt.strftime('%d.%m.%Y') + df["Quarter"].astype(str)
+
+    # Save to Excel
+    df.to_excel("./data_fetching/Entsoe/Balancing_Energy_Activation.xlsx", index=False)
+
+    return df
 
 # 1 Imbalance Prices
 def imbalance_prices(start, end):
@@ -2696,9 +2693,18 @@ def render_fundamentals_page():
 		df_solar_15min['Interval'] = ((df_solar_15min['Timestamp'].dt.hour * 60 + df_solar_15min['Timestamp'].dt.minute) // 15 + 1)
 		df_solar_15min.drop(columns=["Timestamp"], inplace=True)
 		st.dataframe(df_solar_15min)
+
+		df_wind_15min['Date'] = pd.to_datetime(df_wind_15min['Date'], format="%d.%m.%Y")
+		df_solar_15min['Date'] = pd.to_datetime(df_solar_15min['Date'], format="%d.%m.%Y")
+
+		df_wind_15min['Interval'] = df_wind_15min['Interval'].astype('int64')
+		df_solar_15min['Interval'] = df_solar_15min['Interval'].astype('int64')
+
 		# Now proceed with the merge as previously described
 		df_final = pd.merge(df_wind_15min, df_solar_15min, on=['Date', 'Interval'], how='left')
 
+		df_hydro_15min['Date'] = pd.to_datetime(df_hydro_15min['Date'], format="%d.%m.%Y")
+		df_hydro_15min['Interval'] = df_hydro_15min['Interval'].astype('int64')
 		# Adding the Hydro Power to the Volue dataframe
 		df_final_2 = pd.merge(df_final, df_hydro_15min, on=['Date', 'Interval'], how='left')
 
@@ -2720,6 +2726,8 @@ def render_fundamentals_page():
 		# st.dataframe(df_final_3)
 
 		# Adding the Price to the Volue dataframe
+		df_price_15min['Date'] = pd.to_datetime(df_price_15min['Date'], format="%d.%m.%Y")
+		df_price_15min['Interval'] = df_price_15min['Interval'].astype('int64')
 		df_final_3 = pd.merge(df_final_2, df_price_15min, on=['Date', 'Interval'], how='left')
 		st.dataframe(df_final_3)
 
@@ -2773,7 +2781,9 @@ def render_fundamentals_page():
 						filtered_data = processed_data[(processed_data['Date'].dt.year == current_year) & (processed_data['Date'].dt.month == current_month)]
 
 						filtered_data.dropna(inplace=True)
-						filtered_data.to_excel('./Market Fundamentals/Transelectrica_data/Cons_Prod_final/Weekly_Consumption_2024.xlsx', index=False)
+						# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
+						filtered_data['Lookup'] = filtered_data["Date"].dt.strftime('%d.%m.%Y') + filtered_data["Interval"].astype(str)
+						filtered_data.to_excel('./Market Fundamentals/Transelectrica_data/Cons_Prod_final/Weekly_Consumption_2025.xlsx', index=False)
 					elif uploaded_file.name == "weekly_production_2023.xls":
 						production = pd.read_excel("./Market Fundamentals/Transelectrica_data/weekly_production_2023.xls")
 						production.to_excel('./Market Fundamentals/Transelectrica_data/weekly_production_2023.xlsx', engine='openpyxl', index=False)
@@ -2801,8 +2811,9 @@ def render_fundamentals_page():
 						# Filter for April 2024
 						filtered_data = processed_data[(processed_data['Date'].dt.year == current_year) & (processed_data['Date'].dt.month == current_month)]
 						filtered_data.dropna(inplace=True)
-
-						filtered_data.to_excel('./Market Fundamentals/Transelectrica_data/Cons_Prod_final/Weekly_Production_2024.xlsx', index=False)
+						# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
+						filtered_data['Lookup'] = filtered_data["Date"].dt.strftime('%d.%m.%Y') + filtered_data["Interval"].astype(str)
+						filtered_data.to_excel('./Market Fundamentals/Transelectrica_data/Cons_Prod_final/Weekly_Production_2025.xlsx', index=False)
 
 		# Downloading the Files
 		folder_path = './Market Fundamentals/Transelectrica_data/Cons_Prod_final/'
@@ -3077,8 +3088,8 @@ def render_fundamentals_page():
 		df_consumption_forecast = fetch_consumption_forecast(start_date, end_date)
 		df_consumption_actual = fetch_actual_consumption(start_date, end_date)
 
-		# Fetching the aFRR activation
-		# st.dataframe(fetch_process_balancing_activation_energy(start_date, end_date))
+		# Fetching the Balancing Energy Activation
+		st.dataframe(fetch_intraday_balancing_activations(start_date, end_date))
 
 
 

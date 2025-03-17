@@ -4,9 +4,11 @@ import pandas as pd
 from datetime import date, timedelta
 import os
 import uuid
+from dotenv import load_dotenv
 
+load_dotenv()
 # Heroku PostgreSQL connection details
-DB_URL = "postgresql://u6vgnrtb422bju:p593a702cae233b84c4a2a29ad9f8f13116fa3a407ea6b2ed91d97280a5e17d9c@c8lj070d5ubs83.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/d67n79bcvb33fq"
+DB_URL = os.getenv("pulseai-db-url")
 # DB_URL = st.secrets["DB_URL"]
 # Establish a connection to the PostgreSQL database
 def get_connection():
@@ -134,8 +136,6 @@ def check_tomorrow_indisponibilities(table_name):
 
     return interval_from, interval_to, limitation_percentage
 
-
-
 # Render and manage the indisponibility database for the given client
 def render_indisponibility_db(table_name, title):
     def generate_key(prefix):
@@ -220,20 +220,23 @@ def render_indisponibility_db(table_name, title):
     return interval_from, interval_to, limitation_percentage
 
 # Specific functions for each client
-def render_indisponibility_db_Solina():
-    return render_indisponibility_db("indisponibility_solina", "Solina")
+# def render_indisponibility_db_Solina():
+#     return render_indisponibility_db("indisponibility_solina", "Solina")
 
-def render_indisponibility_db_Astro():
-    return render_indisponibility_db("indisponibility_astro", "Astro")
+# def render_indisponibility_db_Astro():
+#     return render_indisponibility_db("indisponibility_astro", "Astro")
 
-def render_indisponibility_db_Imperial():
-    return render_indisponibility_db("indisponibility_imperial", "Imperial")
+# def render_indisponibility_db_Imperial():
+#     return render_indisponibility_db("indisponibility_imperial", "Imperial")
 
-def render_indisponibility_db_RES_Energy():
-    return render_indisponibility_db("indisponibility_res", "RES Energy")
+# def render_indisponibility_db_RES_Energy():
+#     return render_indisponibility_db("indisponibility_res", "RES Energy")
 
-def render_indisponibility_db_Luxus():
-    return render_indisponibility_db("indisponibility_luxus", "Luxus")
+# def render_indisponibility_db_Luxus():
+#     return render_indisponibility_db("indisponibility_luxus", "Luxus")
 
-def render_indisponibility_db_Kek_Hal():
-    return render_indisponibility_db("indisponibility_luxus", "Kek_Hal")
+# def render_indisponibility_db_Kek_Hal():
+#     return render_indisponibility_db("indisponibility_luxus", "Kek_Hal")
+
+def render_indisponibility_db_Kahraman():
+    return render_indisponibility_db("indisponibility_kahraman", "Kahraman")

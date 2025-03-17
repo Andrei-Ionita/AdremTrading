@@ -1,0 +1,27 @@
+/* Custom font import */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap');
+
+/* Base styling */
+.st-emotion-cache-1v0mbdj {
+    border-radius: 8px !important;
+    border: 1px solid #2A3647 !important;
+}
+
+/* Metric cards */
+[data-testid="stMetric"] {
+    background: #1D2633;
+    border-radius: 8px;
+    padding: 16px;
+    border: 1px solid #2A3647;
+}
+
+/* Button styling */
+.stButton > button {
+    border-radius: 6px !important;
+    font-weight: 500 !important;
+    transition: all 0.2s ease !important;
+}
+
+.stButton > button:focus {
+    box-shadow: 0 0 0 2px #1652F066 !important;
+}

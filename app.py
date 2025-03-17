@@ -6,6 +6,8 @@ import xgboost as xgb
 import joblib
 import xlsxwriter
 import base64
+from streamlit_lottie import st_lottie
+import requests
 
 # Importing apps and pages
 # from eda import render_eda_page
@@ -14,395 +16,189 @@ from fundamentals import render_fundamentals_page
 from balancing import render_balancing_market_intraday_page
 # from Balancing_Market_intraday_layout import render_balancing_market_intraday_page
 
+# Load Lottie animation
+def load_lottie_url(url: str):
+    r = requests.get(url)
+    if r.status_code != 200:
+        return None
+    return r.json()
+
+lottie_background = load_lottie_url("https://assets2.lottiefiles.com/packages/lf20_zrqthn6o.json")
 
 #================================================CSS=================================
-# st.markdown(
-#     """
-#     <style>
-#     /* Custom Netflix-inspired styles */
-#     .css-18e3th9 {  /* Main background */
-#         background-color: #141414;
-#     }
-#     .css-1d391kg {  /* Sidebar */
-#         background-color: #2c2c2c;
-#     }
-#     .css-1v0mbdj, .css-10trblm {  /* Streamlit titles and headers */
-#         color: #e50914;
-#     }
-#     .css-1d391kg h2 {
-#         color: #e50914;
-#     }
-#     button {
-#         background-color: #e50914 !important;
-#         color: white !important;
-#         border-radius: 5px;
-#         border: none;
-#     }
-#     button:hover {
-#         background-color: #f40612 !important;
-#     }
-#     </style>
-#     """,
-#     unsafe_allow_html=True
-# )
 
-# Inject custom CSS
+# CSS for polished design
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
 
-    /* Override the default font */
-    html, body, [class*="css"]  {
+    html, body, [class*="css"] {
         font-family: 'Inter', sans-serif;
     }
 
-    /* Clean card styles similar to Coinbase */
-    .st-card {
-        background-color: #ffffff;
+    .main-container {
+        padding: 50px;
+    }
+
+    .hero-section {
+        background: linear-gradient(135deg, #1652F0, #1D2633);
+        padding: 40px;
         border-radius: 12px;
+        text-align: center;
+        color: white;
+    }
+
+    .hero-section h1 {
+        font-size: 48px;
+        font-weight: bold;
+        margin-bottom: 10px;
+    }
+
+    .hero-section p {
+        font-size: 20px;
+        margin-bottom: 20px;
+    }
+
+    .feature-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+        margin-top: 40px;
+    }
+
+    .feature-card {
+        background-color: #1D2633;
         padding: 20px;
-        box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.05);
+        border-radius: 12px;
+        text-align: center;
+        color: white;
+        box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.3);
+        transition: transform 0.2s;
+    }
+
+    .feature-card:hover {
+        transform: scale(1.05);
+    }
+
+    .feature-card h3 {
+        font-size: 24px;
+        margin-bottom: 10px;
+    }
+
+    .feature-card p {
+        font-size: 16px;
         margin-bottom: 15px;
     }
 
-    /* Buttons with futuristic Coinbase hover effect */
-    .st-button>button {
-        background-color: #3e8ef7;
-        color: #ffffff;
-        border-radius: 8px;
-        padding: 10px 15px;
-        font-weight: bold;
+    .cta-button {
+        background-color: #1652F0;
+        padding: 10px 20px;
         border: none;
+        border-radius: 8px;
+        color: white;
+        font-weight: bold;
+        cursor: pointer;
+        transition: background-color 0.3s;
     }
 
-    .st-button>button:hover {
-        background-color: #2968c8;
-        transition: 0.3s ease;
+    .cta-button:hover {
+        background-color: #0E3FBF;
     }
 
-    /* Light section dividers for contrast */
-    .section-divider {
-        background-color: #f3f4f6;
-        height: 3px;
-        margin: 20px 0;
+    .footer {
+        margin-top: 50px;
+        text-align: center;
+        color: #888;
     }
     </style>
 """, unsafe_allow_html=True)
 
-#========================================================HTML Components==========================
-# Define rendering functions before the main function.
-slideshow_html = """
-<style>
-* {box-sizing: border-box}
-body {font-family: Verdana, sans-serif; margin:0}
-.mySlides {display: none}
-img {vertical-align: middle; max-height: 700px; width: auto; max-width: 100%;}
-
-/* Slideshow container */
-.slideshow-container {
-	max-width: 100%;
-	height: 700px;
-	position: relative;
-	margin: auto;
-}
-
-/* Next & previous buttons */
-.prev, .next {
-	cursor: pointer;
-	position: absolute;
-	top: 50%;
-	width: auto;
-	padding: 16px;
-	margin-top: -22px;
-	color: white;
-	font-weight: bold;
-	font-size: 18px;
-	transition: 0.6s ease;
-	border-radius: 0 3px 3px 0;
-	user-select: none;
-}
-
-/* Position the "next button" to the right */
-.next {
-	right: 0;
-	border-radius: 3px 0 0 3px;
-}
-
-/* On hover, add a black background color with a little bit see-through */
-.prev:hover, .next:hover {
-	background-color: rgba(0,0,0,0.8);
-}
-
-/* Caption text */
-.text {
-	color: #f2f2f2;
-	font-size: 15px;
-	padding: 8px 12px;
-	position: absolute;
-	bottom: 8px;
-	width: 100%;
-	text-align: center;
-}
-
-/* Number text (1/3 etc) */
-.numbertext {
-	color: #f2f2f2;
-	font-size: 12px;
-	padding: 8px 12px;
-	position: absolute;
-	top: 0;
-}
-
-/* The dots/bullets/indicators */
-.dot {
-	cursor: pointer;
-	height: 15px;
-	width: 15px;
-	margin: 0 2px;
-	background-color: #bbb;
-	border-radius: 50%;
-	display: inline-block;
-	transition: background-color 0.6s ease;
-}
-
-.active, .dot:hover {
-	background-color: #717171;
-}
-
-/* Fading animation */
-.fade {
-	animation-name: fade;
-	animation-duration: 1.5s;
-}
-
-@keyframes fade {
-	from {opacity: .4} 
-	to {opacity: 1}
-}
-
-/* On smaller screens, decrease text size */
-@media only screen and (max-width: 300px) {
-	.prev, .next,.text {font-size: 11px}
-}
-</style>
-
-<body>
-
-<div class="slideshow-container">
-
-<div class="mySlides fade">
-	<img src="./assets/AI_pics/20230607PHT95601_original.jpg">
-</div>
-
-<div class="mySlides fade">
-	<img src="./assets/AI_pics/ai_face2.png">
-</div>
-
-<div class="mySlides fade">
-	<img src="./assets/AI_pics/real-ai.jpg">
-</div>
-
-<div class="mySlides fade">
-	<img src="./assets/AI_pics/ia_face9.jpg">
-</div>
-
-<div class="mySlides fade">
-	<img src="./assets/AI_pics/ai_face5.png">
-</div>
-
-</div>
-<br>
-
-<div style="text-align:center">
-  <span class="dot" onclick="currentSlide(1)"></span> 
-  <span class="dot" onclick="currentSlide(2)"></span> 
-  <span class="dot" onclick="currentSlide(3)"></span>
-  <span class="dot" onclick="currentSlide(4)"></span> 
-  <span class="dot" onclick="currentSlide(5)"></span>
-</div>
-
-<script>
-let slideIndex = 1; // Start from the first slide
-showSlides(slideIndex); // Initialize the slideshow
-
-function plusSlides(n) {
-  slideIndex += n;
-  if (slideIndex > slides.length) {slideIndex = 1}    
-  if (slideIndex < 1) {slideIndex = slides.length}
-  showSlides(slideIndex);
-}
-
-function currentSlide(n) {
-  showSlides(slideIndex = n);
-}
-
-function showSlides(n) {
-  let i;
-  let slides = document.getElementsByClassName("mySlides");
-  let dots = document.getElementsByClassName("dot");
-  if (n > slides.length) {slideIndex = 1}    
-  if (n < 1) {slideIndex = slides.length}
-  for (i = 0; i < slides.length; i++) {
-      slides[i].style.display = "none";  
-  }
-  for (i = 0; i < dots.length; i++) {
-      dots[i].className = dots[i].className.replace(" active", "");
-  }
-  slides[slideIndex-1].style.display = "block";  
-  dots[slideIndex-1].className += " active";
-}
-</script>
-
-</body>
-"""
-
-custom_styles = """
-<style>
-	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
-		body {
-				font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-				background-color: #f4f4f4;
-		}
-</style>
-"""
 def get_base64_encoded_image(image_path):
     with open(image_path, "rb") as img_file:
         return base64.b64encode(img_file.read()).decode('utf-8')
 
-encoded_image_1 = get_base64_encoded_image("./assets/AI_pics/ai_face2.png")
+encoded_image_1 = get_base64_encoded_image("./assets/AI_pics/trading_AI.jpg")
 encoded_image_2 = get_base64_encoded_image("./assets/AI_pics/ai_face3.png")
 encoded_image_3 = get_base64_encoded_image("./assets/AI_pics/ai_face4.png")
-encoded_image_4 = get_base64_encoded_image("./assets/AI_pics/ai_face5.png")
-encoded_image_5 = get_base64_encoded_image("./assets/AI_pics/ai_face6.png")
-encoded_image_6 = get_base64_encoded_image("./assets/AI_pics/ai_face7.png")
 
+# Dynamic Slideshow Section
 slideshow_html = f"""
-<!DOCTYPE html>
-<html>
-<head>
-<style>
-.mySlides {{display: none;}}
-.mySlides img {{
-  width: 100%; /* Responsive width */
-  max-width: 700px; /* Maximum width */
-  height: auto; /* Adjust height automatically */
-  display: block; /* Center the image */
-  margin-left: auto;
-  margin-right: auto;
-}}
-</style>
-</head>
-<body>
-
-<div class="mySlides">
-  <img src="data:image/png;base64,{encoded_image_1}">
-</div>
-
-<div class="mySlides">
-  <img src="data:image/png;base64,{encoded_image_2}">
-</div>
-
-<div class="mySlides">
-  <img src="data:image/png;base64,{encoded_image_3}">
-</div>
-
-<div class="mySlides">
-  <img src="data:image/png;base64,{encoded_image_4}">
-</div>
-
-<div class="mySlides">
-  <img src="data:image/png;base64,{encoded_image_5}">
-</div>
-
-<div class="mySlides">
-  <img src="data:image/png;base64,{encoded_image_6}">
-</div>
-
-<script>
-var slideIndex = 0;
-showSlides();
-
-function showSlides() {{
-  var i;
-  var slides = document.getElementsByClassName("mySlides");
-  for (i = 0; i < slides.length; i++) {{
-    slides[i].style.display = "none";  
-  }}
-  slideIndex++;
-  if (slideIndex > slides.length) {{slideIndex = 1}}
-  slides[slideIndex-1].style.display = "block";
-  setTimeout(showSlides, 2000); // Change image every 2 seconds
-}}
-</script>
-
-</body>
-</html>
+    <div class="slideshow-container">
+        <img src="data:image/png;base64,{encoded_image_1}" style="width:100%; border-radius: 12px;">
+    </div>
 """
 
-
 def render_home_page():
-	st.title("nextE@AI Forecasting")
-	st.subheader("Forecast and analyze renewable energy production and consumption")
-	stc.html(slideshow_html, height=700)
-	st.markdown("""
-	<style>
-			.divider {
-					border-bottom: 1px solid rgba(203, 228, 222, 0.2); /* Change color here */
-					margin: 20px 0; /* Adjust margin to suit */
-			}
-	</style>
-	<div class="divider"></div>
-	""", unsafe_allow_html=True)
-	st.markdown(custom_styles, unsafe_allow_html=True)
-	st.write("Use the navigation menu to access forecasting and EDA tools.")
-	st.markdown("""
-	<style>
-			.divider {
-					border-bottom: 1px solid rgba(203, 228, 222, 0.2); /* Change color here */
-					margin: 20px 0; /* Adjust margin to suit */
-			}
-	</style>
-	<div class="divider"></div>
-	""", unsafe_allow_html=True)
+    # Display the Lottie background animation
+    st_lottie(lottie_background, height=200, key="background", speed=1, loop=True)
+
+    # Hero section
+    st.markdown("""
+        <div class="hero-section">
+            <h1>AI-Powered Energy Forecasting</h1>
+            <p>Gain real-time insights to optimize energy trading and asset management.</p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # Slideshow
+    stc.html(slideshow_html, height=600)
+
+    # Feature grid section
+    st.markdown("""
+        <div class="feature-grid">
+            <div class="feature-card">
+                <h3>Forecasting</h3>
+                <p>Accurate short-term and day-ahead energy production and consumption forecasts.</p>
+                <button class="cta-button" onclick="window.location.href='#'">Explore</button>
+            </div>
+            <div class="feature-card">
+                <h3>Market Fundamentals</h3>
+                <p>Track supply-demand imbalances, renewable energy contributions, and market drivers.</p>
+                <button class="cta-button" onclick="window.location.href='#'">Learn More</button>
+            </div>
+            <div class="feature-card">
+                <h3>Balancing Market</h3>
+                <p>Analyze real-time imbalance volumes and forecast price deviations.</p>
+                <button class="cta-button" onclick="window.location.href='#'">Discover</button>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # Footer section
+    st.markdown("""
+        <div class="footer">
+            <p>&copy; 2025 OngyAI Forecasting | Powering Energy Markets</p>
+        </div>
+    """, unsafe_allow_html=True)
+
+# Sidebar rendering with icons and dynamic page switching
+def render_sidebar():
+    st.markdown("<div class='sidebar-title'>Navigation</div>", unsafe_allow_html=True)
+    
+    menu_options = {
+        "Home": "🏠 Home",
+        "Forecast": "📈 Forecast",
+        "Market Fundamentals": "📊 Market Fundamentals",
+        "Balancing Market": "⚡ Balancing Market"
+    }
+
+    selected_page = st.radio("", list(menu_options.keys()), key="page_select", format_func=lambda x: menu_options[x])
+
+    return selected_page
 
 def main():
-	
-	st.sidebar.title("Navigation")
+    page = render_sidebar()
 
-	# Initialize session state for conversation history
-	if 'conversation' not in st.session_state:
-		st.session_state['conversation'] = []
-
-	# Determine the index for the default value of the sidebar radio
-	# default_index = 0 if st.session_state['page'] == "Home" else ["Forecast", "EDA"].index(st.session_state['page'])
-
-	# Use session state to set default value for sidebar radio
-	page = st.sidebar.radio(
-			"Select a page:",
-			options=["Home", "Forecast", "Market Fundamentals", "Balancing Market"],
-			index=None,
-			key="page_select"
-	)
-
-	if page==None:
-		render_home_page()
-		st.session_state['page'] = "Home"
-
-	# Update session state with new page selection
-	st.session_state['page'] = page
-
-	# Render the appropriate page based on session state
-	if st.session_state['page'] == "Home":
-		render_home_page()
-	elif st.session_state["page"] == "Balancing Market":
-		render_balancing_market_page()
-		render_balancing_market_intraday_page()
-	elif st.session_state['page'] == "Forecast":
-		render_forecast_page()
-	elif st.session_state['page'] == "Market Fundamentals":
-		render_fundamentals_page()
-	# elif st.session_state['page'] == "EDA":
-	# 	render_eda_page()
+    # Route pages
+    if page == "Home":
+        render_home_page()
+    elif page == "Forecast":
+        render_forecast_page()
+    elif page == "Market Fundamentals":
+        render_fundamentals_page()
+    elif page == "Balancing Market":
+        render_balancing_market_page()
+        render_balancing_market_intraday_page()
 
 if __name__ == "__main__":
-		main()
+    main()
