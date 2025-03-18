@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 # Heroku PostgreSQL connection details
-DB_URL = os.getenv("pulseai-db-url") or st.secrets["pulseai-db-url"]
+DB_URL = os.getenv("pulseai-db-url")
 # Establish a connection to the PostgreSQL database
 def get_connection():
     try:
