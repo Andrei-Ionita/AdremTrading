@@ -1871,7 +1871,7 @@ def fetch_physical_flows_bulgaria_to_romania():
 
     except requests.exceptions.RequestException as e:
         print(f"An error occurred: {e}")
-        return pd.DataFrame()
+        return pd.DataFrame(columns=["Timestamp", "Physical Flow (MW)"])  # Return empty DataFrame on failure
 
 def fetch_physical_flows_romania_to_bulgaria():
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -1967,7 +1967,7 @@ def fetch_physical_flows_romania_to_bulgaria():
 
     except requests.exceptions.RequestException as e:
         print(f"An error occurred: {e}")
-        return pd.DataFrame()
+        return pd.DataFrame(columns=["Timestamp", "Physical Flow (MW)"])  # Return empty DataFrame on failure
 
 def concatenate_cross_border_flows(df_bg_to_ro, df_ro_to_bg):
     # Rename columns for clarity before concatenation
@@ -2343,7 +2343,7 @@ def fetch_physical_flows(out_domain, in_domain):
 
     except requests.exceptions.RequestException as e:
         print(f"An error occurred: {e}")
-        return pd.DataFrame()
+        return pd.DataFrame(columns=["Timestamp", "Physical Flow (MW)"])  # Return empty DataFrame on failure
 
 def combine_physical_and_scheduled_flows_ro_rs(df_rs_ro_flow, df_ro_rs_flow, df_rs_ro_schedule, df_ro_rs_schedule):
     # Rename schedule columns for clarity
@@ -2488,7 +2488,7 @@ def fetch_physical_flows_ro_hu(out_domain, in_domain):
 
     except requests.exceptions.RequestException as e:
         print(f"An error occurred: {e}")
-        return pd.DataFrame()
+        return pd.DataFrame(columns=["Timestamp", "Physical Flow (MW)"])  # Return empty DataFrame on failure
 
 def fetch_cross_border_schedule_hu_ro():
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -2586,7 +2586,7 @@ def fetch_cross_border_schedule_hu_ro():
 
     except requests.exceptions.RequestException as e:
         print(f"An error occurred: {e}")
-        return pd.DataFrame()
+        return pd.DataFrame(columns=["Timestamp", "Scheduled Flow (MW)"])  # Return empty DataFrame on failure
 
 def fetch_cross_border_schedule_quarterly_ro_hu():
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -2684,7 +2684,7 @@ def fetch_cross_border_schedule_quarterly_ro_hu():
 
     except requests.exceptions.RequestException as e:
         print(f"An error occurred: {e}")
-        return pd.DataFrame()
+        return pd.DataFrame(columns=["Timestamp", "Scheduled Flow (MW)"])  # Return empty DataFrame on failure
 
 
 def combine_physical_and_scheduled_flows_ro_hu(df_hu_ro_flow, df_ro_hu_flow, df_hu_ro_scheduled, df_ro_hu_scheduled):
