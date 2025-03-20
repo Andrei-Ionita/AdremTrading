@@ -2400,6 +2400,109 @@ def load_forecast_CET(start_cet, end_cet):
 	# Display or analyze the fetched data
 	return load_forecast_cet
 
+# Unintended Deviations ================================================================================================================
+def fetch_unintended_deviation_data(start_cet, end_cet):
+    """Fetch unintended deviation data (import/export) over multiple days, converting timestamps to CET."""
+
+    # Define CET timezone
+    cet_timezone = pytz.timezone("Europe/Berlin")
+
+    # Prepare list to store data
+    all_rows = []
+
+    # Loop through each day in the range
+    current_day = start_cet
+    while current_day <= end_cet:
+        # Set start & end of the day in CET
+        start_cet_adjusted = datetime.combine(current_day - timedelta(days=1), time(23, 45)).replace(tzinfo=cet_timezone)
+        end_cet_midnight = datetime.combine(current_day, datetime.min.time()).replace(tzinfo=cet_timezone) + timedelta(days=1)
+
+        # Convert CET times to UTC for API request
+        start_utc = start_cet_adjusted.astimezone(pytz.utc)
+        end_utc = end_cet_midnight.astimezone(pytz.utc)
+
+        # Format timestamps for API request
+        from_time = start_utc.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        to_time = end_utc.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+        # Debug: Print request time range
+        print(f"\n🔍 Requesting data from {from_time} UTC to {to_time} UTC for {current_day.strftime('%Y-%m-%d')}")
+
+        # API Request
+        url = f"https://newmarkets.transelectrica.ro/usy-durom-publicreportg01/00121002500000000000000000000100/publicReport/estimatedPowerSystemImbalance?timeInterval.from={from_time}&timeInterval.to={to_time}&pageInfo.pageSize=3000"
+
+        response = requests.get(url)
+
+        if response.status_code != 200:
+            print(f"⚠️ Failed to fetch data for {current_day.strftime('%Y-%m-%d')}. Status code: {response.status_code}")
+            current_day += timedelta(days=1)  # Move to the next day
+            continue
+
+        # Parse JSON response
+        try:
+            data = response.json()
+            items = data.get("itemList", [])
+
+            print(f"✅ Fetched {len(items)} records for {current_day.strftime('%Y-%m-%d')}.")
+
+            if len(items) == 0:
+                print("⚠️ No data found in itemList.")
+                current_day += timedelta(days=1)
+                continue
+
+            # Process and convert timestamps
+            for item in items:
+                try:
+                    # Convert timestamps from UTC to CET
+                    utc_from = datetime.fromisoformat(item['timeInterval']['from'].replace('Z', '+00:00'))
+                    utc_to = datetime.fromisoformat(item['timeInterval']['to'].replace('Z', '+00:00'))
+
+                    cet_from = utc_from.astimezone(cet_timezone)
+                    cet_to = utc_to.astimezone(cet_timezone)
+
+                    # Store in formatted string
+                    time_period = f"{cet_from.strftime('%Y-%m-%d %H:%M:%S')} - {cet_to.strftime('%Y-%m-%d %H:%M:%S')}"
+
+                    # Extract values (handling potential missing values)
+                    unintended_import = float(item.get("estimatedUnintendedDeviationINArea", 0) or 0)
+                    unintended_export = float(item.get("estimatedUnintendedDeviationOUTArea", 0) or 0)
+
+                    # Debugging - Print added records
+                    print(f"ADDING: {time_period} | IN: {unintended_import}, OUT: {unintended_export}")
+
+                    # Store processed row
+                    all_rows.append([cet_from, unintended_import, unintended_export])
+
+                except Exception as e:
+                    print(f"❌ Error processing record: {e}")
+
+        except Exception as e:
+            print(f"❌ JSON Parsing Error for {current_day.strftime('%Y-%m-%d')}: {e}")
+
+        # Move to the next day
+        current_day += timedelta(days=1)
+
+    # Convert to DataFrame
+    df_unintended_deviation = pd.DataFrame(all_rows, columns=['Timestamp', 'Unintended_Import (MW)', 'Unintended_Export (MW)'])
+
+    if df_unintended_deviation.empty:
+        print("⚠️ No data fetched for the requested period.")
+        return df_unintended_deviation
+
+    # Ensure Timestamp is properly formatted in CET
+    df_unintended_deviation['Timestamp'] = pd.to_datetime(df_unintended_deviation['Timestamp']).dt.tz_localize(None)
+
+    # Add "Quarter" and "Lookup" fields for easy reference
+    df_unintended_deviation['Quarter'] = ((df_unintended_deviation.index % 96) + 1)
+    df_unintended_deviation['Lookup'] = df_unintended_deviation["Timestamp"].dt.strftime('%d.%m.%Y') + df_unintended_deviation["Quarter"].astype(str)
+
+    # Save to Excel
+    df_unintended_deviation.to_excel("./data_fetching/Entsoe/Unintended_Deviation.xlsx", index=False)
+
+    print("✅ Successfully saved unintended deviation data.")
+
+    return df_unintended_deviation
+
 #==================================================================================== Wind Prouction Forecast===================================================================================
 solcast_api_key = os.getenv("solcast_api_key")
 def fetching_Cogealac_data():
@@ -3090,6 +3193,10 @@ def render_fundamentals_page():
 
 		# Fetching the Balancing Energy Activation
 		st.dataframe(fetch_intraday_balancing_activations(start_date, end_date))
+
+		# Fetching the Unintended Deviation Data
+		st.dataframe(fetch_unintended_deviation_data(start_date, end_date))
+		
 
 
 

@@ -2958,11 +2958,11 @@ def predicting_exporting_Kahraman_15min(interval_from, interval_to, limitation_p
 
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate"]]
 
-	xgb_loaded = joblib.load("./Kahraman/rs_xgb_Kahraman_prod_15min_1124.pkl")
+	xgb_loaded = joblib.load("./Kahraman/rs_xgb_Kahraman_prod_15min_1124_2.pkl")
 
 	df["Month"] = df.Data.dt.month
 	dataset = df.copy()
-	forecast_dataset = dataset[["Interval", "Temperatura",  "Nori", "Radiatie", "Umiditate", "Month"]]
+	forecast_dataset = dataset[["Interval", "Temperatura",  "Nori", "Radiatie", "Dewpoint", "Umiditate", "Month"]]
 		
 	preds = xgb_loaded.predict(forecast_dataset.values)
 	
@@ -3057,13 +3057,13 @@ def predicting_exporting_Kahraman(interval_from, interval_to, limitation_percent
 	# Completing the Humidity column
 	forecast_dataset["Umiditate"] = data["relative_humidity"].values
 
-	xgb_loaded = joblib.load("./Kahraman/rs_xgb_Kahraman_default_1124.pkl")
+	xgb_loaded = joblib.load("./Kahraman/rs_xgb_Kahraman_default_1124_2.pkl")
 
 	forecast_dataset["Month"] = pd.to_datetime(forecast_dataset.Data).dt.month
 	
 	dataset = forecast_dataset.copy()
 	forecast_dataset = forecast_dataset.drop("Data", axis=1)
-	forecast_dataset = forecast_dataset[["Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate", "Month"]]
+	forecast_dataset = forecast_dataset[["Interval", "Temperatura", "Nori", "Radiatie"]]
 	preds = xgb_loaded.predict(forecast_dataset.values)
 	
 	# Rounding each value in the list to the third decimal
