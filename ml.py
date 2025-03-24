@@ -3679,43 +3679,43 @@ def check_file_sync(file_path, access_token, max_retries=5, wait_seconds=10):
 def render_consumption_forecast():
 	st.write("Consumption Forecast Section")
 
-	# Allow the user to choose between Consumption and Production
-	consumption_place = st.radio("Choose Consumption:", options=["Solina", "RAAL"], index=None)
-	if consumption_place == "Solina":
-		if st.button("Submit"):
-			fetching_Solina_data()
-			df = predicting_exporting_Consumption_Solina()
-			st.dataframe(df)
-			file_path = './Solina/Consumption/Results/Results_Consumption_Solina.xlsx'
-			with open(file_path, "rb") as f:
-				excel_data = f.read()
+	# # Allow the user to choose between Consumption and Production
+	# consumption_place = st.radio("Choose Consumption:", options=["Solina", "RAAL"], index=None)
+	# if consumption_place == "Solina":
+	# 	if st.button("Submit"):
+	# 		fetching_Solina_data()
+	# 		df = predicting_exporting_Consumption_Solina()
+	# 		st.dataframe(df)
+	# 		file_path = './Solina/Consumption/Results/Results_Consumption_Solina.xlsx'
+	# 		with open(file_path, "rb") as f:
+	# 			excel_data = f.read()
 
-			# Create a download link
-			b64 = base64.b64encode(excel_data).decode()
-			button_html = f"""
-				 <a download="Consumption_Forecast_Solina.xlsx" href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download>
-				 <button kind="secondary" data-testid="baseButton-secondary" class="st-emotion-cache-12tniow ef3psqc12">Download Forecast Results</button>
-				 </a> 
-				 """
-			st.markdown(button_html, unsafe_allow_html=True)
+	# 		# Create a download link
+	# 		b64 = base64.b64encode(excel_data).decode()
+	# 		button_html = f"""
+	# 			 <a download="Consumption_Forecast_Solina.xlsx" href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download>
+	# 			 <button kind="secondary" data-testid="baseButton-secondary" class="st-emotion-cache-12tniow ef3psqc12">Download Forecast Results</button>
+	# 			 </a> 
+	# 			 """
+	# 		st.markdown(button_html, unsafe_allow_html=True)
 
-	elif consumption_place == "RAAL":
-		if st.button("Submit"):
-			fetching_RAAL_data()
-			df=predicting_exporting_Consumption_RAAL()
-			st.dataframe(df)
-			file_path = './RAAL/Consumption/Results/Results_Consumption_RAAL.xlsx'
-			with open(file_path, "rb") as f:
-				excel_data = f.read()
+	# elif consumption_place == "RAAL":
+	# 	if st.button("Submit"):
+	# 		fetching_RAAL_data()
+	# 		df=predicting_exporting_Consumption_RAAL()
+	# 		st.dataframe(df)
+	# 		file_path = './RAAL/Consumption/Results/Results_Consumption_RAAL.xlsx'
+	# 		with open(file_path, "rb") as f:
+	# 			excel_data = f.read()
 
-			# Create a download link
-			b64 = base64.b64encode(excel_data).decode()
-			button_html = f"""
-				 <a download="Consumption_Forecast_RAAL.xlsx" href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download>
-				 <button kind="secondary" data-testid="baseButton-secondary" class="st-emotion-cache-12tniow ef3psqc12">Download Forecast Results</button>
-				 </a> 
-				 """
-			st.markdown(button_html, unsafe_allow_html=True)
+	# 		# Create a download link
+	# 		b64 = base64.b64encode(excel_data).decode()
+	# 		button_html = f"""
+	# 			 <a download="Consumption_Forecast_RAAL.xlsx" href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download>
+	# 			 <button kind="secondary" data-testid="baseButton-secondary" class="st-emotion-cache-12tniow ef3psqc12">Download Forecast Results</button>
+	# 			 </a> 
+	# 			 """
+	# 		st.markdown(button_html, unsafe_allow_html=True)
 
 def render_production_forecast():
 	st.write("Production Forecast Section")
@@ -4339,16 +4339,16 @@ def render_forecast_page():
 	# render_indisponibility_management()
 	st.subheader("Forecast", divider = "grey")
 	# Allow the user to choose between Consumption and Production
-	forecast_type = st.radio("Choose Forecast Type:", options=["Consumption", "Production", "Transavia"])
+	forecast_type = st.radio("Choose Forecast Type:", options=["Consumption", "Production"])
 
 	if forecast_type == "Consumption":
 		cleaning_input_files()
 		render_consumption_forecast()
 	elif forecast_type == "Production":
 		render_production_forecast()
-	elif forecast_type == "Transavia":
-		print("Transavia page")
-		render_Transavia_page()
+	# elif forecast_type == "Transavia":
+	# 	print("Transavia page")
+	# 	render_Transavia_page()
 		
 
 #======================================================BALANGING MARKET===================================================================================================
