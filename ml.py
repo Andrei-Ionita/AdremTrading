@@ -2965,9 +2965,13 @@ def predicting_exporting_Kahraman_15min(interval_from, interval_to, limitation_p
 	forecast_dataset = dataset[["Interval", "Temperatura",  "Nori", "Radiatie", "Dewpoint", "Umiditate", "Month"]]
 		
 	preds = xgb_loaded.predict(forecast_dataset.values)
-	
-	# Rounding each value in the list to the third decimal
-	rounded_values = [round(value*1.1, 3) for value in preds]
+	today = datetime.now()
+	if today.month == 3:
+		# Rounding each value in the list to the third decimal
+		rounded_values = [round(value*1.1, 3) for value in preds]
+	else:
+		# Rounding each value in the list to the third decimal
+		rounded_values = [round(value, 3) for value in preds]
 	
 	#Exporting Results to Excel
 	workbook = xlsxwriter.Workbook("./Kahraman/Results_Production_Kahraman_xgb_15min.xlsx")
@@ -3066,8 +3070,12 @@ def predicting_exporting_Kahraman(interval_from, interval_to, limitation_percent
 	forecast_dataset = forecast_dataset[["Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate", "Month"]]
 	preds = xgb_loaded.predict(forecast_dataset.values)
 	
+	today = datetime.now()
 	# Rounding each value in the list to the third decimal
-	rounded_values = [round(value*1.1, 3) for value in preds]
+	if today.month == 3:
+		rounded_values = [round(value*1.1, 3) for value in preds]
+	else:
+		rounded_values = [round(value, 3) for value in preds]
 	
 	#Exporting Results to Excel
 	workbook = xlsxwriter.Workbook("./Kahraman/Results_Production_Kahraman_xgb.xlsx")
