@@ -3063,7 +3063,7 @@ def predicting_exporting_Kahraman(interval_from, interval_to, limitation_percent
 	
 	dataset = forecast_dataset.copy()
 	forecast_dataset = forecast_dataset.drop("Data", axis=1)
-	forecast_dataset = forecast_dataset[["Interval", "Temperatura", "Nori", "Radiatie"]]
+	forecast_dataset = forecast_dataset[["Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate", "Month"]]
 	preds = xgb_loaded.predict(forecast_dataset.values)
 	
 	# Rounding each value in the list to the third decimal

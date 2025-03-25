@@ -625,6 +625,8 @@ def zip_files(folder_path, zip_name):
 					zipf.write(file_path, arcname)
 #====================================================================================ENTSOE newAPI data=======================================================================================
 api_key_entsoe = os.getenv("api_key_entsoe")
+if api_key_entsoe is None:
+	api_key_entsoe = "api_key_entsoe = ad0626ec-bccb-4d39-9b90-30b2e50c18e0"
 client = EntsoePandasClient(api_key=api_key_entsoe)
 
 
