@@ -2958,7 +2958,7 @@ def predicting_exporting_Kahraman_15min(interval_from, interval_to, limitation_p
 
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate"]]
 
-	xgb_loaded = joblib.load("./Kahraman/rs_xgb_Kahraman_prod_15min_1124_3.pkl")
+	xgb_loaded = joblib.load("./Kahraman/rs_xgb_Kahraman_prod_15min_1124_4.pkl")
 
 	df["Month"] = df.Data.dt.month
 	dataset = df.copy()
@@ -2967,7 +2967,7 @@ def predicting_exporting_Kahraman_15min(interval_from, interval_to, limitation_p
 	preds = xgb_loaded.predict(forecast_dataset.values)
 	
 	# Rounding each value in the list to the third decimal
-	rounded_values = [round(value, 3) for value in preds]
+	rounded_values = [round(value*1.1, 3) for value in preds]
 	
 	#Exporting Results to Excel
 	workbook = xlsxwriter.Workbook("./Kahraman/Results_Production_Kahraman_xgb_15min.xlsx")
@@ -3067,7 +3067,7 @@ def predicting_exporting_Kahraman(interval_from, interval_to, limitation_percent
 	preds = xgb_loaded.predict(forecast_dataset.values)
 	
 	# Rounding each value in the list to the third decimal
-	rounded_values = [round(value, 3) for value in preds]
+	rounded_values = [round(value*1.1, 3) for value in preds]
 	
 	#Exporting Results to Excel
 	workbook = xlsxwriter.Workbook("./Kahraman/Results_Production_Kahraman_xgb.xlsx")
