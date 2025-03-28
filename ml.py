@@ -1632,7 +1632,7 @@ def fetching_Kahraman_data():
 	columns_to_shift = data.columns.difference(['period_end'])
 
 	# Shift the data columns by 2 intervals
-	data_shifted = data[columns_to_shift].shift(1)
+	data_shifted = data[columns_to_shift].shift(2)
 
 	# Combine the fixed 'period_end' with the shifted data columns
 	data_adjusted = pd.concat([data[['period_end']], data_shifted], axis=1)
@@ -2949,7 +2949,7 @@ def predicting_exporting_Kahraman_15min(interval_from, interval_to, limitation_p
 	df.dropna(subset=['period_end'], inplace=True)
 
 	# Shift the 'period_end' column by 2 hours
-	df['period_end'] = df['period_end'] + pd.Timedelta(hours=2)
+	df['period_end'] = df['period_end'] + pd.Timedelta(hours=3)
 
 	# Creating the Interval column
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
@@ -3069,7 +3069,7 @@ def predicting_exporting_Kahraman(interval_from, interval_to, limitation_percent
 	forecast_dataset = forecast_dataset.drop("Data", axis=1)
 	forecast_dataset = forecast_dataset[["Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate", "Month"]]
 	preds = xgb_loaded.predict(forecast_dataset.values)
-	
+
 	today = datetime.now()
 	# Rounding each value in the list to the third decimal
 	if today.month == 3:
