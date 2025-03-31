@@ -2958,11 +2958,11 @@ def predicting_exporting_Kahraman_15min(interval_from, interval_to, limitation_p
 
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate"]]
 
-	xgb_loaded = joblib.load("./Kahraman/rs_xgb_Kahraman_prod_15min_1124_5.pkl")
+	xgb_loaded = joblib.load("./Kahraman/rs_xgb_Kahraman_prod_15min_1124_7.pkl")
 
 	df["Month"] = df.Data.dt.month
 	dataset = df.copy()
-	forecast_dataset = dataset[["Interval", "Temperatura",  "Nori", "Radiatie", "Dewpoint", "Umiditate", "Month"]]
+	forecast_dataset = dataset[["Interval", "Temperatura",  "Nori", "Radiatie", "Dewpoint", "Umiditate"]]
 		
 	preds = xgb_loaded.predict(forecast_dataset.values)
 	today = datetime.now()
