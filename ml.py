@@ -2958,7 +2958,7 @@ def predicting_exporting_Kahraman_15min(interval_from, interval_to, limitation_p
 
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate"]]
 
-	xgb_loaded = joblib.load("./Kahraman/rs_xgb_Kahraman_prod_15min_1124_4.pkl")
+	xgb_loaded = joblib.load("./Kahraman/rs_xgb_Kahraman_prod_15min_1124_5.pkl")
 
 	df["Month"] = df.Data.dt.month
 	dataset = df.copy()
@@ -2968,7 +2968,7 @@ def predicting_exporting_Kahraman_15min(interval_from, interval_to, limitation_p
 	today = datetime.now()
 	if today.month == 3:
 		# Rounding each value in the list to the third decimal
-		rounded_values = [round(value*1.1, 3) for value in preds]
+		rounded_values = [round(value, 3) for value in preds]
 	else:
 		# Rounding each value in the list to the third decimal
 		rounded_values = [round(value, 3) for value in preds]
@@ -3073,7 +3073,7 @@ def predicting_exporting_Kahraman(interval_from, interval_to, limitation_percent
 	today = datetime.now()
 	# Rounding each value in the list to the third decimal
 	if today.month == 3:
-		rounded_values = [round(value*1.1, 3) for value in preds]
+		rounded_values = [round(value, 3) for value in preds]
 	else:
 		rounded_values = [round(value, 3) for value in preds]
 	
