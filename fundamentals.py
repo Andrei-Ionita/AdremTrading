@@ -961,7 +961,7 @@ def fetch_process_wind_notified(start_date, end_date):
 	Fetch and process wind notified production data from ENTSO-E API for a given date range.
 	"""
 	# Convert start_date and end_date to CET timestamps
-	start_cet = pd.Timestamp(start_date.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-1)
+	start_cet = pd.Timestamp(start_date.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
 	end_cet = pd.Timestamp((end_date + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
 
 	# Format the start and end dates to match the API requirements (yyyymmddhhmm)
@@ -1077,7 +1077,7 @@ def fetch_process_wind_actual_production(start_date, end_date):
 	Fetch and process actual wind production data from ENTSO-E API for a given date range.
 	"""
 	# Convert start_date and end_date to CET timestamps
-	start_cet = pd.Timestamp(start_date.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-1)
+	start_cet = pd.Timestamp(start_date.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
 	end_cet = pd.Timestamp((end_date + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
 
 	# Format the start and end dates to match the API requirements (yyyymmddhhmm)
@@ -1232,7 +1232,7 @@ def fetch_process_solar_notified(start_date, end_date):
 	Fetch and process solar notified production data from ENTSO-E API for a given date range.
 	"""
 	# Convert start_date and end_date to CET timestamps
-	start_cet = pd.Timestamp(start_date.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-1)
+	start_cet = pd.Timestamp(start_date.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
 	end_cet = pd.Timestamp((end_date + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
 
 	# Format the start and end dates to match the API requirements (yyyymmddhhmm)
@@ -1348,7 +1348,7 @@ def fetch_process_solar_actual_production(start_date, end_date):
 	Fetch and process solar actual production data from ENTSO-E API for a given date range.
 	"""
 	# Convert start_date and end_date to CET timestamps
-	start_cet = pd.Timestamp(start_date.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-1)
+	start_cet = pd.Timestamp(start_date.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
 	end_cet = pd.Timestamp((end_date + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
 
 	# Format the start and end dates to match the API requirements (yyyymmddhhmm)
@@ -1504,7 +1504,7 @@ def fetch_process_hydro_water_reservoir_actual_production(start_date, end_date):
 	Fetch and process hydro water reservoir actual production data from ENTSO-E API for a given date range.
 	"""
 	# Convert start_date and end_date to CET timestamps
-	start_cet = pd.Timestamp(start_date.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-1)
+	start_cet = pd.Timestamp(start_date.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
 	end_cet = pd.Timestamp((end_date + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
 
 	# Format the start and end dates to match the API requirements (yyyymmddhhmm)
@@ -1622,7 +1622,7 @@ def fetch_process_hydro_river_actual_production(start_date, end_date):
 	Fetch and process hydro river actual production data from ENTSO-E API for a given date range.
 	"""
 	# Convert start_date and end_date to CET timestamps
-	start_cet = pd.Timestamp(start_date.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-1)
+	start_cet = pd.Timestamp(start_date.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
 	end_cet = pd.Timestamp((end_date + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
 
 	# Format the start and end dates to match the API requirements (yyyymmddhhmm)
@@ -1783,7 +1783,7 @@ def fetch_consumption_forecast(start_date, end_date):
 	Fetch forecasted consumption data for the specified date range and save it to an Excel file.
 	"""
 	# Convert start_date and end_date to CET timestamps
-	start_cet = pd.Timestamp(start_date.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-1)
+	start_cet = pd.Timestamp(start_date.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
 	end_cet = pd.Timestamp((end_date + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
 
 	# Format the start and end dates to match the API requirements (yyyymmddhhmm)
@@ -1887,7 +1887,7 @@ def fetch_consumption_forecast(start_date, end_date):
 def fetch_actual_consumption(start_date, end_date):
 	# Setting up the start and end dates (today and tomorrow)
 	today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-	start_cet = pd.Timestamp(start_date.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-1)
+	start_cet = pd.Timestamp(start_date.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
 	end_cet = pd.Timestamp((end_date + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
 
 	# Format the start and end dates to match the API requirements (yyyymmddhhmm)
@@ -2013,130 +2013,532 @@ def combine_consumption_data(df_forecast, df_actual):
 
 # ===========================Activation Energy=======================================================================================
 
+# def fetch_intraday_balancing_activations(start_date, end_date):
+#     """
+#     Fetch activated balancing energy data (aFRR & mFRR) from Transelectrica API
+#     for a user-defined date range.
+#     """
+
+#     # Define CET timezone
+#     cet_timezone = pytz.timezone("Europe/Berlin")
+
+#     # Adjust `start_date` to include the last quarter of the previous day (23:45)
+#     start_cet_adjusted = datetime.combine(start_date - timedelta(days=1), time(23, 45)).replace(tzinfo=cet_timezone)
+#     end_cet_midnight = datetime.combine(end_date, datetime.min.time()).replace(tzinfo=cet_timezone) + timedelta(days=1)
+
+#     # Convert CET times to UTC (API operates in UTC)
+#     start_utc = start_cet_adjusted.astimezone(pytz.utc)
+#     end_utc = end_cet_midnight.astimezone(pytz.utc)
+
+#     # Format timestamps for API request
+#     from_time = start_utc.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+#     to_time = end_utc.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+#     # ✅ Debugging: Print time range
+#     print(f"\n🔍 Requesting data from {from_time} UTC to {to_time} UTC")
+
+#     # ✅ API Request (Transelectrica)
+#     url = f"https://newmarkets.transelectrica.ro/usy-durom-publicreportg01/00121002500000000000000000000100/publicReport/activatedBalancingEnergyOverview?timeInterval.from={from_time}&timeInterval.to={to_time}&pageInfo.pageSize=3000"
+    
+#     response = requests.get(url)
+    
+#     # ✅ Check response status
+#     if response.status_code != 200:
+#         print(f"❌ Failed to fetch data. Status code: {response.status_code}")
+#         return pd.DataFrame()
+
+#     # ✅ Parse JSON response
+#     data = response.json()
+#     items = data.get("itemList", [])
+
+#     if not items:
+#         print(f"⚠️ No data found for the selected date range ({start_date} to {end_date}).")
+#         return pd.DataFrame()
+
+#     print(f"✅ Successfully fetched {len(items)} records from API.")
+
+#     # ✅ Process and convert timestamps
+#     rows = []
+#     for item in items:
+#         try:
+#             # Convert timestamps from UTC to CET
+#             utc_from = datetime.fromisoformat(item['timeInterval']['from'].replace('Z', '+00:00'))
+#             cet_from = utc_from.astimezone(cet_timezone)
+
+#             # **✅ Round timestamps to the nearest minute**
+#             cet_from = cet_from.replace(second=0, microsecond=0)
+
+#             # ✅ Extract energy values (convert None to 0)
+#             afrr_up = item.get("aFRR_Up", 0) or 0
+#             afrr_down = item.get("aFRR_Down", 0) or 0
+#             mfrr_up = item.get("mFRR_Up", 0) or 0
+#             mfrr_down = item.get("mFRR_Down", 0) or 0
+
+#             # ✅ Store processed row
+#             rows.append([cet_from, afrr_up, afrr_down, mfrr_up, mfrr_down])
+
+#         except Exception as e:
+#             print(f"❌ Error processing record: {e}")
+
+#     # ✅ Convert to DataFrame
+#     df = pd.DataFrame(rows, columns=["Timestamp (CET)", "aFRR Up (MW)", "aFRR Down (MW)", "mFRR Up (MW)", "mFRR Down (MW)"])
+
+#     # ✅ Ensure timestamps are in the correct format and remove extra precision
+#     df["Timestamp (CET)"] = pd.to_datetime(df["Timestamp (CET)"]).dt.floor("min")
+
+#     # ✅ Adjust start/end times based on the extracted data
+#     if not df.empty:
+#         start_cet = df["Timestamp (CET)"].min()  # Get earliest timestamp from extracted data
+#         end_cet = df["Timestamp (CET)"].max()  # Get latest timestamp from extracted data
+#     else:
+#         print("⚠️ DataFrame is empty, using default time range!")
+#         start_cet = pd.Timestamp(start_date.strftime('%Y-%m-%dT00:00:00'), tz='Europe/Berlin')
+#         end_cet = pd.Timestamp(end_date.strftime('%Y-%m-%dT23:45:00'), tz='Europe/Berlin')
+
+#     # ✅ Generate the corrected timestamp index
+#     full_index_cet = pd.date_range(start=start_cet, end=end_cet, freq='15T', tz='Europe/Berlin')
+
+#     # ✅ Merge with real data, keeping extracted values
+#     df_full = pd.DataFrame({'Timestamp (CET)': full_index_cet}).set_index("Timestamp (CET)")
+#     df = df.set_index("Timestamp (CET)")
+
+#     # ✅ Merge instead of reindexing to prevent overwriting
+#     df = df_full.merge(df, how='left', left_index=True, right_index=True)
+
+#     # ✅ Fill missing values *only* where data was not present
+#     df.fillna(0, inplace=True)
+
+#     # Reset index
+#     df.reset_index(inplace=True)
+
+#     # ✅ Ensure first quarter (`00:00`) is included
+#     if df["Timestamp (CET)"].iloc[0].time() != time(0, 0):
+#         print("⚠️ Missing 00:00 quarter, adding it manually.")
+#         first_quarter = pd.DataFrame([[datetime.combine(start_date, time(0, 0)), 0, 0, 0, 0]],
+#                                      columns=df.columns)
+#         df = pd.concat([first_quarter, df], ignore_index=True)
+
+#     # ✅ Debug: Print first and last timestamps to verify range
+#     if not df.empty:
+#         print("\n✅ First Timestamp in DataFrame:", df.iloc[0]["Timestamp (CET)"])
+#         print("✅ Last Timestamp in DataFrame:", df.iloc[-1]["Timestamp (CET)"])
+
+#     print("📊 Processed DataFrame:")
+#     print(df.head())
+
+#     # Remove timezone information from the 'Timestamp' column
+#     df['Timestamp (CET)'] = pd.to_datetime(df['Timestamp (CET)'], utc=False, errors='coerce')
+
+#     if pd.api.types.is_datetime64_any_dtype(df['Timestamp (CET)']):
+#         if df['Timestamp (CET)'].dt.tz is not None:
+#             df['Timestamp (CET)'] = df['Timestamp (CET)'].dt.tz_localize(None)
+#     # Add a "Quarter" column based on the Timestamp column
+#     df['Quarter'] = ((df.index % 96) + 1)
+
+#     # Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
+#     df['Lookup'] = df["Timestamp (CET)"].dt.strftime('%d.%m.%Y') + df["Quarter"].astype(str)
+
+#     # Save to Excel
+#     df.to_excel("./data_fetching/Entsoe/Balancing_Energy_Activation.xlsx", index=False)
+
+#     return df
+
+# def fetch_intraday_balancing_activations_2(start_date, end_date):
+#     cet_timezone = pytz.timezone("Europe/Berlin")
+
+#     # Adjust `start_date` to include the last quarter of the previous day (23:45)
+#     start_cet_adjusted = datetime.combine(start_date - timedelta(days=1), time(23, 45)).replace(tzinfo=cet_timezone)
+#     end_cet_midnight = datetime.combine(end_date, datetime.min.time()).replace(tzinfo=cet_timezone) + timedelta(days=1)
+
+#     start_utc = start_cet_adjusted.astimezone(pytz.utc)
+#     end_utc = end_cet_midnight.astimezone(pytz.utc)
+
+#     from_time = start_utc.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+#     to_time = end_utc.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+#     print(f"\n🔍 Requesting data from {from_time} UTC to {to_time} UTC")
+
+#     url = f"https://newmarkets.transelectrica.ro/usy-durom-publicreportg01/00121002500000000000000000000100/publicReport/activatedBalancingEnergyOverview?timeInterval.from={from_time}&timeInterval.to={to_time}&pageInfo.pageSize=3000"
+#     response = requests.get(url)
+
+#     if response.status_code != 200:
+#         print(f"❌ Failed to fetch data. Status code: {response.status_code}")
+#         return pd.DataFrame()
+
+#     data = response.json()
+#     items = data.get("itemList", [])
+#     if not items:
+#         print(f"⚠️ No data found for the selected date range ({start_date} to {end_date}).")
+#         return pd.DataFrame()
+
+#     print(f"✅ Successfully fetched {len(items)} records from API.")
+
+#     rows = []
+#     for item in items:
+#         try:
+#             utc_from = datetime.fromisoformat(item['timeInterval']['from'].replace('Z', '+00:00'))
+#             cet_from = utc_from.astimezone(cet_timezone).replace(second=0, microsecond=0)
+
+#             afrr_up = item.get("aFRR_Up", 0) or 0
+#             afrr_down = item.get("aFRR_Down", 0) or 0
+#             mfrr_up = item.get("mFRR_Up", 0) or 0
+#             mfrr_down = item.get("mFRR_Down", 0) or 0
+
+#             rows.append([cet_from, afrr_up, afrr_down, mfrr_up, mfrr_down])
+#         except Exception as e:
+#             print(f"❌ Error processing record: {e}")
+
+#     df = pd.DataFrame(rows, columns=["Timestamp (CET)", "aFRR Up (MW)", "aFRR Down (MW)", "mFRR Up (MW)", "mFRR Down (MW)"])
+
+#     # Ensure datetime column
+#     df["Timestamp (CET)"] = pd.to_datetime(df["Timestamp (CET)"], utc=False, errors='coerce')
+#     df = df[df["Timestamp (CET)"].notnull()]  # Drop parsing failures
+
+#     # Floor to minute
+#     df["Timestamp (CET)"] = df["Timestamp (CET)"].dt.floor("min")
+
+#     # Generate full 15-minute range
+#     start_cet = df["Timestamp (CET)"].min()
+#     end_cet = df["Timestamp (CET)"].max()
+#     full_index_cet = pd.date_range(start=start_cet, end=end_cet, freq='15T', tz='Europe/Berlin')
+
+#     df_full = pd.DataFrame({'Timestamp (CET)': full_index_cet})
+#     df_full["Timestamp (CET)"] = pd.to_datetime(df_full["Timestamp (CET)"]).dt.tz_localize(None)
+
+#     # Prepare base DataFrame and merge
+#     df["Timestamp (CET)"] = df["Timestamp (CET)"].dt.tz_localize(None)
+#     df = df_full.merge(df, on="Timestamp (CET)", how="left").fillna(0)
+
+#     # Add 00:00 quarter if missing
+#     first_timestamp = pd.Timestamp(datetime.combine(start_date, time(0, 0)))
+#     if first_timestamp not in df["Timestamp (CET)"].values:
+#         print("⚠️ Adding missing 00:00 quarter manually.")
+#         df = pd.concat([
+#             pd.DataFrame([[first_timestamp, 0, 0, 0, 0]], columns=df.columns),
+#             df
+#         ]).drop_duplicates(subset="Timestamp (CET)").sort_values("Timestamp (CET)").reset_index(drop=True)
+
+#     # Add Quarter and Lookup columns
+#     df['Quarter'] = ((df.index % 96) + 1)
+#     df['Lookup'] = df["Timestamp (CET)"].dt.strftime('%d.%m.%Y') + df["Quarter"].astype(str)
+
+#     # Export and return
+#     df.to_excel("./data_fetching/Entsoe/Balancing_Energy_Activation.xlsx", index=False)
+#     print("✅ Final DataFrame:")
+#     print(df.head())
+
+#     return df
+
+
+# def fetch_intraday_balancing_activations_3(start_date, end_date, retries=3, delay=5):
+#     """
+#     Fetch activated balancing energy data (aFRR & mFRR) from Transelectrica API
+#     for a user-defined date range (in CET). Handles misaligned timestamps,
+#     aligns to 15-min quarters, and saves to Excel.
+#     """
+
+#     cet = pytz.timezone("Europe/Berlin")
+#     start_cet = datetime.combine(start_date, time(0, 0)).replace(tzinfo=cet)
+#     end_cet = datetime.combine(end_date, time(23, 45)).replace(tzinfo=cet)
+#     start_utc = start_cet.astimezone(pytz.utc)
+#     end_utc = (end_cet + timedelta(minutes=15)).astimezone(pytz.utc)
+
+#     from_time = start_utc.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+#     to_time = end_utc.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+#     url = f"https://newmarkets.transelectrica.ro/usy-durom-publicreportg01/00121002500000000000000000000100/publicReport/activatedBalancingEnergyOverview?timeInterval.from={from_time}&timeInterval.to={to_time}&pageInfo.pageSize=3000"
+
+#     for attempt in range(retries):
+#         try:
+#             response = requests.get(url)
+#             response.raise_for_status()
+#             break
+#         except requests.exceptions.RequestException as e:
+#             print(f"Attempt {attempt + 1}/{retries} - Network error: {e}")
+#             if attempt < retries - 1:
+#                 time_module.sleep(delay)
+#             else:
+#                 print("❌ Max retries reached. Returning empty DataFrame.")
+#                 return pd.DataFrame()
+
+#     data = response.json()
+#     items = data.get("itemList", [])
+#     if not items:
+#         print("⚠️ No data returned.")
+#         return pd.DataFrame()
+
+#     rows = []
+#     for item in items:
+#         try:
+#             utc_from = datetime.fromisoformat(item['timeInterval']['from'].replace('Z', '+00:00'))
+#             cet_from = utc_from.astimezone(cet)
+
+#             # ✅ Round to nearest lower 15-min interval
+#             cet_from = cet_from.floor("15min")
+
+#             rows.append([
+#                 cet_from,
+#                 float(item.get("aFRR_Up", 0) or 0),
+#                 float(item.get("aFRR_Down", 0) or 0),
+#                 float(item.get("mFRR_Up", 0) or 0),
+#                 float(item.get("mFRR_Down", 0) or 0)
+#             ])
+#         except Exception as e:
+#             print(f"❌ Error processing record: {e}")
+
+#     df = pd.DataFrame(rows, columns=[
+#         "Timestamp (CET)", "aFRR Up (MW)", "aFRR Down (MW)", "mFRR Up (MW)", "mFRR Down (MW)"
+#     ])
+
+#     # ✅ Generate full index with all quarters
+#     full_index = pd.date_range(start=start_cet, end=end_cet, freq="15T", tz=cet).tz_localize(None)
+#     df_full = pd.DataFrame({'Timestamp (CET)': full_index})
+#     df = pd.merge(df_full, df, on="Timestamp (CET)", how="left").fillna(0)
+
+#     # ✅ Remove tz info
+#     df["Timestamp (CET)"] = pd.to_datetime(df["Timestamp (CET)"]).dt.tz_localize(None)
+
+#     # ✅ Quarter calculation: 1–96
+#     df["Quarter"] = df["Timestamp (CET)"].dt.hour * 4 + (df["Timestamp (CET)"].dt.minute // 15) + 1
+
+#     # ✅ Lookup format: dd.mm.yyyy + quarter
+#     df["Lookup"] = df["Timestamp (CET)"].dt.strftime('%d.%m.%Y') + df["Quarter"].astype(str)
+
+#     # ✅ Save to Excel
+#     df.to_excel("./data_fetching/Entsoe/Balancing_Energy_Activation.xlsx", index=False)
+#     print("✅ Saved to ./data_fetching/Entsoe/Balancing_Energy_Activation.xlsx")
+
+#     return df
+
+
+# def fetch_intraday_balancing_activations_4(start_date, end_date):
+#     """Fetch activated balancing energy (aFRR & mFRR) with DST-aware UTC→CET alignment."""
+
+#     cet_tz = pytz.timezone("Europe/Bucharest")
+#     all_rows = []
+
+#     current_day = start_date
+#     while current_day <= end_date:
+#         # Determine DST offset for this day
+#         cet_midnight = cet_tz.localize(datetime.combine(current_day, time(0, 0)))
+#         utc_equivalent = cet_midnight.astimezone(pytz.utc)
+
+#         # Calculate how many 15-min quarters we need from previous UTC day
+#         quarter_shift = int((cet_midnight - utc_equivalent).total_seconds() // (15 * 60))
+
+#         # Fetch from (midnight - shift) UTC to next day midnight UTC
+#         utc_start = utc_equivalent - timedelta(minutes=15 * quarter_shift)
+#         utc_end = utc_equivalent + timedelta(days=1)
+
+#         from_time = utc_start.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+#         to_time = utc_end.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+#         print(f"📡 Fetching UTC data from {from_time} to {to_time} for CET date {current_day}")
+
+#         url = f"https://newmarkets.transelectrica.ro/usy-durom-publicreportg01/00121002500000000000000000000100/publicReport/activatedBalancingEnergyOverview?timeInterval.from={from_time}&timeInterval.to={to_time}&pageInfo.pageSize=3000"
+#         response = requests.get(url)
+
+#         if response.status_code != 200:
+#             print(f"❌ Failed to fetch data for {current_day} | Status: {response.status_code}")
+#             current_day += timedelta(days=1)
+#             continue
+
+#         try:
+#             items = response.json().get("itemList", [])
+#             if not items:
+#                 print(f"⚠️ No data returned for {current_day}")
+#                 current_day += timedelta(days=1)
+#                 continue
+
+#             for item in items:
+#                 try:
+#                     utc_from = datetime.fromisoformat(item['timeInterval']['from'].replace('Z', '+00:00'))
+#                     cet_from = utc_from.astimezone(cet_tz).replace(second=0, microsecond=0)
+
+#                     afrr_up = item.get("aFRR_Up", 0) or 0
+#                     afrr_down = item.get("aFRR_Down", 0) or 0
+#                     mfrr_up = item.get("mFRR_Up", 0) or 0
+#                     mfrr_down = item.get("mFRR_Down", 0) or 0
+
+#                     all_rows.append([cet_from, afrr_up, afrr_down, mfrr_up, mfrr_down])
+#                 except Exception as e:
+#                     print(f"❌ Error parsing item: {e}")
+
+#         except Exception as e:
+#             print(f"❌ JSON error: {e}")
+
+#         current_day += timedelta(days=1)
+
+#     # Construct DataFrame
+#     df = pd.DataFrame(all_rows, columns=["Timestamp (CET)", "aFRR Up (MW)", "aFRR Down (MW)", "mFRR Up (MW)", "mFRR Down (MW)"])
+
+#     # Drop timezone info, sort
+#     df["Timestamp (CET)"] = pd.to_datetime(df["Timestamp (CET)"]).dt.tz_localize(None)
+#     df = df.sort_values("Timestamp (CET)").reset_index(drop=True)
+
+#     # Filter only quarters in target range
+#     full_range = pd.date_range(start=start_date, end=end_date + timedelta(days=1) - timedelta(minutes=15), freq="15min", tz=cet_tz)
+#     full_range = full_range.tz_localize(None)
+
+#     df = df[df["Timestamp (CET)"].isin(full_range)].reset_index(drop=True)
+
+#     # Add Quarter and Lookup
+#     df['Quarter'] = ((df.index % 96) + 1)
+#     df['Lookup'] = df["Timestamp (CET)"].dt.strftime('%d.%m.%Y') + df["Quarter"].astype(str)
+
+#     # Save to Excel
+#     df.to_excel("./data_fetching/Entsoe/Balancing_Energy_Activation.xlsx", index=False)
+#     print("✅ Saved to Excel: Balancing_Energy_Activation.xlsx")
+
+#     return df
+
+# def fetch_intraday_balancing_activations(start_date, end_date):
+#     """Fetch activated balancing energy data and align it to CET."""
+
+#     # Timezones
+#     utc = pytz.utc
+#     cet = pytz.timezone("CET")
+
+#     # Fetch window: 2 hours before CET midnight
+#     request_start = datetime.combine(start_date - timedelta(days=1), time(22, 0)).replace(tzinfo=cet)
+#     request_end = datetime.combine(end_date + timedelta(days=1), time(0, 0)).replace(tzinfo=cet)
+
+#     # Convert to UTC for API
+#     from_time = request_start.astimezone(utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+#     to_time = request_end.astimezone(utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+#     url = f"https://newmarkets.transelectrica.ro/usy-durom-publicreportg01/00121002500000000000000000000100/publicReport/activatedBalancingEnergyOverview?timeInterval.from={from_time}&timeInterval.to={to_time}&pageInfo.pageSize=3000"
+#     response = requests.get(url)
+
+#     if response.status_code != 200:
+#         print(f"Failed to fetch data: {response.status_code}")
+#         return pd.DataFrame()
+
+#     data = response.json().get("itemList", [])
+#     records = []
+
+#     for item in data:
+#         try:
+#             ts_utc = datetime.fromisoformat(item["timeInterval"]["from"].replace("Z", "+00:00")).astimezone(cet)
+#             ts_utc = ts_utc.replace(second=0, microsecond=0)
+#             records.append({
+#                 "Timestamp (CET)": ts_utc,
+#                 "aFRR Up (MW)": item.get("aFRR_Up", 0) or 0,
+#                 "aFRR Down (MW)": item.get("aFRR_Down", 0) or 0,
+#                 "mFRR Up (MW)": item.get("mFRR_Up", 0) or 0,
+#                 "mFRR Down (MW)": item.get("mFRR_Down", 0) or 0,
+#             })
+#         except Exception as e:
+#             print(f"Error processing record: {e}")
+
+#     df = pd.DataFrame(records)
+
+#     if df.empty:
+#         print("No data available.")
+#         return df
+
+#     # Filter strictly for CET date range
+#     df = df[(df["Timestamp (CET)"] >= pd.Timestamp(start_date, tz=cet)) &
+#             (df["Timestamp (CET)"] < pd.Timestamp(end_date + timedelta(days=1), tz=cet))]
+
+#     df["Timestamp (CET)"] = df["Timestamp (CET)"].dt.tz_localize(None)
+
+#     df["Quarter"] = ((df.index % 96) + 1)
+#     df["Lookup"] = df["Timestamp (CET)"].dt.strftime('%d.%m.%Y') + df["Quarter"].astype(str)
+
+#     # Save to Excel
+#     output_path = "./data_fetching/Entsoe/Balancing_Energy_Activation_CET.xlsx"
+#     os.makedirs(os.path.dirname(output_path), exist_ok=True)
+#     df.to_excel(output_path, index=False)
+
+#     return df
+
 def fetch_intraday_balancing_activations(start_date, end_date):
     """
-    Fetch activated balancing energy data (aFRR & mFRR) from Transelectrica API
-    for a user-defined date range.
+    Fetch activated aFRR and mFRR balancing energy from Transelectrica API 
+    and align the data in CET with proper quarter-hour indexing (1 to 96).
+
+    Each day is built from UTC data starting 2 hours earlier to account for 
+    Daylight Saving Time (when CET = UTC+2), ensuring the CET day starts at 00:00.
     """
 
-    # Define CET timezone
-    cet_timezone = pytz.timezone("Europe/Berlin")
+    import requests
+    import pandas as pd
+    from datetime import datetime, timedelta, time
+    import pytz
 
-    # Adjust `start_date` to include the last quarter of the previous day (23:45)
-    start_cet_adjusted = datetime.combine(start_date - timedelta(days=1), time(23, 45)).replace(tzinfo=cet_timezone)
-    end_cet_midnight = datetime.combine(end_date, datetime.min.time()).replace(tzinfo=cet_timezone) + timedelta(days=1)
+    cet = pytz.timezone("Europe/Berlin")
+    utc = pytz.utc
 
-    # Convert CET times to UTC (API operates in UTC)
-    start_utc = start_cet_adjusted.astimezone(pytz.utc)
-    end_utc = end_cet_midnight.astimezone(pytz.utc)
-
-    # Format timestamps for API request
-    from_time = start_utc.strftime("%Y-%m-%dT%H:%M:%S.000Z")
-    to_time = end_utc.strftime("%Y-%m-%dT%H:%M:%S.000Z")
-
-    # ✅ Debugging: Print time range
-    print(f"\n🔍 Requesting data from {from_time} UTC to {to_time} UTC")
-
-    # ✅ API Request (Transelectrica)
-    url = f"https://newmarkets.transelectrica.ro/usy-durom-publicreportg01/00121002500000000000000000000100/publicReport/activatedBalancingEnergyOverview?timeInterval.from={from_time}&timeInterval.to={to_time}&pageInfo.pageSize=3000"
-    
-    response = requests.get(url)
-
-    # ✅ Check response status
-    if response.status_code != 200:
-        print(f"❌ Failed to fetch data. Status code: {response.status_code}")
-        return pd.DataFrame()
-
-    # ✅ Parse JSON response
-    data = response.json()
-    items = data.get("itemList", [])
-
-    if not items:
-        print(f"⚠️ No data found for the selected date range ({start_date} to {end_date}).")
-        return pd.DataFrame()
-
-    print(f"✅ Successfully fetched {len(items)} records from API.")
-
-    # ✅ Process and convert timestamps
     rows = []
-    for item in items:
+    current_day = start_date
+
+    while current_day <= end_date:
+        # --- Build the UTC time window: 2 hours before CET midnight to next CET midnight
+        start_cet_dt = datetime.combine(current_day, datetime.min.time()).replace(tzinfo=cet)
+        end_cet_dt = start_cet_dt + timedelta(days=1)
+
+        start_utc = start_cet_dt - timedelta(hours=2)  # Covers 00:00 CET = 22:00 UTC
+        end_utc = end_cet_dt
+
+        url = (
+            "https://newmarkets.transelectrica.ro/usy-durom-publicreportg01/"
+            "00121002500000000000000000000100/publicReport/activatedBalancingEnergyOverview"
+            f"?timeInterval.from={start_utc.strftime('%Y-%m-%dT%H:%M:%S.000Z')}"
+            f"&timeInterval.to={end_utc.strftime('%Y-%m-%dT%H:%M:%S.000Z')}"
+            f"&pageInfo.pageSize=3000"
+        )
+
+        response = requests.get(url)
+        if response.status_code != 200:
+            print(f"❌ Failed for {current_day}: {response.status_code}")
+            current_day += timedelta(days=1)
+            continue
+
         try:
-            # Convert timestamps from UTC to CET
-            utc_from = datetime.fromisoformat(item['timeInterval']['from'].replace('Z', '+00:00'))
-            cet_from = utc_from.astimezone(cet_timezone)
+            data = response.json().get("itemList", [])
+            if not data:
+                print(f"⚠️ No data for {current_day}")
+                current_day += timedelta(days=1)
+                continue
 
-            # **✅ Round timestamps to the nearest minute**
-            cet_from = cet_from.replace(second=0, microsecond=0)
+            for item in data:
+                start = datetime.fromisoformat(item['timeInterval']['from'].replace("Z", "+00:00")).astimezone(cet)
+                afrr_up = item.get("aFRR_Up", 0) or 0
+                afrr_down = item.get("aFRR_Down", 0) or 0
+                mfrr_up = item.get("mFRR_Up", 0) or 0
+                mfrr_down = item.get("mFRR_Down", 0) or 0
 
-            # ✅ Extract energy values (convert None to 0)
-            afrr_up = item.get("aFRR_Up", 0) or 0
-            afrr_down = item.get("aFRR_Down", 0) or 0
-            mfrr_up = item.get("mFRR_Up", 0) or 0
-            mfrr_down = item.get("mFRR_Down", 0) or 0
-
-            # ✅ Store processed row
-            rows.append([cet_from, afrr_up, afrr_down, mfrr_up, mfrr_down])
+                rows.append([start.replace(second=0, microsecond=0), afrr_up, afrr_down, mfrr_up, mfrr_down])
 
         except Exception as e:
-            print(f"❌ Error processing record: {e}")
+            print(f"❌ Error processing data for {current_day}: {e}")
 
-    # ✅ Convert to DataFrame
+        current_day += timedelta(days=1)
+
+    # --- Create DataFrame
     df = pd.DataFrame(rows, columns=["Timestamp (CET)", "aFRR Up (MW)", "aFRR Down (MW)", "mFRR Up (MW)", "mFRR Down (MW)"])
 
-    # ✅ Ensure timestamps are in the correct format and remove extra precision
-    df["Timestamp (CET)"] = pd.to_datetime(df["Timestamp (CET)"]).dt.floor("min")
+    if df.empty:
+        print("⚠️ No data collected.")
+        return df
 
-    # ✅ Adjust start/end times based on the extracted data
-    if not df.empty:
-        start_cet = df["Timestamp (CET)"].min()  # Get earliest timestamp from extracted data
-        end_cet = df["Timestamp (CET)"].max()  # Get latest timestamp from extracted data
-    else:
-        print("⚠️ DataFrame is empty, using default time range!")
-        start_cet = pd.Timestamp(start_date.strftime('%Y-%m-%dT00:00:00'), tz='Europe/Berlin')
-        end_cet = pd.Timestamp(end_date.strftime('%Y-%m-%dT23:45:00'), tz='Europe/Berlin')
+    # --- Strip timezone info and sort
+    df["Timestamp (CET)"] = pd.to_datetime(df["Timestamp (CET)"]).dt.tz_localize(None)
+    df = df.sort_values("Timestamp (CET)").reset_index(drop=True)
 
-    # ✅ Generate the corrected timestamp index
-    full_index_cet = pd.date_range(start=start_cet, end=end_cet, freq='15T', tz='Europe/Berlin')
+    # --- Filter for timestamps that belong to actual requested CET days
+    df = df[df["Timestamp (CET)"].dt.date.between(start_date, end_date)]
 
-    # ✅ Merge with real data, keeping extracted values
-    df_full = pd.DataFrame({'Timestamp (CET)': full_index_cet}).set_index("Timestamp (CET)")
-    df = df.set_index("Timestamp (CET)")
+    # --- Add quarter column (1 to 96 for each day)
+    df["Quarter"] = df["Timestamp (CET)"].apply(lambda ts: (ts.hour * 60 + ts.minute) // 15 + 1)
 
-    # ✅ Merge instead of reindexing to prevent overwriting
-    df = df_full.merge(df, how='left', left_index=True, right_index=True)
+    # --- Create lookup key: e.g., "01.04.202512" for 12th quarter on April 1st
+    df["Lookup"] = df["Timestamp (CET)"].dt.strftime('%d.%m.%Y') + df["Quarter"].astype(str)
 
-    # ✅ Fill missing values *only* where data was not present
-    df.fillna(0, inplace=True)
-
-    # Reset index
-    df.reset_index(inplace=True)
-
-    # ✅ Ensure first quarter (`00:00`) is included
-    if df["Timestamp (CET)"].iloc[0].time() != time(0, 0):
-        print("⚠️ Missing 00:00 quarter, adding it manually.")
-        first_quarter = pd.DataFrame([[datetime.combine(start_date, time(0, 0)), 0, 0, 0, 0]],
-                                     columns=df.columns)
-        df = pd.concat([first_quarter, df], ignore_index=True)
-
-    # ✅ Debug: Print first and last timestamps to verify range
-    if not df.empty:
-        print("\n✅ First Timestamp in DataFrame:", df.iloc[0]["Timestamp (CET)"])
-        print("✅ Last Timestamp in DataFrame:", df.iloc[-1]["Timestamp (CET)"])
-
-    print("📊 Processed DataFrame:")
-    print(df.head())
-
-    # Remove timezone information from the 'Timestamp' column
-    df['Timestamp (CET)'] = df['Timestamp (CET)'].dt.tz_localize(None)
-
-    # Add a "Quarter" column based on the Timestamp column
-    df['Quarter'] = ((df.index % 96) + 1)
-
-    # Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
-    df['Lookup'] = df["Timestamp (CET)"].dt.strftime('%d.%m.%Y') + df["Quarter"].astype(str)
-
-    # Save to Excel
+    # --- Save to Excel
     df.to_excel("./data_fetching/Entsoe/Balancing_Energy_Activation.xlsx", index=False)
+    print("✅ Saved aligned balancing activation data in CET.")
 
     return df
 

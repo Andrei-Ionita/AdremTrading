@@ -520,7 +520,7 @@ def create_combined_imbalance_dataframe(df_prices, df_volumes):
 def fetch_process_wind_notified():
     # Setting up the start and end dates (today for intraday)
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-1)
+    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
     end_cet = pd.Timestamp((today + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
 
     # Format the start and end dates to match the API requirements (yyyymmddhhmm)
@@ -643,7 +643,7 @@ def fetch_process_wind_notified():
 def fetch_process_wind_actual_production():
     # Setting up the start and end dates (today for intraday)
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-1)
+    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
     end_cet = pd.Timestamp((today + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
 
     # Format the start and end dates to match the API requirements (yyyymmddhhmm)
@@ -977,7 +977,7 @@ def add_solcast_forecast_to_wind_dataframe(df_combined, df_solcast_forecast):
 def fetch_process_solar_notified():
     # Setting up the start and end dates (today for intraday)
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-1)
+    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
     end_cet = pd.Timestamp((today + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
 
     # Format the start and end dates to match the API requirements (yyyymmddhhmm)
@@ -1100,7 +1100,7 @@ def fetch_process_solar_notified():
 def fetch_process_solar_actual_production():
     # Setting up the start and end dates (today for intraday)
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-1)
+    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
     end_cet = pd.Timestamp((today + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
 
     # Format the start and end dates to match the API requirements (yyyymmddhhmm)
@@ -1265,7 +1265,7 @@ def combine_solar_production_data(df_notified, df_actual, df_forecast):
 def fetch_process_hydro_water_reservoir_actual_production():
     # Setting up the start and end dates (today for intraday)
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-1)
+    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
     end_cet = pd.Timestamp((today + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
 
     # Format the start and end dates to match the API requirements (yyyymmddhhmm)
@@ -1382,7 +1382,7 @@ def fetch_process_hydro_water_reservoir_actual_production():
 def fetch_process_hydro_river_actual_production():
     # Setting up the start and end dates (today for intraday)
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-1)
+    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
     end_cet = pd.Timestamp((today + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
 
     # Format the start and end dates to match the API requirements (yyyymmddhhmm)
@@ -1668,7 +1668,7 @@ def fetch_consumption_forecast():
 
 def fetch_actual_consumption():
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-1)
+    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
     end_cet = pd.Timestamp((today + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
 
     period_start = start_cet.strftime('%Y%m%d%H%M')
@@ -1779,7 +1779,7 @@ def combine_consumption_data(df_forecast, df_actual):
 
 def fetch_physical_flows_bulgaria_to_romania():
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-1)
+    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
     end_cet = pd.Timestamp((today + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
 
     period_start = start_cet.strftime('%Y%m%d%H%M')
@@ -1875,7 +1875,7 @@ def fetch_physical_flows_bulgaria_to_romania():
 
 def fetch_physical_flows_romania_to_bulgaria():
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-1)
+    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
     end_cet = pd.Timestamp((today + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
 
     period_start = start_cet.strftime('%Y%m%d%H%M')
@@ -2068,7 +2068,7 @@ def fetch_cross_border_schedule(out_domain, in_domain):
     end_cet = pd.Timestamp((today + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Berlin')
 
     # Convert to UTC for API request
-    start_utc = start_cet.tz_convert('UTC') - timedelta(hours=1)
+    start_utc = start_cet.tz_convert('UTC') - timedelta(hours=2)
     period_start = start_utc.strftime('%Y%m%d%H%M')
     period_end = end_cet.tz_convert('UTC').strftime('%Y%m%d%H%M')
 
@@ -2251,7 +2251,7 @@ def combine_physical_and_scheduled_flows_ro_bg(df_cross_border_flows, df_bg_to_r
 
 def fetch_physical_flows(out_domain, in_domain):
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-1)
+    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
     end_cet = pd.Timestamp((today + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
 
     period_start = start_cet.strftime('%Y%m%d%H%M')
@@ -2411,7 +2411,7 @@ eic_Moldova = "10Y1001A1001A990"
 
 def fetch_physical_flows_ro_hu(out_domain, in_domain):
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Berlin') - timedelta(hours=1)
+    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Berlin') - timedelta(hours=2)
     end_cet = pd.Timestamp((today + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Berlin')
 
     period_start = start_cet.strftime('%Y%m%d%H%M')
@@ -2495,8 +2495,8 @@ def fetch_cross_border_schedule_hu_ro():
     start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Berlin')
     end_cet = pd.Timestamp((today + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Berlin')
 
-    period_start = (start_cet - timedelta(hours=1)).strftime('%Y%m%d%H%M')  # Start in UTC for API
-    period_end = (end_cet - timedelta(hours=1)).strftime('%Y%m%d%H%M')  # End in UTC for API
+    period_start = (start_cet - timedelta(hours=2)).strftime('%Y%m%d%H%M')  # Start in UTC for API
+    period_end = (end_cet - timedelta(hours=2)).strftime('%Y%m%d%H%M')  # End in UTC for API
 
     url = "https://web-api.tp.entsoe.eu/api"
 
@@ -2593,8 +2593,8 @@ def fetch_cross_border_schedule_quarterly_ro_hu():
     start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Berlin')
     end_cet = pd.Timestamp((today + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Berlin')
 
-    period_start = (start_cet - timedelta(hours=1)).strftime('%Y%m%d%H%M')  # Start in UTC for API
-    period_end = (end_cet - timedelta(hours=1)).strftime('%Y%m%d%H%M')  # End in UTC for API
+    period_start = (start_cet - timedelta(hours=2)).strftime('%Y%m%d%H%M')  # Start in UTC for API
+    period_end = (end_cet - timedelta(hours=2)).strftime('%Y%m%d%H%M')  # End in UTC for API
 
     url = "https://web-api.tp.entsoe.eu/api"
 
