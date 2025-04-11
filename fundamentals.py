@@ -2461,12 +2461,6 @@ def fetch_intraday_balancing_activations(start_date, end_date):
     Each day is built from UTC data starting 2 hours earlier to account for 
     Daylight Saving Time (when CET = UTC+2), ensuring the CET day starts at 00:00.
     """
-
-    import requests
-    import pandas as pd
-    from datetime import datetime, timedelta, time
-    import pytz
-
     cet = pytz.timezone("Europe/Berlin")
     utc = pytz.utc
 
@@ -2909,6 +2903,7 @@ def fetch_unintended_deviation_data(start_cet, end_cet):
 
 #==================================================================================== Wind Prouction Forecast===================================================================================
 solcast_api_key = os.getenv("solcast_api_key")
+
 def fetching_Cogealac_data():
 	lat = 44.561156
 	lon = 28.562586
@@ -2949,18 +2944,36 @@ def fetching_Cogealac_data_15min():
 	print("Fetching data...")
 	if response.status_code == 200:
 		# Write the content to a CSV file
-		with open("./Market Fundamentals/Wind_Production_Forecast/Wind_dataset_raw_15min.csv", 'wb') as file:
+		with open("./Market Fundamentals/Wind_Production_Forecast/Wind_dataset_Cogealac_raw_15min.csv", 'wb') as file:
+			file.write(response.content)
+	else:
+		print(response.text)  # Add this line to see the error message returned by the API
+		raise Exception(f"Failed to fetch data: Status code {response.status_code}")
+	# Saving the Cogealac wind dataset
+	data = pd.read_csv("./Market Fundamentals/Wind_Production_Forecast/Wind_dataset_Cogealac_raw_15min.csv")
+	data.to_csv("./Market Fundamentals/Wind_Production_Forecast/Wind_dataset_Cogealac_raw_15min.xlsx", index=False)
+
+def fetching_Focsani_data_15min():
+	lat = 45.696475
+	lon = 27.184043
+	# Fetch data from the API
+	api_url = "https://api.solcast.com.au/data/forecast/radiation_and_weather?latitude={}&longitude={}&hours=168&output_parameters=air_temp,wind_direction_100m,wind_direction_10m,wind_speed_100m,wind_speed_10m&period=PT15M&format=csv&time_zone=3&api_key={}".format(lat, lon, solcast_api_key)
+	response = requests.get(api_url)
+	print("Fetching data...")
+	if response.status_code == 200:
+		# Write the content to a CSV file
+		with open("./Market Fundamentals/Wind_Production_Forecast/Wind_dataset_Focsani_raw_15min.csv", 'wb') as file:
 			file.write(response.content)
 	else:
 		print(response.text)  # Add this line to see the error message returned by the API
 		raise Exception(f"Failed to fetch data: Status code {response.status_code}")
 	# Adjusting the values to EET time
-	data = pd.read_csv("./Market Fundamentals/Wind_Production_Forecast/Wind_dataset_raw_15min.csv")
-# Defining the function for forecasting
+	data = pd.read_csv("./Market Fundamentals/Wind_Production_Forecast/Wind_dataset_Focsani_raw_15min.csv")
+	data.to_csv("./Market Fundamentals/Wind_Production_Forecast/Wind_dataset_Focsani_raw_15min.xlsx", index=False)
 
 def predicting_wind_production():
 	# Creating the forecast_dataset df
-	data = pd.read_csv("./Market Fundamentals/Wind_Production_Forecast/Wind_dataset_raw.csv")
+	data_Cogealac = pd.read_csv("./Market Fundamentals/Wind_Production_Forecast/Wind_dataset_raw.csv")
 	forecast_dataset = pd.read_excel("./Market Fundamentals/Wind_Production_Forecast/Input_Wind_dataset.xlsx")
 	# Convert 'period_end' in santimbru to datetime
 	data['period_end'] = pd.to_datetime(data['period_end'], errors='coerce')
@@ -3033,36 +3046,54 @@ def predicting_wind_production():
 
 def predicting_wind_production_15min():
 	# Creating the forecast_dataset df
-	data = pd.read_csv("./Market Fundamentals/Wind_Production_Forecast/Wind_dataset_raw_15min.csv")
+	data_Cogealac = pd.read_csv("./Market Fundamentals/Wind_Production_Forecast/Wind_dataset_Cogealac_raw_15min.csv")
+	data_Focsani = pd.read_csv("./Market Fundamentals/Wind_Production_Forecast/Wind_dataset_Focsani_raw_15min.csv")
 	forecast_dataset = pd.read_excel("./Market Fundamentals/Wind_Production_Forecast/Input_Wind_dataset_15min.xlsx")
 	# Convert the 'period_end' column to datetime, handling errors
-	data['period_end'] = pd.to_datetime(data['period_end'], errors='coerce', format='%Y-%m-%dT%H:%M:%SZ')
+	data_Cogealac['period_end'] = pd.to_datetime(data_Cogealac['period_end'], errors='coerce', format='%Y-%m-%dT%H:%M:%SZ')
+	data_Focsani['period_end'] = pd.to_datetime(data_Focsani['period_end'], errors='coerce', format='%Y-%m-%dT%H:%M:%SZ')
 	# Shift the 'period_end' column by 2 hours
-	data['period_end'] = data['period_end'] + pd.Timedelta(hours=2)
-	forecast_dataset['Data'] = data.period_end.dt.strftime('%Y-%m-%d').values
+	data_Cogealac['period_end'] = data_Cogealac['period_end'] + pd.Timedelta(hours=3)
+	data_Focsani['period_end'] = data_Focsani['period_end'] + pd.Timedelta(hours=3)
+
+	forecast_dataset['Data'] = data_Cogealac.period_end.dt.strftime('%Y-%m-%d %H:%M:%S').values
 	# Creating the Interval column
-	forecast_dataset['Interval'] = data.period_end.dt.hour * 4 + data.period_end.dt.minute // 15 + 1
+	forecast_dataset['Interval'] = data_Cogealac.period_end.dt.hour * 4 + data_Cogealac.period_end.dt.minute // 15 + 1
 	# Replace NaNs in the 'Interval' column with 0
 	forecast_dataset['Interval'].fillna(9, inplace=True)
 	# Replace NaNs in the 'Date' column with the previous valid observation
 	forecast_dataset['Data'].fillna(method='ffill', inplace=True)
-	# Completing the wind_direction_100m column
-	forecast_dataset["wind_direction_100m"] = data["wind_direction_100m"].values
-	# Completing the wind_direction_10m column
-	forecast_dataset["wind_direction_10m"] = data["wind_direction_10m"].values
-	# Completing the wind_speed_100m column
-	forecast_dataset["wind_speed_100m"] = data["wind_speed_100m"].values
-	# Completing the wind_speed_10m column
-	forecast_dataset["wind_speed_10m"] = data["wind_speed_10m"].values
-	# Completing the temperature column
-	forecast_dataset["temperature"] = data["air_temp"].values
+	# Filling the air_temp Cogealac column
+	forecast_dataset["air_temp_Cogealac"] = data_Cogealac["air_temp"].values
+	# Completing the wind_direction_100m Cogealac column
+	forecast_dataset["wind_direction_100m_Cogealac"] = data_Cogealac["wind_direction_100m"].values
+	# Completing the wind_direction_10m Cogealac column
+	forecast_dataset["wind_direction_10m_Cogealac"] = data_Cogealac["wind_direction_10m"].values
+	# Completing the wind_speed_100m Cogealac column
+	forecast_dataset["wind_speed_100m_Cogealac"] = data_Cogealac["wind_speed_100m"].values
+	# Completing the wind_speed_10m Cogealac column
+	forecast_dataset["wind_speed_10m_Cogealac"] = data_Cogealac["wind_speed_10m"].values
+	# Completing the wind_gust Cogealac column
+	# forecast_dataset["wind_gust_Cogealac"] = data_Cogealac["wind_gust"].values
+	# Filling the air_temp Focsani column
+	forecast_dataset["air_temp_Focsani"] = data_Focsani["air_temp"].values
+	# Completing the wind_direction_100m Focsani column
+	forecast_dataset["wind_direction_100m_Focsani"] = data_Focsani["wind_direction_100m"].values
+	# Completing the wind_direction_10m Focsani column
+	forecast_dataset["wind_direction_10m_Focsani"] = data_Focsani["wind_direction_10m"].values
+	# Completing the wind_speed_100m Focsani column
+	forecast_dataset["wind_speed_100m_Focsani"] = data_Focsani["wind_speed_100m"].values
+	# Completing the wind_speed_10m Focsani column
+	forecast_dataset["wind_speed_10m_Focsani"] = data_Focsani["wind_speed_10m"].values
+	# Completing the wind_gust Focsani column
+	# forecast_dataset["wind_gust_Focsani"] = data_Focsani["wind_gust"].values
 
-	xgb_loaded = joblib.load("./Market Fundamentals/Wind_Production_Forecast/rs_xgb_wind_production_quarterly_1024.pkl")
+	xgb_loaded = joblib.load("./Market Fundamentals/Wind_Production_Forecast/rs_xgb_wind_production_0325.pkl")
 
 	forecast_dataset["Month"] = pd.to_datetime(forecast_dataset.Data).dt.month
 	dataset = forecast_dataset.copy()
 	forecast_dataset = forecast_dataset.drop("Data", axis=1)
-	forecast_dataset = forecast_dataset[["Interval", "wind_direction_100m", "wind_direction_10m", "wind_speed_100m", "wind_speed_10m", "temperature", "Month"]]
+	forecast_dataset = forecast_dataset[["Interval", "air_temp_Cogealac", "wind_direction_100m_Cogealac", "wind_direction_10m_Cogealac", "wind_speed_100m_Cogealac", "wind_speed_10m_Cogealac", "air_temp_Focsani", "wind_direction_100m_Focsani", "wind_direction_10m_Focsani", "wind_speed_100m_Focsani", "wind_speed_10m_Focsani", "Month"]]
 	preds = xgb_loaded.predict(forecast_dataset.values)
 
 	# Rounding each value in the list to the third decimal
@@ -3101,7 +3132,7 @@ def predicting_wind_production_15min():
 	# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
 	df['Lookup'] = df["Data"].dt.strftime('%d.%m.%Y') + df["Interval"].astype(str)
 	df.to_excel(file_path, index=False)
-	return data
+	return dataset
 #=================================================================================PZU Price Forecast=========================================================================================
 # Defining the function for forecasting
 def predicting_price_forecast():
@@ -3523,7 +3554,8 @@ def render_fundamentals_page():
 	# 		st.markdown(button_html, unsafe_allow_html=True)
 	if st.button("Forecast Wind Production Quarterly"):
 		fetching_Cogealac_data_15min()
-		predicting_wind_production_15min()
+		fetching_Focsani_data_15min()
+		st.dataframe(predicting_wind_production_15min())
 		with open("./Market Fundamentals/Wind_Production_Forecast/Wind_Forecast_Production_15min.xlsx", "rb") as f:
 			excel_data = f.read()
 
@@ -3535,6 +3567,7 @@ def render_fundamentals_page():
 				 </a> 
 				 """
 			st.markdown(button_html, unsafe_allow_html=True)
+
 	st.header("Spot Price Forecast", divider = "gray")
 	if st.button("Forecast Price"):
 		st.dataframe(predicting_price_forecast())
