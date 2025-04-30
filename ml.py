@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Importing apps and pages
-from database import render_indisponibility_db_Kahraman
+from database import render_indisponibility_db_Kahraman, render_indisponibility_db_Astro, render_indisponibility_db_Imperial
 # from OneDriveAPI_token import get_token
 
 session_start_time = time.time()
@@ -1762,7 +1762,7 @@ def fetching_Astro_data():
 	columns_to_shift = data.columns.difference(['period_end'])
 
 	# Shift the data columns by 2 intervals
-	data_shifted = data[columns_to_shift].shift(1)
+	data_shifted = data[columns_to_shift].shift(2)
 
 	# Combine the fixed 'period_end' with the shifted data columns
 	data_adjusted = pd.concat([data[['period_end']], data_shifted], axis=1)
@@ -1794,7 +1794,7 @@ def fetching_Imperial_data():
 	columns_to_shift = data.columns.difference(['period_end'])
 
 	# Shift the data columns by 2 intervals
-	data_shifted = data[columns_to_shift].shift(1)
+	data_shifted = data[columns_to_shift].shift(2)
 
 	# Combine the fixed 'period_end' with the shifted data columns
 	data_adjusted = pd.concat([data[['period_end']], data_shifted], axis=1)
@@ -1982,7 +1982,7 @@ def predicting_exporting_Astro_15min(interval_from, interval_to, limitation_perc
 	df.dropna(subset=['period_end'], inplace=True)
 
 	# Shift the 'period_end' column by 2 hours
-	df['period_end'] = df['period_end'] + pd.Timedelta(hours=2)
+	df['period_end'] = df['period_end'] + pd.Timedelta(hours=3)
 
 	# Creating the Interval column
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
@@ -2571,7 +2571,7 @@ def predicting_exporting_Imperial_15min(interval_to, interval_from, limitation_p
 	df.dropna(subset=['period_end'], inplace=True)
 
 	# Shift the 'period_end' column by 2 hours
-	df['period_end'] = df['period_end'] + pd.Timedelta(hours=2)
+	df['period_end'] = df['period_end'] + pd.Timedelta(hours=3)
 
 	# Creating the Interval column
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
@@ -3729,7 +3729,7 @@ def render_production_forecast():
 	st.write("Production Forecast Section")
 
 	# Allow the user to choose between Consumption and Production
-	PVPP = st.radio("Choose PVPP:", options=["Kahraman"], index=None)
+	PVPP = st.radio("Choose PVPP:", options=["Kahraman", "Astro", "Imperial"], index=None)
 
 	if PVPP == "Kahraman":
 		# Updating the indisponibility, if any
@@ -3912,352 +3912,352 @@ def render_production_forecast():
 	# 				 """
 	# 			st.markdown(button_html, unsafe_allow_html=True)
 
-	# elif PVPP == "Astro":
-	# 	# Updating the indisponibility, if any
-	# 	result_Astro = render_indisponibility_db_Astro()
-	# 	if result_Astro[0] is not None:
-	# 		interval_from, interval_to, limitation_percentage = result_Astro
-	# 	else:
-	# 		# Handle the case where no data is found
-	# 		# st.text("No indisponibility found for tomorrow")
-	# 		# Fallback logic: Add your fallback actions here
-	# 		# st.write("Running fallback logic because no indisponibility data is found.")
-	# 		interval_from = 1
-	# 		interval_to = 24
-	# 		limitation_percentage = 0
-	# 	st.subheader("Default Forecasting", divider = "red")
-	# 	# Submit button
-	# 	if st.button("Submit"):
-	# 		# Fetching the Solcast data
-	# 		fetching_Astro_data()
-	# 		fetching_Astro_data_15min()
+	elif PVPP == "Astro":
+		# Updating the indisponibility, if any
+		result_Astro = render_indisponibility_db_Astro()
+		if result_Astro[0] is not None:
+			interval_from, interval_to, limitation_percentage = result_Astro
+		else:
+			# Handle the case where no data is found
+			# st.text("No indisponibility found for tomorrow")
+			# Fallback logic: Add your fallback actions here
+			# st.write("Running fallback logic because no indisponibility data is found.")
+			interval_from = 1
+			interval_to = 24
+			limitation_percentage = 0
+		st.subheader("Default Forecasting", divider = "red")
+		# Submit button
+		if st.button("Submit"):
+			# Fetching the Solcast data
+			fetching_Astro_data()
+			fetching_Astro_data_15min()
 
-	# 		df = predicting_exporting_Astro(interval_from, interval_to, limitation_percentage)
-	# 		st.dataframe(df)
-	# 		st.success('Forecast Ready', icon="✅")
-	# 		file_path = './Astro/Results_Production_Astro_xgb.xlsx'
-	# 		with open(file_path, "rb") as f:
-	# 			excel_data = f.read()
+			df = predicting_exporting_Astro(interval_from, interval_to, limitation_percentage)
+			st.dataframe(df)
+			st.success('Forecast Ready', icon="✅")
+			file_path = './Astro/Results_Production_Astro_xgb.xlsx'
+			with open(file_path, "rb") as f:
+				excel_data = f.read()
 
-	# 			# Create a download link
-	# 			b64 = base64.b64encode(excel_data).decode()
-	# 			button_html = f"""
-	# 				 <a download="Production_Forecast_Astro.xlsx" href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download>
-	# 				 <button kind="secondary" data-testid="baseButton-secondary" class="st-emotion-cache-12tniow ef3psqc12">Download Forecast Results</button>
-	# 				 </a> 
-	# 				 """
-	# 			st.markdown(button_html, unsafe_allow_html=True)
-	# 		# Uploading the file to the OneDrive root
-	# 		file_path = "./Astro/Results_Production_Astro_xgb.xlsx"
-	# 		# uploading_onedrive_file(file_path, access_token)
-	# 		# access_token = upload_file_with_retries(file_path)
-	# 		# check_file_sync(file_path, access_token)
-	# 		# Updating the Weather Input 30min granularity
-	# 		file_path_input = './Astro/Solcast/Bontida_raw_30min.csv'
-	# 		data = pd.read_csv(file_path_input)
-	# 		forecast_dataset = pd.read_excel("./Astro/Input_Astro_30min.xlsx")
-	# 		# Convert 'period_end' to datetime in UTC
-	# 		data['period_end'] = pd.to_datetime(data['period_end'], errors='coerce', utc=True)
+				# Create a download link
+				b64 = base64.b64encode(excel_data).decode()
+				button_html = f"""
+					 <a download="Production_Forecast_Astro.xlsx" href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download>
+					 <button kind="secondary" data-testid="baseButton-secondary" class="st-emotion-cache-12tniow ef3psqc12">Download Forecast Results</button>
+					 </a> 
+					 """
+				st.markdown(button_html, unsafe_allow_html=True)
+			# Uploading the file to the OneDrive root
+			file_path = "./Astro/Results_Production_Astro_xgb.xlsx"
+			# uploading_onedrive_file(file_path, access_token)
+			# access_token = upload_file_with_retries(file_path)
+			# check_file_sync(file_path, access_token)
+			# Updating the Weather Input 30min granularity
+			file_path_input = './Astro/Solcast/Bontida_raw_30min.csv'
+			data = pd.read_csv(file_path_input)
+			forecast_dataset = pd.read_excel("./Astro/Input_Astro_30min.xlsx")
+			# Convert 'period_end' to datetime in UTC
+			data['period_end'] = pd.to_datetime(data['period_end'], errors='coerce', utc=True)
 
-	# 		# Manually adjust the time by adding two hours to 'period_end'
-	# 		data['period_end'] = data['period_end'] + pd.DateOffset(hours=3)
+			# Manually adjust the time by adding two hours to 'period_end'
+			data['period_end'] = data['period_end'] + pd.DateOffset(hours=3)
 
-	# 		# Extract just the date part in the desired format (as strings)
-	# 		dates = data['period_end'].dt.strftime('%Y-%m-%d')
-	# 		# Write the dates to the Input file
-	# 		forecast_dataset['Data'] = dates.values
+			# Extract just the date part in the desired format (as strings)
+			dates = data['period_end'].dt.strftime('%Y-%m-%d')
+			# Write the dates to the Input file
+			forecast_dataset['Data'] = dates.values
 
-	# 		# Fill NaNs in the 'Data' column with next valid observation
-	# 		forecast_dataset['Data'].fillna(method='bfill', inplace=True)
+			# Fill NaNs in the 'Data' column with next valid observation
+			forecast_dataset['Data'].fillna(method='bfill', inplace=True)
 
-	# 		# Completing the Interval column
-	# 		intervals = data["period_end"].dt.hour
-	# 		forecast_dataset["Interval"] = intervals
+			# Completing the Interval column
+			intervals = data["period_end"].dt.hour
+			forecast_dataset["Interval"] = intervals
 
-	# 		# Replace NaNs in the 'Interval' column with 0
-	# 		forecast_dataset['Interval'].fillna(0, inplace=True)
+			# Replace NaNs in the 'Interval' column with 0
+			forecast_dataset['Interval'].fillna(0, inplace=True)
 
-	# 		# Completing the Temperatura column
-	# 		forecast_dataset["Temperatura"] = data["air_temp"].values
+			# Completing the Temperatura column
+			forecast_dataset["Temperatura"] = data["air_temp"].values
 
-	# 		# Completing the GHI column
-	# 		forecast_dataset["Radiatie"] = data["ghi"].values
+			# Completing the GHI column
+			forecast_dataset["Radiatie"] = data["ghi"].values
 
-	# 		# Completing the Nori column
-	# 		forecast_dataset["Nori"] = data["cloud_opacity"].values
+			# Completing the Nori column
+			forecast_dataset["Nori"] = data["cloud_opacity"].values
 
-	# 		# Find indices where 'Interval' equals 1
-	# 		indices_of_ones = forecast_dataset.index[forecast_dataset['Interval'] == 1].tolist()
+			# Find indices where 'Interval' equals 1
+			indices_of_ones = forecast_dataset.index[forecast_dataset['Interval'] == 1].tolist()
 
-	# 		# Check if there are at least two '1's and replace the first '0' after the second '1'
-	# 		if len(indices_of_ones) >= 2:
-	# 			second_one_index = indices_of_ones[1]  # Get the index of the second '1'
-	# 			# Find the next '0' after the second '1'
-	# 			for i in range(second_one_index + 1, len(data)):
-	# 				if forecast_dataset.at[i, 'Interval'] == 0:
-	# 					forecast_dataset.at[i, 'Interval'] = 2
-	# 					break  # Stop after replacing the first '0' to avoid affecting further data
+			# Check if there are at least two '1's and replace the first '0' after the second '1'
+			if len(indices_of_ones) >= 2:
+				second_one_index = indices_of_ones[1]  # Get the index of the second '1'
+				# Find the next '0' after the second '1'
+				for i in range(second_one_index + 1, len(data)):
+					if forecast_dataset.at[i, 'Interval'] == 0:
+						forecast_dataset.at[i, 'Interval'] = 2
+						break  # Stop after replacing the first '0' to avoid affecting further data
 
-	# 		# Ensure the data is sorted
-	# 		forecast_dataset.sort_values(by=['Data', 'Interval'], inplace=True)
+			# Ensure the data is sorted
+			forecast_dataset.sort_values(by=['Data', 'Interval'], inplace=True)
 
-	# 		# Initialize the 'Half' column
-	# 		forecast_dataset['Half'] = 1  # Start by default with 1
+			# Initialize the 'Half' column
+			forecast_dataset['Half'] = 1  # Start by default with 1
 
-	# 		# Iterate through the DataFrame to manually adjust 'Half'
-	# 		prev_interval = None
-	# 		count = 0
-	# 		for index, row in forecast_dataset.iterrows():
-	# 			current_interval = row['Interval']
-	# 			if current_interval == prev_interval:
-	# 				count += 1
-	# 			else:
-	# 				count = 1
+			# Iterate through the DataFrame to manually adjust 'Half'
+			prev_interval = None
+			count = 0
+			for index, row in forecast_dataset.iterrows():
+				current_interval = row['Interval']
+				if current_interval == prev_interval:
+					count += 1
+				else:
+					count = 1
 
-	# 			# Reset count if it exceeds 2
-	# 			if count > 2:
-	# 				count = 1
+				# Reset count if it exceeds 2
+				if count > 2:
+					count = 1
 
-	# 			# Assign 'Half' based on count
-	# 			forecast_dataset.at[index, 'Half'] = count
+				# Assign 'Half' based on count
+				forecast_dataset.at[index, 'Half'] = count
 
-	# 			# Update the previous interval
-	# 			prev_interval = current_interval
-	# 		# Ensure the 'Data' column is in datetime format
-	# 		forecast_dataset["Data"] = pd.to_datetime(forecast_dataset["Data"])
+				# Update the previous interval
+				prev_interval = current_interval
+			# Ensure the 'Data' column is in datetime format
+			forecast_dataset["Data"] = pd.to_datetime(forecast_dataset["Data"])
 			
-	# 		# Create the 'Lookup' column by concatenating the 'Data' and 'Interval' columns
-	# 		# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
-	# 		forecast_dataset['Lookup'] = forecast_dataset["Data"].dt.strftime('%d.%m.%Y') + forecast_dataset["Interval"].astype(str) + forecast_dataset["Half"].astype(str)
-	# 		forecast_dataset.to_excel("./Astro/Input_Astro_30min.xlsx", index=False)
+			# Create the 'Lookup' column by concatenating the 'Data' and 'Interval' columns
+			# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
+			forecast_dataset['Lookup'] = forecast_dataset["Data"].dt.strftime('%d.%m.%Y') + forecast_dataset["Interval"].astype(str) + forecast_dataset["Half"].astype(str)
+			forecast_dataset.to_excel("./Astro/Input_Astro_30min.xlsx", index=False)
 
-	# 		with open("./Astro/Input_Astro_30min.xlsx", "rb") as f:
-	# 			excel_data = f.read()
+			with open("./Astro/Input_Astro_30min.xlsx", "rb") as f:
+				excel_data = f.read()
 
-	# 			# Create a download link
-	# 			b64 = base64.b64encode(excel_data).decode()
-	# 			button_html = f"""
-	# 				 <a download="Input_Forecast_Astro_30min.xlsx" href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download>
-	# 				 <button kind="secondary" data-testid="baseButton-secondary" class="st-emotion-cache-12tniow ef3psqc12">Download Input Forecast</button>
-	# 				 </a> 
-	# 				 """
-	# 			st.markdown(button_html, unsafe_allow_html=True)
+				# Create a download link
+				b64 = base64.b64encode(excel_data).decode()
+				button_html = f"""
+					 <a download="Input_Forecast_Astro_30min.xlsx" href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download>
+					 <button kind="secondary" data-testid="baseButton-secondary" class="st-emotion-cache-12tniow ef3psqc12">Download Input Forecast</button>
+					 </a> 
+					 """
+				st.markdown(button_html, unsafe_allow_html=True)
 
-	# 		creating_prediction_dataset_Astro()
-	# 		with open("./Astro/predictions_dataset.xlsx", "rb") as f:
-	# 			excel_data = f.read()
+			creating_prediction_dataset_Astro()
+			with open("./Astro/predictions_dataset.xlsx", "rb") as f:
+				excel_data = f.read()
 
-	# 			# Create a download link
-	# 			b64 = base64.b64encode(excel_data).decode()
-	# 			button_html = f"""
-	# 				 <a download="Predictions_Dataset_Astro.xlsx" href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download>
-	# 				 <button kind="secondary" data-testid="baseButton-secondary" class="st-emotion-cache-12tniow ef3psqc12">Download Predictions Dataset</button>
-	# 				 </a> 
-	# 				 """
-	# 			st.markdown(button_html, unsafe_allow_html=True)
-	# 		st.dataframe(predicting_exporting_Astro_15min(interval_from, interval_to, limitation_percentage))
-	# 		with open("./Astro/Results_Production_Astro_xgb_15min.xlsx", "rb") as f:
-	# 			excel_data = f.read()
+				# Create a download link
+				b64 = base64.b64encode(excel_data).decode()
+				button_html = f"""
+					 <a download="Predictions_Dataset_Astro.xlsx" href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download>
+					 <button kind="secondary" data-testid="baseButton-secondary" class="st-emotion-cache-12tniow ef3psqc12">Download Predictions Dataset</button>
+					 </a> 
+					 """
+				st.markdown(button_html, unsafe_allow_html=True)
+			st.dataframe(predicting_exporting_Astro_15min(interval_from, interval_to, limitation_percentage))
+			with open("./Astro/Results_Production_Astro_xgb_15min.xlsx", "rb") as f:
+				excel_data = f.read()
 
-	# 			# Create a download link
-	# 			b64 = base64.b64encode(excel_data).decode()
-	# 			button_html = f"""
-	# 				 <a download="Production_Forecast_Astro_15min.xlsx" href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download>
-	# 				 <button kind="secondary" data-testid="baseButton-secondary" class="st-emotion-cache-12tniow ef3psqc12">Download Predictions Astro 15min</button>
-	# 				 </a> 
-	# 				 """
-	# 			st.markdown(button_html, unsafe_allow_html=True)
-	# 		# Uploading the file to the OneDrive root
-	# 		file_path = "./Astro/Results_Production_Astro_xgb_15min.xlsx"
-	# 		# uploading_onedrive_file(file_path, access_token)
-	# 		# access_token = upload_file_with_retries(file_path)
-	# 		# check_file_sync(file_path, access_token)
+				# Create a download link
+				b64 = base64.b64encode(excel_data).decode()
+				button_html = f"""
+					 <a download="Production_Forecast_Astro_15min.xlsx" href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download>
+					 <button kind="secondary" data-testid="baseButton-secondary" class="st-emotion-cache-12tniow ef3psqc12">Download Predictions Astro 15min</button>
+					 </a> 
+					 """
+				st.markdown(button_html, unsafe_allow_html=True)
+			# Uploading the file to the OneDrive root
+			file_path = "./Astro/Results_Production_Astro_xgb_15min.xlsx"
+			# uploading_onedrive_file(file_path, access_token)
+			# access_token = upload_file_with_retries(file_path)
+			# check_file_sync(file_path, access_token)
 
-	# 	st.subheader("Forecasting with Real-Time Production:", divider = "red")
-	# 	uploaded_file = st.file_uploader("Upload Real-Time Production Data File", type=['csv', 'xlsx'])
-	# 	if uploaded_file is not None:
-	# 		if uploaded_file.type == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':  # Excel file
-	# 			real_time_data = pd.read_excel(uploaded_file, skiprows=4, names=["Timestamp", "Power"])
-	# 		elif uploaded_file.type == 'text/csv':  # CSV file
-	# 			real_time_data = pd.read_csv(uploaded_file, skiprows=4, names=["Timestamp", "Power"])
-	# 		# Process the data (e.g., display first few rows)
-	# 		if real_time_data is not None:
-	# 			st.write("Uploaded file:")
-	# 			st.write(real_time_data.head())
-	# 			# Do data processing here (e.g., remove timezone, change "--" to 0, convert power to energy, etc.)
-	# 			# Replace '--' with 0 in the 'Power' column
-	# 			real_time_data['Power'] = real_time_data['Power'].replace('--', 0)
+		st.subheader("Forecasting with Real-Time Production:", divider = "red")
+		uploaded_file = st.file_uploader("Upload Real-Time Production Data File", type=['csv', 'xlsx'])
+		if uploaded_file is not None:
+			if uploaded_file.type == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':  # Excel file
+				real_time_data = pd.read_excel(uploaded_file, skiprows=4, names=["Timestamp", "Power"])
+			elif uploaded_file.type == 'text/csv':  # CSV file
+				real_time_data = pd.read_csv(uploaded_file, skiprows=4, names=["Timestamp", "Power"])
+			# Process the data (e.g., display first few rows)
+			if real_time_data is not None:
+				st.write("Uploaded file:")
+				st.write(real_time_data.head())
+				# Do data processing here (e.g., remove timezone, change "--" to 0, convert power to energy, etc.)
+				# Replace '--' with 0 in the 'Power' column
+				real_time_data['Power'] = real_time_data['Power'].replace('--', 0)
 
-	# 			# Convert the 'Power' column to numeric (will convert invalid parsing to NaN)
-	# 			real_time_data['Power'] = pd.to_numeric(real_time_data['Power'], errors='coerce').fillna(0)
+				# Convert the 'Power' column to numeric (will convert invalid parsing to NaN)
+				real_time_data['Power'] = pd.to_numeric(real_time_data['Power'], errors='coerce').fillna(0)
 
-	# 			# Assuming the 'Power' data needs to be in megawatts and currently in watts
-	# 			real_time_data['Power_MW'] = real_time_data['Power'] / 1000000  # Convert W to MW
+				# Assuming the 'Power' data needs to be in megawatts and currently in watts
+				real_time_data['Power_MW'] = real_time_data['Power'] / 1000000  # Convert W to MW
 
-	# 			# Ensure the 'Timestamp' column is in datetime format
-	# 			real_time_data['Timestamp'] = pd.to_datetime(real_time_data['Timestamp'])
+				# Ensure the 'Timestamp' column is in datetime format
+				real_time_data['Timestamp'] = pd.to_datetime(real_time_data['Timestamp'])
 
-	# 			# Shift the 'Timestamp' column by 2 hours forward
-	# 			real_time_data['Timestamp'] = real_time_data['Timestamp'] + pd.Timedelta(hours=2)
+				# Shift the 'Timestamp' column by 2 hours forward
+				real_time_data['Timestamp'] = real_time_data['Timestamp'] + pd.Timedelta(hours=2)
 
-	# 			# Calculate the average of current and next power readings
-	# 			real_time_data['Next_Power_MW'] = real_time_data['Power_MW'].shift(1)  # Shift upwards to get the next reading in the column
+				# Calculate the average of current and next power readings
+				real_time_data['Next_Power_MW'] = real_time_data['Power_MW'].shift(1)  # Shift upwards to get the next reading in the column
 
-	# 			# Calculate the average power
-	# 			real_time_data['Average_Power_MW'] = (real_time_data['Power_MW'] + real_time_data['Next_Power_MW']) / 2
+				# Calculate the average power
+				real_time_data['Average_Power_MW'] = (real_time_data['Power_MW'] + real_time_data['Next_Power_MW']) / 2
 
-	# 			# Calculate the energy for each interval
-	# 			real_time_data['Energy_MWh'] = real_time_data['Average_Power_MW'] * 0.25
+				# Calculate the energy for each interval
+				real_time_data['Energy_MWh'] = real_time_data['Average_Power_MW'] * 0.25
 				
-	# 			real_time_data.to_csv("./Astro/real-time_data_Astro.csv", index = False)
-	# 		else:
-	# 			st.write("Unsupported file format. Please upload a CSV or Excel file.")
+				real_time_data.to_csv("./Astro/real-time_data_Astro.csv", index = False)
+			else:
+				st.write("Unsupported file format. Please upload a CSV or Excel file.")
 
-	# 		st.dataframe(real_time_data)
+			st.dataframe(real_time_data)
 
-	# 	if st.button("Forecast Real-Time"):
-	# 		fetching_Astro_data_past_15min()
-	# 		fetching_Astro_data_15min()
-	# 		predicting_exporting_Astro_Intraday_15min(real_time_data)
-	# 		# Downloading the Predictions Results
-	# 		file_path = "./Astro/Results_Production_Astro_xgb_intraday_15min.xlsx"
-	# 		with open(file_path, "rb") as f:
-	# 			excel_data = f.read()
+		if st.button("Forecast Real-Time"):
+			fetching_Astro_data_past_15min()
+			fetching_Astro_data_15min()
+			predicting_exporting_Astro_Intraday_15min(real_time_data)
+			# Downloading the Predictions Results
+			file_path = "./Astro/Results_Production_Astro_xgb_intraday_15min.xlsx"
+			with open(file_path, "rb") as f:
+				excel_data = f.read()
 
-	# 			# Create a download link
-	# 			b64 = base64.b64encode(excel_data).decode()
-	# 			button_html = f"""
-	# 				 <a download="Production_Forecast_Astro_Intraday_15min.xlsx" href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download>
-	# 				 <button kind="secondary" data-testid="baseButton-secondary" class="st-emotion-cache-12tniow ef3psqc12">Download Forecast Results Intraday 15min</button>
-	# 				 </a> 
-	# 				 """
-	# 			st.markdown(button_html, unsafe_allow_html=True)
+				# Create a download link
+				b64 = base64.b64encode(excel_data).decode()
+				button_html = f"""
+					 <a download="Production_Forecast_Astro_Intraday_15min.xlsx" href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download>
+					 <button kind="secondary" data-testid="baseButton-secondary" class="st-emotion-cache-12tniow ef3psqc12">Download Forecast Results Intraday 15min</button>
+					 </a> 
+					 """
+				st.markdown(button_html, unsafe_allow_html=True)
 
-	# elif PVPP == "Imperial":
-	# 	# Updating the indisponibility, if any
-	# 	result_Imperial = render_indisponibility_db_Imperial()
-	# 	if result_Imperial[0] is not None:
-	# 		interval_from, interval_to, limitation_percentage = result_Imperial
-	# 	else:
-	# 		# Handle the case where no data is found
-	# 		# st.text("No indisponibility found for tomorrow")
-	# 		# Fallback logic: Add your fallback actions here
-	# 		# st.write("Running fallback logic because no indisponibility data is found.")
-	# 		interval_from = 1
-	# 		interval_to = 24
-	# 		limitation_percentage = 0
-	# 	# Default 15 min Forecasting
-	# 	st.subheader("Default Forecasting", divider = "blue")
-	# 	# Submit button
-	# 	if st.button("Submit"):
-	# 		# Fetching the Solcast data
-	# 		fetching_Imperial_data()
-	# 		fetching_Imperial_data_15min()
-	# 		df = predicting_exporting_Imperial(interval_from, interval_to, limitation_percentage)
-	# 		st.dataframe(df)
-	# 		st.success('Forecast Ready', icon="✅")
-	# 		file_path = './Imperial/Results_Production_Imperial_xgb.xlsx'
-	# 		with open(file_path, "rb") as f:
-	# 			excel_data = f.read()
+	elif PVPP == "Imperial":
+		# Updating the indisponibility, if any
+		result_Imperial = render_indisponibility_db_Imperial()
+		if result_Imperial[0] is not None:
+			interval_from, interval_to, limitation_percentage = result_Imperial
+		else:
+			# Handle the case where no data is found
+			# st.text("No indisponibility found for tomorrow")
+			# Fallback logic: Add your fallback actions here
+			# st.write("Running fallback logic because no indisponibility data is found.")
+			interval_from = 1
+			interval_to = 24
+			limitation_percentage = 0
+		# Default 15 min Forecasting
+		st.subheader("Default Forecasting", divider = "blue")
+		# Submit button
+		if st.button("Submit"):
+			# Fetching the Solcast data
+			fetching_Imperial_data()
+			fetching_Imperial_data_15min()
+			df = predicting_exporting_Imperial(interval_from, interval_to, limitation_percentage)
+			st.dataframe(df)
+			st.success('Forecast Ready', icon="✅")
+			file_path = './Imperial/Results_Production_Imperial_xgb.xlsx'
+			with open(file_path, "rb") as f:
+				excel_data = f.read()
 
-	# 			# Create a download link
-	# 			b64 = base64.b64encode(excel_data).decode()
-	# 			button_html = f"""
-	# 				 <a download="Production_Forecast_Imperial.xlsx" href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download>
-	# 				 <button kind="secondary" data-testid="baseButton-secondary" class="st-emotion-cache-12tniow ef3psqc12">Download Forecast Results</button>
-	# 				 </a> 
-	# 				 """
-	# 			st.markdown(button_html, unsafe_allow_html=True)
-	# 		# Uploading the file to the OneDrive root
-	# 		file_path = "./Imperial/Results_Production_Imperial_xgb.xlsx"
-	# 		# uploading_onedrive_file(file_path, access_token)
-	# 		# access_token = upload_file_with_retries(file_path)
-	# 		# check_file_sync(file_path, access_token)
-	# 		st.dataframe(predicting_exporting_Imperial_15min(interval_to, interval_from, limitation_percentage))
-	# 		file_path = './Imperial/Results_Production_Imperial_xgb_15min.xlsx'
-	# 		with open(file_path, "rb") as f:
-	# 			excel_data = f.read()
+				# Create a download link
+				b64 = base64.b64encode(excel_data).decode()
+				button_html = f"""
+					 <a download="Production_Forecast_Imperial.xlsx" href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download>
+					 <button kind="secondary" data-testid="baseButton-secondary" class="st-emotion-cache-12tniow ef3psqc12">Download Forecast Results</button>
+					 </a> 
+					 """
+				st.markdown(button_html, unsafe_allow_html=True)
+			# Uploading the file to the OneDrive root
+			file_path = "./Imperial/Results_Production_Imperial_xgb.xlsx"
+			# uploading_onedrive_file(file_path, access_token)
+			# access_token = upload_file_with_retries(file_path)
+			# check_file_sync(file_path, access_token)
+			st.dataframe(predicting_exporting_Imperial_15min(interval_to, interval_from, limitation_percentage))
+			file_path = './Imperial/Results_Production_Imperial_xgb_15min.xlsx'
+			with open(file_path, "rb") as f:
+				excel_data = f.read()
 
-	# 			# Create a download link
-	# 			b64 = base64.b64encode(excel_data).decode()
-	# 			button_html = f"""
-	# 				 <a download="Production_Forecast_Imperial_15min.xlsx" href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download>
-	# 				 <button kind="secondary" data-testid="baseButton-secondary" class="st-emotion-cache-12tniow ef3psqc12">Download Forecast Results 15min</button>
-	# 				 </a> 
-	# 				 """
-	# 			st.markdown(button_html, unsafe_allow_html=True)
-	# 		# Uploading the file to the OneDrive root
-	# 		file_path = "./Imperial/Results_Production_Imperial_xgb_15min.xlsx"
-	# 		# uploading_onedrive_file(file_path, access_token)
-	# 		# access_token = upload_file_with_retries(file_path)
-	# 		# check_file_sync(file_path, access_token)
-	# 	# Forecasting using the Real-Time production data		
-	# 	st.subheader("Forecasting with Real-Time Production:", divider = "blue")
-	# 	uploaded_files = st.file_uploader("Upload Real-Time Production Data Files", type=['csv', 'xlsx'], accept_multiple_files=True)
-	# 	if uploaded_files:
-	# 		count = 0
-	# 		# Process each uploaded file
-	# 		combined_data = pd.DataFrame()
-	# 		for uploaded_file in uploaded_files:
-	# 			count = count + 1
-	# 			if uploaded_file.type == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':  # Excel file
-	# 				real_time_data = pd.read_excel(uploaded_file, skiprows=4, names=["Timestamp", "Power"])
-	# 			elif uploaded_file.type == 'text/csv':  # CSV file
-	# 				real_time_data = pd.read_csv(uploaded_file, skiprows=4, names=["Timestamp", "Power"])
+				# Create a download link
+				b64 = base64.b64encode(excel_data).decode()
+				button_html = f"""
+					 <a download="Production_Forecast_Imperial_15min.xlsx" href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download>
+					 <button kind="secondary" data-testid="baseButton-secondary" class="st-emotion-cache-12tniow ef3psqc12">Download Forecast Results 15min</button>
+					 </a> 
+					 """
+				st.markdown(button_html, unsafe_allow_html=True)
+			# Uploading the file to the OneDrive root
+			file_path = "./Imperial/Results_Production_Imperial_xgb_15min.xlsx"
+			# uploading_onedrive_file(file_path, access_token)
+			# access_token = upload_file_with_retries(file_path)
+			# check_file_sync(file_path, access_token)
+		# Forecasting using the Real-Time production data		
+		st.subheader("Forecasting with Real-Time Production:", divider = "blue")
+		uploaded_files = st.file_uploader("Upload Real-Time Production Data Files", type=['csv', 'xlsx'], accept_multiple_files=True)
+		if uploaded_files:
+			count = 0
+			# Process each uploaded file
+			combined_data = pd.DataFrame()
+			for uploaded_file in uploaded_files:
+				count = count + 1
+				if uploaded_file.type == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':  # Excel file
+					real_time_data = pd.read_excel(uploaded_file, skiprows=4, names=["Timestamp", "Power"])
+				elif uploaded_file.type == 'text/csv':  # CSV file
+					real_time_data = pd.read_csv(uploaded_file, skiprows=4, names=["Timestamp", "Power"])
 				
-	# 			# Do data processing here (e.g., remove timezone, change "--" to 0, convert power to energy, etc.)
+				# Do data processing here (e.g., remove timezone, change "--" to 0, convert power to energy, etc.)
 	 
-	# 			# Replace '--' with 0 in the 'Power' column
-	# 			real_time_data['Power'] = real_time_data['Power'].replace('--', 0)
+				# Replace '--' with 0 in the 'Power' column
+				real_time_data['Power'] = real_time_data['Power'].replace('--', 0)
 
-	# 			# Convert the 'Power' column to numeric (will convert invalid parsing to NaN)
-	# 			real_time_data['Power'] = pd.to_numeric(real_time_data['Power'], errors='coerce').fillna(0)
+				# Convert the 'Power' column to numeric (will convert invalid parsing to NaN)
+				real_time_data['Power'] = pd.to_numeric(real_time_data['Power'], errors='coerce').fillna(0)
 
-	# 			# Assuming the 'Power' data needs to be in megawatts and currently in watts
-	# 			real_time_data['Power_MW'] = real_time_data['Power'] / 1000000  # Convert W to MW
+				# Assuming the 'Power' data needs to be in megawatts and currently in watts
+				real_time_data['Power_MW'] = real_time_data['Power'] / 1000000  # Convert W to MW
 
-	# 			# Ensure the 'Timestamp' column is in datetime format
-	# 			real_time_data['Timestamp'] = pd.to_datetime(real_time_data['Timestamp'])
+				# Ensure the 'Timestamp' column is in datetime format
+				real_time_data['Timestamp'] = pd.to_datetime(real_time_data['Timestamp'])
 
-	# 			# Shift the 'Timestamp' column by 2 hours forward
-	# 			real_time_data['Timestamp'] = real_time_data['Timestamp'] + pd.Timedelta(hours=2)
+				# Shift the 'Timestamp' column by 2 hours forward
+				real_time_data['Timestamp'] = real_time_data['Timestamp'] + pd.Timedelta(hours=2)
 
-	# 			# Calculate the average of current and next power readings
-	# 			real_time_data['Next_Power_MW'] = real_time_data['Power_MW'].shift(1)  # Shift upwards to get the next reading in the column
+				# Calculate the average of current and next power readings
+				real_time_data['Next_Power_MW'] = real_time_data['Power_MW'].shift(1)  # Shift upwards to get the next reading in the column
 
-	# 			# Calculate the average power
-	# 			real_time_data['Average_Power_MW'] = (real_time_data['Power_MW'] + real_time_data['Next_Power_MW']) / 2
+				# Calculate the average power
+				real_time_data['Average_Power_MW'] = (real_time_data['Power_MW'] + real_time_data['Next_Power_MW']) / 2
 
-	# 			# Calculate the energy for each interval
-	# 			real_time_data['Energy_MWh'] = real_time_data['Average_Power_MW'] * 0.25
+				# Calculate the energy for each interval
+				real_time_data['Energy_MWh'] = real_time_data['Average_Power_MW'] * 0.25
 				
-	# 			real_time_data.to_csv("./Imperial/real-time_data_Imperial{}.csv".format(count), index = False)
+				real_time_data.to_csv("./Imperial/real-time_data_Imperial{}.csv".format(count), index = False)
 
-	# 	if st.button("Forecast Real-Time"):
-	# 		fetching_Imperial_data_past_15min()
-	# 		# Creating the real-time production dataframe for Imperial
-	# 		real_time_data = pd.read_csv("./Imperial/real-time_data_Imperial1.csv")
-	# 		second_data = pd.read_csv("./Imperial/real-time_data_Imperial2.csv")
-	# 		# Iterate over columns to add from the second DataFrame
-	# 		for column in ['Power', 'Power_MW', 'Next_Power_MW', 'Average_Power_MW', 'Energy_MWh']:
-	# 			# Sum values from the second DataFrame and add them to the respective column in the final DataFrame
-	# 			real_time_data[column] += second_data[column]
-	# 		real_time_data.to_excel("./Imperial/Real-Time_forecast_dataset.xlsx", index = False)
-	# 		preds = predicting_exporting_Imperial_Intraday_15min(real_time_data)
+		if st.button("Forecast Real-Time"):
+			fetching_Imperial_data_past_15min()
+			# Creating the real-time production dataframe for Imperial
+			real_time_data = pd.read_csv("./Imperial/real-time_data_Imperial1.csv")
+			second_data = pd.read_csv("./Imperial/real-time_data_Imperial2.csv")
+			# Iterate over columns to add from the second DataFrame
+			for column in ['Power', 'Power_MW', 'Next_Power_MW', 'Average_Power_MW', 'Energy_MWh']:
+				# Sum values from the second DataFrame and add them to the respective column in the final DataFrame
+				real_time_data[column] += second_data[column]
+			real_time_data.to_excel("./Imperial/Real-Time_forecast_dataset.xlsx", index = False)
+			preds = predicting_exporting_Imperial_Intraday_15min(real_time_data)
 			
-	# 		# Downloading the Predictions Results
-	# 		file_path = "./Imperial/Results_Production_Imperial_xgb_intraday_15min.xlsx"
-	# 		with open(file_path, "rb") as f:
-	# 			excel_data = f.read()
+			# Downloading the Predictions Results
+			file_path = "./Imperial/Results_Production_Imperial_xgb_intraday_15min.xlsx"
+			with open(file_path, "rb") as f:
+				excel_data = f.read()
 
-	# 			# Create a download link
-	# 			b64 = base64.b64encode(excel_data).decode()
-	# 			button_html = f"""
-	# 				 <a download="Production_Forecast_Imperial_Intraday_15min.xlsx" href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download>
-	# 				 <button kind="secondary" data-testid="baseButton-secondary" class="st-emotion-cache-12tniow ef3psqc12">Download Forecast Results Intraday 15min</button>
-	# 				 </a> 
-	# 				 """
-	# 			st.markdown(button_html, unsafe_allow_html=True)
+				# Create a download link
+				b64 = base64.b64encode(excel_data).decode()
+				button_html = f"""
+					 <a download="Production_Forecast_Imperial_Intraday_15min.xlsx" href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download>
+					 <button kind="secondary" data-testid="baseButton-secondary" class="st-emotion-cache-12tniow ef3psqc12">Download Forecast Results Intraday 15min</button>
+					 </a> 
+					 """
+				st.markdown(button_html, unsafe_allow_html=True)
 
 	# elif PVPP == "Luxus":
 	# 	# Updating the indisponibility, if any

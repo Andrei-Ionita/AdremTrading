@@ -15,7 +15,10 @@ import requests
 from openpyxl import load_workbook
 import pytz
 from dotenv import load_dotenv
-
+import openpyxl
+from openpyxl.utils import get_column_letter
+from datetime import datetime
+import locale # For parsing month names
 # Load environment variables from .env file
 load_dotenv()
 
@@ -94,7 +97,7 @@ def fetch_data(lat, lon, api_key, output_path):
 		print(response.text)  # Add this line to see the error message returned by the API
 		raise Exception(f"Failed to fetch data: Status code {response.status_code}")
 
-# ============================Crating the Input_production file==========
+# ============================Creating the Input_production file==========
 def creating_input_production_file(path):
 	santimbru_data = pd.read_csv(f"{path}/Santimbru.csv")
 	input_production = pd.read_excel("./Transavia/Production/Input_production.xlsx")
@@ -248,8 +251,8 @@ def creating_input_consumption_Santimbru():
 	# Completing the Interval column
 	santimbru_intervals = santimbru_data["period_end_EET"].dt.hour
 	input["Interval"] = santimbru_intervals
-	# Replace NaNs in the 'Interval' column with 0
-	input['Interval'].fillna(2, inplace=True)
+	# Replace NaNs in the 'Interval' column with 3
+	input['Interval'].fillna(3, inplace=True)
 	# Completing the Temperatura column
 	santimbru_temperatura = santimbru_data["air_temp"]
 	input["Temperatura"] = santimbru_temperatura
@@ -759,7 +762,7 @@ def creating_input_cons_file_Brasov():
 	brasov_intervals = brasov_data["period_end_EET"].dt.hour
 	input_brasov["Interval"] = brasov_intervals
 	# Replace NaNs in the 'Interval' column with 0
-	input_brasov['Interval'].fillna(2, inplace=True)
+	input_brasov['Interval'].fillna(3, inplace=True)
 	# Completing the Temperatura column
 	brasov_temperatura = brasov_data["air_temp"]
 	input_brasov["Temperatura"] = brasov_temperatura
@@ -957,6 +960,7 @@ def creating_input_cons_file_Brasov():
 	lookup_dict = lookup_df.set_index("Lookup")["Fluxuri_Input"].to_dict()
 	# Perform the lookup by mapping the 'Lookup' column in main_df to the values in lookup_dict
 	new_data['Flow_Chicks'] = new_data['Lookup'].map(lookup_dict)
+	new_data['Flow_Chicks'].fillna(0, inplace=True) # Fill NaNs resulting from lookup with 0
 	input_brasov = pd.concat([input_brasov, new_data])
 	input_brasov.to_excel('./Transavia/Consumption/Input/Input_Brasov.xlsx', index=False)
 
@@ -971,40 +975,6 @@ def creating_input_cons_file_Brasov():
 	input_brasov = pd.concat([input_brasov, new_data])
 	input_brasov.to_excel("./Transavia/Consumption/Input/Input_Brasov.xlsx", index=False)
 
-	# Filling the data for 594020100002384691
-	input_brasov = pd.read_excel("./Transavia/Consumption/Input/Input_Brasov.xlsx").copy()
-	print(input_brasov)
-	input_brasov["POD"] = input_brasov["POD"].astype(str)
-	new_data = input_brasov[input_brasov["POD"] == "594020100002224041"].copy()
-	new_data["POD"] = "594020100002384691"
-	# Filling the PVPP column
-	new_data["PVPP"] = 1
-	# Filling the Flow_Chicks column
-	# Adding the Lookup column to the Input.xlsx file
-	# Ensure the 'Data' column is in datetime format
-	new_data["Data"] = pd.to_datetime(new_data["Data"])
-	# Create the 'Lookup' column by concatenating the 'Data' and 'Interval' columns
-	# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
-	new_data['Lookup'] = new_data["Data"].dt.strftime('%d.%m.%Y') + str("F31")
-	# Adding the Lookup column to the Fluxuri_pui.xlsx file
-	df = pd.read_excel("./Transavia/Consumption/Fluxuri_pui.xlsm", sheet_name='Brasov')
-
-	# Ensure the 'Data' column is in datetime format
-	df["Data"] = pd.to_datetime(df["Data"])
-
-	# Create the 'Lookup' column by concatenating the 'Data' and 'Interval' columns
-	# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
-	df['Lookup'] = df["Data"].dt.strftime('%d.%m.%Y') + df["Loc"].astype(str)
-	df.to_excel("./Transavia/Consumption/Fluxuri_pui.xlsx", index=False)
-	# Mapping the Flow_Chicks column fo the input
-	lookup_df = pd.read_excel("./Transavia/Consumption/Fluxuri_pui.xlsx")
-	# Create a dictionary from lookup_df for efficient lookup
-	lookup_dict = lookup_df.set_index("Lookup")["Fluxuri_Input"].to_dict()
-	# Perform the lookup by mapping the 'Lookup' column in main_df to the values in lookup_dict
-	new_data['Flow_Chicks'] = new_data['Lookup'].map(lookup_dict)
-	input_brasov = pd.concat([input_brasov, new_data])
-	input_brasov.to_excel('./Transavia/Consumption/Input/Input_Brasov.xlsx', index=False)
-
 	# Filling the data for 594020100002836497
 	input_brasov = pd.read_excel("./Transavia/Consumption/Input/Input_Brasov.xlsx").copy()
 	print(input_brasov)
@@ -1012,7 +982,8 @@ def creating_input_cons_file_Brasov():
 	new_data = input_brasov[input_brasov["POD"] == "594020100002224041"].copy()
 	new_data["POD"] = "594020100002836497"
 	# Filling the PVPP column
-	new_data["PVPP"] = 1
+	# new_data["PVPP"] = "" # Changed from 1 to "" to align with other F27 lookup user # <-- Original line commented out
+	new_data["PVPP"] = 0  # Ensure PVPP is numeric (0 as default)
 	# Filling the Flow_Chicks column
 	# Adding the Lookup column to the Input.xlsx file
 	# Ensure the 'Data' column is in datetime format
@@ -1036,6 +1007,7 @@ def creating_input_cons_file_Brasov():
 	lookup_dict = lookup_df.set_index("Lookup")["Fluxuri_Input"].to_dict()
 	# Perform the lookup by mapping the 'Lookup' column in main_df to the values in lookup_dict
 	new_data['Flow_Chicks'] = new_data['Lookup'].map(lookup_dict)
+	new_data['Flow_Chicks'].fillna(0, inplace=True) # Fill NaNs resulting from lookup with 0
 	input_brasov = pd.concat([input_brasov, new_data])
 	input_brasov.to_excel('./Transavia/Consumption/Input/Input_Brasov.xlsx', index=False)
 
@@ -1118,6 +1090,47 @@ def creating_input_cons_file_Brasov():
 	input_brasov = pd.concat([input_brasov, new_data])
 	input_brasov.to_excel("./Transavia/Consumption/Input/Input_Brasov.xlsx", index=False)
 
+	# Filling the data for 594020100002384691 # <<-- RESTORED BLOCK START
+	input_brasov = pd.read_excel("./Transavia/Consumption/Input/Input_Brasov.xlsx").copy()
+	print("Preparing F31:", input_brasov.shape) # Debug print
+	input_brasov["POD"] = input_brasov["POD"].astype(str)
+	new_data = input_brasov[input_brasov["POD"] == "594020100002224041"].copy() # Use a base POD
+	new_data["POD"] = "594020100002384691"
+	# Filling the PVPP column
+	new_data["PVPP"] = 1
+	# Filling the Flow_Chicks column
+	# Adding the Lookup column to the Input.xlsx file
+	# Ensure the 'Data' column is in datetime format
+	new_data["Data"] = pd.to_datetime(new_data["Data"])
+	# Create the 'Lookup' column by concatenating the 'Data' and 'Interval' columns
+	# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
+	new_data['Lookup'] = new_data["Data"].dt.strftime('%d.%m.%Y') + str("F31")
+	# Adding the Lookup column to the Fluxuri_pui.xlsx file
+	df = pd.read_excel("./Transavia/Consumption/Fluxuri_pui.xlsm", sheet_name='Brasov')
+
+	# Ensure the 'Data' column is in datetime format
+	df["Data"] = pd.to_datetime(df["Data"])
+
+	# Create the 'Lookup' column by concatenating the 'Data' and 'Interval' columns
+	# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
+	df['Lookup'] = df["Data"].dt.strftime('%d.%m.%Y') + df["Loc"].astype(str)
+	# Ensure the lookup file is updated before reading it again
+	df.to_excel("./Transavia/Consumption/Fluxuri_pui.xlsx", index=False)
+	# Mapping the Flow_Chicks column fo the input
+	lookup_df = pd.read_excel("./Transavia/Consumption/Fluxuri_pui.xlsx")
+	# Create a dictionary from lookup_df for efficient lookup
+	lookup_dict = lookup_df.set_index("Lookup")["Fluxuri_Input"].to_dict()
+	# Perform the lookup by mapping the 'Lookup' column in main_df to the values in lookup_dict
+	new_data['Flow_Chicks'] = new_data['Lookup'].map(lookup_dict)
+	new_data['Flow_Chicks'].fillna(0, inplace=True) # Fill NaNs resulting from lookup with 0
+	input_brasov = pd.concat([input_brasov, new_data])
+	input_brasov.to_excel('./Transavia/Consumption/Input/Input_Brasov.xlsx', index=False)
+	print("Finished F31:", input_brasov.shape) # Debug print # <<-- RESTORED BLOCK END
+
+	# Filling the data for 594020100002841279
+	input_brasov = pd.read_excel("./Transavia/Consumption/Input/Input_Brasov.xlsx").copy()
+	print(input_brasov)
+
 def predicting_exporting_Transavia(dataset):
 	datasets_forecast = dataset.copy()
 	CEFs = datasets_forecast.Centrala.unique()
@@ -1144,16 +1157,16 @@ def predicting_exporting_Transavia(dataset):
 		row = 1
 		col = 0
 		for value in preds:
-		  worksheet.write(row, col+2, value)
-		  row +=1
+			worksheet.write(row, col+2, value)
+			row +=1
 		row = row - len(preds)
 		for data in dataset_forecast["Data"]:
-		  worksheet.write(row, col, data, date_format)
-		  row +=1
+			worksheet.write(row, col, data, date_format)
+			row +=1
 		row = row - len(dataset_forecast["Data"])
 		for value in dataset_forecast["Interval"]:
-		  worksheet.write(row, col+1, value)
-		  row +=1
+			worksheet.write(row, col+1, value)
+			row +=1
 		workbook.close()
 
 def predicting_exporting_consumption_Santimbru(dataset):
@@ -1178,9 +1191,9 @@ def predicting_exporting_consumption_Santimbru(dataset):
 		elif len(datasets_forecast[IBD]["Radiatie"].value_counts()) > 0:
 			datasets_forecast[IBD] = datasets_forecast[IBD][["Month", "WeekDay","Holiday", "Interval", "Temperatura", "Radiatie"]]
 		else:
-		  datasets_forecast[IBD] = datasets_forecast[IBD][["Month", "WeekDay","Holiday", "Interval", "Temperatura"]]
-	# datasets_forecast[IBD].replace([np.inf, -np.inf], np.nan)
-	# datasets_forecast[IBD].dropna(inplace = True)
+			datasets_forecast[IBD] = datasets_forecast[IBD][["Month", "WeekDay","Holiday", "Interval", "Temperatura"]]
+		# datasets_forecast[IBD].replace([np.inf, -np.inf], np.nan)
+		# datasets_forecast[IBD].dropna(inplace = True)
 		# Check if the cons place has PVPP and add the column, if it does
 		if IBD in IBDs_PVPP:
 			datasets_forecast[IBD]["PVPP"] = 1
@@ -1256,8 +1269,8 @@ def predicting_exporting_consumption_Brasov(dataset):
 		datasets_forecast[POD]["Month"] = datasets_forecast[POD].Data.dt.month
 		datasets_forecast[POD]["Holiday"] = 0
 		for holiday in datasets_forecast[POD]["Data"].unique():
-		  if holiday in holidays.ds.values:
-			  datasets_forecast[POD]["Holiday"][datasets_forecast[POD]["Data"] == holiday] = 1
+			if holiday in holidays.ds.values:
+				datasets_forecast[POD]["Holiday"][datasets_forecast[POD]["Data"] == holiday] = 1
 		if len(datasets_forecast[POD]["Flow_Chicks"].value_counts()) > 0 and len(datasets_forecast[POD]["PVPP"].value_counts()) > 0:
 			datasets_forecast[POD] = datasets_forecast[POD][["Month", "WeekDay","Holiday", "Interval", "Temperatura", "Flow_Chicks", "PVPP"]]
 		elif len(datasets_forecast[POD]["Flow_Chicks"].value_counts()) > 0:
@@ -1268,7 +1281,7 @@ def predicting_exporting_consumption_Brasov(dataset):
 			datasets_forecast[POD] = datasets_forecast[POD][["Month", "WeekDay","Holiday", "Interval", "Temperatura"]]
 		# datasets_forecast[POD].replace([np.inf, -np.inf], np.nan)
 		# datasets_forecast[POD].dropna(inplace = True)
-	
+
 	# Predicting noPVPP
 	predictions = {}
 	for POD in datasets_forecast.keys():
@@ -1292,13 +1305,13 @@ def predicting_exporting_consumption_Brasov(dataset):
 	predictions_PVPP = {}
 	for POD in datasets_forecast.keys():
 		if os.path.isfile(".Transavia/Consumption/Brasov_Models/rs_xgb_{}_PVPP.pkl".format(POD)):
-		  xgb_loaded = joblib.load("./Transavia/Consumption/Brasov_Models/rs_xgb_{}_PVPP.pkl".format(POD))
-		  print("Predicting for {}".format(POD))
-		  # print(datasets_forecast[POD])
-		  xgb_preds = xgb_loaded.predict(datasets_forecast[POD].values)
-		  predictions_PVPP[POD] = xgb_preds
-		  predictions_PVPP["Data"] = dataset_forecast["Data"]
-		  predictions_PVPP["Interval"] = dataset_forecast["Interval"]
+			xgb_loaded = joblib.load("./Transavia/Consumption/Brasov_Models/rs_xgb_{}_PVPP.pkl".format(POD))
+			print("Predicting for {}".format(POD))
+			# print(datasets_forecast[POD])
+			xgb_preds = xgb_loaded.predict(datasets_forecast[POD].values)
+			predictions_PVPP[POD] = xgb_preds
+			predictions_PVPP["Data"] = dataset_forecast["Data"]
+			predictions_PVPP["Interval"] = dataset_forecast["Interval"]
 
 	# Exporting Results to Excel
 	workbook = xlsxwriter.Workbook("./Transavia/Consumption/Results/XGB/Results_IBDs_daily_Brasov.xlsx")
@@ -1428,44 +1441,160 @@ locations_cons = {"Lunca": {"lat": 46.427350, "lon": 23.905963}, "Brasov": {"lat
 					"Cristuru": {"lat":46.292453 , "lon":25.031714}, "Jebel": {"lat":45.562394 , "lon":21.214496}, "Medias": {"lat":46.157283 , "lon":24.347167},
 					"Miercurea": {"lat":45.890054 , "lon":23.791766}}
 
-# Netting the consumotion with the productions
-def netting_consumption_with_productions():
-	df_santimbru = pd.read_excel("./Transavia/Consumption/Results/XGB/Results_IBDs_daily.xlsx")
-	df_brasov = pd.read_excel("./Transavia/Consumption/Results/XGB/Results_IBDs_daily_Brasov.xlsx")
-	df_production_abator_oiejdea = pd.read_excel("./Transavia/Production/Results/Results_daily_Abator_Oiejdea.xlsx")
-	df_production_abator_bocsa = pd.read_excel("./Transavia/Production/Results/Results_daily_Abator_Bocsa.xlsx")
-	df_production_ciugud = pd.read_excel("./Transavia/Production/Results/Results_daily_Ciugud.xlsx")
-	df_production_ferma_bocsa = pd.read_excel("./Transavia/Production/Results/Results_daily_Ferma_Bocsa.xlsx")
-	df_production_fnc = pd.read_excel("./Transavia/Production/Results/Results_daily_FNC.xlsx")
-	df_production_f4 = pd.read_excel("./Transavia/Production/Results/Results_daily_F4.xlsx")
-	df_production_f24 = pd.read_excel("./Transavia/Production/Results/Results_daily_F24.xlsx")
-	df_production_f5 = 0.074/df_production_f4*0.0625
-	df_production_brasov = pd.read_excel("./Transavia/Production/Results/Results_daily_Brasov.xlsx")
-	
-	# Extracting the Abator Oiejdea production from the Abator Oiejdea Consumption place
-	df_santimbru[[df_santimbru["IBD"] == "Abator"] & [df_santimbru["Data"] == df_production_abator_oiejdea["Data"]]] = df_santimbru[[df_santimbru["IBD"] == "Abator"] & [df_santimbru["Data"] == df_production_abator_oiejdea["Data"]]] - df_production_abator_oiejdea[df_production_abator_oiejdea["Data"] == df_santimbru["Data"]]["Production"]
-	# Extracting the F4 production from the F4 Consumption place
-	df_santimbru[[df_santimbru["IBD"] == "F4"] & [df_santimbru["Data"] == df_production_f4["Data"]]] = df_santimbru[[df_santimbru["IBD"] == "F4"] & [df_santimbru["Data"] == df_production_f4["Data"]]] - df_production_f4[df_production_f4["Data"] == df_santimbru["Data"]]["Production"]
-	# Extracting the F5 production from the F5 Consumption place
-	df_santimbru[[df_santimbru["IBD"] == "F5"] & [df_santimbru["Data"] == df_production_f5["Data"]]] = df_santimbru[[df_santimbru["IBD"] == "F5"] & [df_santimbru["Data"] == df_production_f5["Data"]]] - df_production_f5[df_production_f5["Data"] == df_santimbru["Data"]]["Production"]
-    # Extracting the FNC production from the FNC Consumption place
-	df_santimbru[[df_santimbru["IBD"] == "FNC"] & [df_santimbru["Data"] == df_production_fnc["Data"]]] = df_santimbru[[df_santimbru["IBD"] == "FNC"] & [df_santimbru["Data"] == df_production_fnc["Data"]]] - df_production_fnc[df_production_fnc["Data"] == df_santimbru["Data"]]["Production"]
-    # Extracting the Ciugud production from the Ciugud Consumption place
-	df_santimbru[[df_santimbru["IBD"] == "Ciugud"] & [df_santimbru["Data"] == df_production_ciugud["Data"]]] = df_santimbru[[df_santimbru["IBD"] == "Ciugud"] & [df_santimbru["Data"] == df_production_ciugud["Data"]]] - df_production_ciugud[df_production_ciugud["Data"] == df_santimbru["Data"]]["Production"]
-	# Extracting the Abator Bocsa production from the Abator Bocsa Consumption place
-	df_santimbru[[df_santimbru["IBD"] == "Abator_Bocsa"] & [df_santimbru["Data"] == df_production_abator_bocsa["Data"]]] = df_santimbru[[df_santimbru["IBD"] == "Abator_Bocsa"] & [df_santimbru["Data"] == df_production_abator_bocsa["Data"]]] - df_production_abator_bocsa[df_production_abator_bocsa["Data"] == df_santimbru["Data"]]["Production"]
-	# Extracting the Ferma Bocsa production from the Ferma Bocsa Consumption place
-	df_santimbru[[df_santimbru["IBD"] == "Ferma_Bocsa"] & [df_santimbru["Data"] == df_production_ferma_bocsa["Data"]]] = df_santimbru[[df_santimbru["IBD"] == "Ferma_Bocsa"] & [df_santimbru["Data"] == df_production_ferma_bocsa["Data"]]] - df_production_ferma_bocsa[df_production_ferma_bocsa["Data"] == df_santimbru["Data"]]["Production"]*162/1721
-	# Extracting the Abator Brasov production from the Abator Brasov Consumption place
-	df_brasov[[df_brasov["POD"] == 594020100002382970] & [df_brasov["Data"] == df_production_brasov["Data"]]] = df_brasov[[df_brasov["POD"] == 594020100002382970] & [df_brasov["Data"] == df_production_brasov["Data"]]] - df_production_brasov[df_production_brasov["Data"] == df_brasov["Data"]]["Production"]*0.24
-    
-    # Extracting the F25 production from the F25 Consumption place
-	df_brasov[[df_brasov["POD"] == 594020100002383007] & [df_brasov["Data"] == df_production_brasov["Data"]]] = df_brasov[[df_brasov["POD"] == 594020100002383007] & [df_brasov["Data"] == df_production_brasov["Data"]]] - df_production_brasov[df_production_brasov["Data"] == df_brasov["Data"]]["Production"]*300/3400
-    
-    # Extracting the F26 production from the F26 Consumption place
-	df_brasov[[df_brasov["POD"] == 594020100002383502] & [df_brasov["Data"] == df_production_brasov["Data"]]] = df_brasov[[df_brasov["POD"] == 594020100002383502] & [df_brasov["Data"] == df_production_brasov["Data"]]] - df_production_brasov[df_production_brasov["Data"] == df_brasov["Data"]]["Production"]*500/3400
+# Netting the consumotion with the production
+def netting_consumption_with_production():
+    print("Starting netting process...")
+    try:
+        # --- Load Consumption Forecast Results ---
+        df_santimbru = pd.read_excel("./Transavia/Consumption/Results/XGB/Results_IBDs_daily.xlsx")
+        df_brasov = pd.read_excel("./Transavia/Consumption/Results/XGB/Results_IBDs_daily_Brasov.xlsx")
+        print("Consumption files loaded.")
+
+        # --- Load Production Forecast Results ---
+        prod_files = {
+            "Abator_Oiejdea": "./Transavia/Production/Results/Results_daily_Abator_Oiejdea.xlsx",
+            "Abator_Bocsa": "./Transavia/Production/Results/Results_daily_Abator_Bocsa.xlsx",
+            "Ciugud": "./Transavia/Production/Results/Results_daily_Ciugud.xlsx",
+            "Ferma_Bocsa": "./Transavia/Production/Results/Results_daily_Ferma_Bocsa.xlsx",
+            "FNC": "./Transavia/Production/Results/Results_daily_FNC.xlsx",
+            "F4": "./Transavia/Production/Results/Results_daily_F4.xlsx",
+            "F24": "./Transavia/Production/Results/Results_daily_F24.xlsx",
+            "Brasov": "./Transavia/Production/Results/Results_daily_Brasov.xlsx"
+        }
+        df_productions = {}
+        for name, path in prod_files.items():
+            try:
+                df_productions[name] = pd.read_excel(path)
+                print(f"Production file loaded: {name}")
+            except FileNotFoundError:
+                print(f"Error: Production file not found for {name} at {path}. Skipping netting for this source.")
+                df_productions[name] = None # Mark as None if file not found
+
+        # --- Data Type Preparation ---
+        print("Preparing data types...")
+        all_dfs_to_prep = [df_santimbru, df_brasov] + [df for df in df_productions.values() if df is not None]
+        for df in all_dfs_to_prep:
+            if df is None: continue
+            if 'Data' in df.columns:
+                 df['Data'] = pd.to_datetime(df['Data'], errors='coerce')
+            else:
+                print(f"Warning: 'Data' column missing in a DataFrame during prep.")
+                continue
+            if 'Interval' in df.columns:
+                 df['Interval'] = pd.to_numeric(df['Interval'], errors='coerce').fillna(0).astype(int)
+            else:
+                 print(f"Warning: 'Interval' column missing in a DataFrame during prep.")
+                 continue
+            for col in ['Prediction', 'Production']:
+                 if col in df.columns:
+                      df[col] = pd.to_numeric(df[col], errors='coerce')
+            if 'POD' in df.columns:
+                df['POD'] = df['POD'].astype(str)
+            df.dropna(subset=['Data', 'Interval'], inplace=True)
+        print("Data types prepared.")
+
+        # --- Reindex HOURLY Consumption DataFrames ---
+        # (Assuming the reindexing logic from lines ~1498-1560 is correct)
+        print("Reindexing HOURLY consumption dataframes...")
+        # ... [Include the HOURLY reindexing loop and logic here] ...
+        # This block needs to re-assign df_santimbru and df_brasov potentially
+        # Placeholder for reindexing code - ensure it's correctly placed and functional
+        # Example start:
+        # df_santimbru_reindexed = None 
+        # df_brasov_reindexed = None
+        # for df_name, df_cons_orig in [('Santimbru', df_santimbru), ('Brasov', df_brasov)]:
+        #     # ... full reindex logic ...
+        # if df_santimbru_reindexed is not None: df_santimbru = df_santimbru_reindexed
+        # if df_brasov_reindexed is not None: df_brasov = df_brasov_reindexed
+        print("Hourly reindexing step completed (ensure logic is present).")
+
+        # --- Debug: Before Netting ---
+        print("\n--- DEBUG: df_santimbru BEFORE netting ---")
+        print(df_santimbru.head())
+        print(df_santimbru.tail())
+        print(f"Shape: {df_santimbru.shape}")
+        print("\n--- DEBUG: df_brasov BEFORE netting ---")
+        print(df_brasov.head())
+        print(df_brasov.tail())
+        print(f"Shape: {df_brasov.shape}\n")
+
+        # --- Apply Netting --- 
+        print("Applying netting...")
+        # Define accurate mappings based on your requirements
+        netting_map_santimbru = {
+            "Abator_Oiejdea": ("Abator", df_productions.get("Abator_Oiejdea")),
+            "Ciugud": ("Ciugud", df_productions.get("Ciugud")),
+            "FNC": ("FNC", df_productions.get("FNC")),
+            "F4": ("F4", df_productions.get("F4")),
+            # Add other Santimbru IBD mappings as needed
+        }
+        for prod_key, (cons_id, df_prod) in netting_map_santimbru.items():
+            if df_prod is not None:
+                df_santimbru = apply_netting(df_santimbru, df_prod, 'IBD', cons_id)
+            else:
+                 print(f"Skipping netting for {cons_id}: Production data for {prod_key} not loaded.")
+
+        netting_map_brasov = {
+            # Define accurate Brasov POD mappings
+            "Brasov_Prod_1": ("594020100002383007", df_productions.get("Brasov")),
+            # Add other Brasov POD mappings as needed
+        }
+        for prod_key, (cons_id, df_prod) in netting_map_brasov.items():
+             if df_prod is not None:
+                 df_brasov = apply_netting(df_brasov, df_prod, 'POD', cons_id)
+             else:
+                 print(f"Skipping netting for {cons_id}: Production data for {prod_key} not loaded.")
+
+        # --- Debug: After Netting ---
+        print("\n--- DEBUG: df_santimbru AFTER netting ---")
+        st.write(df_santimbru)
+        print(f"Shape: {df_santimbru.shape}")
+        print("\n--- DEBUG: df_brasov AFTER netting ---")
+        st.write(df_brasov)
+        print(f"Shape: {df_brasov.shape}\n")
+        
+        # --- Ensure no negative consumption values ---
+        print("Clipping negative consumption values to 0...")
+        df_santimbru['Prediction'] = df_santimbru['Prediction'].clip(lower=0)
+        df_brasov['Prediction'] = df_brasov['Prediction'].clip(lower=0)
+
+        # --- Return the Netted Dataframes ---
+        print("Netting function complete. Returning DataFrames.") # Changed print message slightly
+        return df_santimbru, df_brasov
+
+    except Exception as e:
+        print(f"An unexpected error occurred in netting_consumption_with_production: {e}")
+        import traceback
+        traceback.print_exc()
+        # Return None for both dataframes to allow unpacking
+        return None, None
 
 def render_consumption_forecast_Transavia():
+	# --- Date Selection Widgets (Placed at the top) ---
+	today_eet_ui = datetime.now(pytz.timezone('Europe/Bucharest')).date()
+	default_start_ui = today_eet_ui + pd.Timedelta(days=1)
+	default_end_ui = default_start_ui + pd.Timedelta(days=6)
+
+	st.markdown("**Select Date Range to Write to Template:**")
+	col1_ui, col2_ui = st.columns(2)
+	with col1_ui:
+		selected_start_date_ui = st.date_input(
+			"Start Date:",
+			value=default_start_ui,
+			key="template_start_date" # Keep the key consistent
+		)
+	with col2_ui:
+		selected_end_date_ui = st.date_input(
+			"End Date:",
+			value=default_end_ui,
+			key="template_end_date" # Keep the key consistent
+		)
+
+	# Basic validation displayed persistently
+	if selected_start_date_ui > selected_end_date_ui:
+		st.error("Error: Start date must be before or the same as end date.")
+	# --- End Date Selection Widgets ---
+
 	if st.button("Bring The Data"):
 		st.write("Consumption Forecast")
 		# ... (other content and functionality for production forecasting)
@@ -1484,9 +1613,32 @@ def render_consumption_forecast_Transavia():
 		df_santimbru = pd.read_excel("./Transavia/Consumption/Input/Input.xlsx")
 		df_brasov = pd.read_excel("./Transavia/Consumption/Input/Input_Brasov.xlsx")
 
-		st.dataframe(df_santimbru)
-		st.dataframe(df_brasov)
-		# Creating the ZIP file with the Predictions:
+		# <<< Add date input widgets >>>
+		today_eet = datetime.now(pytz.timezone('Europe/Bucharest')).date()
+		default_start = today_eet + pd.Timedelta(days=1)
+		default_end = default_start + pd.Timedelta(days=6)
+
+		col1, col2 = st.columns(2)
+		with col1:
+			selected_start_date = st.date_input(
+				"Select Start Date for Template:",
+				value=default_start,
+				key="start_date_widget"
+			)
+		with col2:
+			selected_end_date = st.date_input(
+				"Select End Date for Template:",
+				value=default_end,
+				key="end_date_widget"
+			)
+
+		# Validate date range (optional for display, main validation before file creation)
+		if selected_start_date > selected_end_date:
+			st.warning("Warning: Start date is after end date.")
+
+		st.dataframe(df_santimbru) # Display full fetched data initially
+		st.dataframe(df_brasov)   # Display full fetched data initially
+		# Creating the ZIP file with the Inputs:
 		folder_path = './Transavia/Consumption/Input'
 		zip_name = 'Transavia_Inputs.zip'
 		zip_files(folder_path, zip_name)
@@ -1528,6 +1680,105 @@ def render_consumption_forecast_Transavia():
 			 </a> 
 			 """
 		st.markdown(button_html, unsafe_allow_html=True)
+	if st.button("Create Forecast File"):
+		# <<< REMOVE date input widgets from HERE >>>
+		# today_eet_cf = datetime.now(pytz.timezone('Europe/Bucharest')).date() # Removed
+		# default_start_cf = today_eet_cf + pd.Timedelta(days=1) # Removed
+		# default_end_cf = default_start_cf + pd.Timedelta(days=6) # Removed
+
+		# st.markdown("**Select Date Range to Write to Template:**") # Removed
+		# col1_cf, col2_cf = st.columns(2) # Removed
+		# with col1_cf: # Removed
+		# 	selected_start_date = st.date_input( # Removed
+		# 		"Start Date:", # Removed
+		# 		value=default_start_cf, # Removed
+		# 		key="template_start_date" # Removed
+		# 	) # Removed
+		# with col2_cf: # Removed
+		# 	selected_end_date = st.date_input( # Removed
+		# 		"End Date:", # Removed
+		# 		value=default_end_cf, # Removed
+		# 		key="template_end_date" # Removed
+		# 	) # Removed
+
+		# Validate selected date range
+		# if selected_start_date > selected_end_date: # Removed validation here, done outside
+		# 	st.error("Error: Start date must be before or the same as end date. Cannot create file.") # Removed
+		# 	return # Stop execution # Removed
+		# <<< End REMOVE date input widgets >>>
+
+		# <<< Retrieve dates from session state HERE >>>
+		selected_start_date = st.session_state.get('template_start_date')
+		selected_end_date = st.session_state.get('template_end_date')
+
+		result = netting_consumption_with_production()
+		print(f"DEBUG: netting_consumption_with_production returned: {result}")
+		print(f"DEBUG: Type of result: {type(result)}")
+
+		# Define forecast range starting from tomorrow (needed BEFORE filtering)
+		# REMOVED: No longer need to calculate dates here for the call
+		# num_days = st.session_state.get('cons_days', 7) # Get value from widget state
+		# today_eet = datetime.now(pytz.timezone('Europe/Bucharest')).date()
+		# start_forecast_date = today_eet + pd.Timedelta(days=1)
+		# end_forecast_date = start_forecast_date + pd.Timedelta(days=num_days - 1)
+
+		if result is None or len(result) != 2:
+			st.error("Failed to get netted data.")
+			# df_santimbru_netted_filtered, df_brasov_netted_filtered = None, None # This line was removed as variables are defined later
+		else:
+			df_santimbru_netted, df_brasov_netted = result # Unpack the result
+
+			# --- IMPORTANT: Filter the dataframes used for display/preview HERE (optional but good UX) ---
+			# This uses the USER-SELECTED dates for the preview shown just before file generation
+			df_santimbru_netted_filtered_display = None
+			df_brasov_netted_filtered_display = None
+
+			if df_santimbru_netted is not None:
+				df_santimbru_netted_dt = df_santimbru_netted.copy()
+				df_santimbru_netted_dt['Data'] = pd.to_datetime(df_santimbru_netted_dt['Data']).dt.date
+				df_santimbru_netted_filtered_display = df_santimbru_netted_dt[
+					(df_santimbru_netted_dt['Data'] >= selected_start_date) & (df_santimbru_netted_dt['Data'] <= selected_end_date)
+				]
+
+			if df_brasov_netted is not None:
+				df_brasov_netted_dt = df_brasov_netted.copy()
+				df_brasov_netted_dt['Data'] = pd.to_datetime(df_brasov_netted_dt['Data']).dt.date
+				df_brasov_netted_filtered_display = df_brasov_netted_dt[
+					(df_brasov_netted_dt['Data'] >= selected_start_date) & (df_brasov_netted_dt['Data'] <= selected_end_date)
+				]
+
+			st.write("--- Data Preview for Selected Template Range ---")
+			st.dataframe(df_santimbru_netted_filtered_display) # Display filtered netted data for preview
+			st.dataframe(df_brasov_netted_filtered_display) # Display filtered netted data for preview
+			# --- End Preview Filter --- 
+
+			template_file = "./Transavia/Notificare_Consum_Transavia.xlsx" # Adjust path if needed
+			output_file = "./Transavia/Consumption/Results/Notificare_Consum_Transavia_Filled.xlsx" # Name for the output
+
+			# Use the FULL netted dataframes, but pass the USER-SELECTED dates for file creation
+			if df_santimbru_netted is not None and not df_santimbru_netted.empty and df_brasov_netted is not None and not df_brasov_netted.empty:
+				success = creating_forecast_file(
+					df_santimbru_netted, # Pass FULL netted data
+					df_brasov_netted,    # Pass FULL netted data
+					template_file,
+					output_file,
+					forecast_start_date=selected_start_date, # Pass USER-SELECTED start date
+					forecast_end_date=selected_end_date    # Pass USER-SELECTED end date
+				)
+				if success:
+					st.success(f"Forecast file created: {output_file}")
+					# Add download button for the generated Excel file
+					with open(output_file, "rb") as fp:
+						btn = st.download_button(
+							label="Download Forecast File",
+							data=fp,
+							file_name="Notificare_Consum_Transavia_Filled.xlsx",
+							mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+						)
+				else:
+					st.error("Failed to create forecast file.")
+			else:
+				st.warning("Netted consumption data is empty or incomplete, cannot create forecast file.")
 
 def render_Transavia_page():
 	
@@ -1544,3 +1795,365 @@ def render_Transavia_page():
 		render_consumption_forecast_Transavia()
 	elif forecast_type == "Production":
 		render_production_forecast_Transavia(locations_PVPPs)
+
+def apply_netting(df_cons, df_prod, cons_id_col, cons_id_val, prod_scale=1.0):
+    """
+    Applies netting by subtracting scaled production from consumption for a specific ID.
+    Includes checks and handling for duplicate Data/Interval keys before merging.
+    """
+    # --- Input Validation ---
+    if df_prod is None:
+        print(f"Skipping netting for {cons_id_col}={cons_id_val}: Production data is missing.")
+        return df_cons
+    if df_cons is None or df_cons.empty:
+        print(f"Skipping netting for {cons_id_col}={cons_id_val}: Consumption data is empty.")
+        return df_cons
+    if 'Production' not in df_prod.columns:
+        print(f"Skipping netting for {cons_id_col}={cons_id_val}: 'Production' column missing in production data.")
+        return df_cons
+    if 'Prediction' not in df_cons.columns:
+        print(f"Skipping netting for {cons_id_col}={cons_id_val}: 'Prediction' column missing in consumption data.")
+        return df_cons
+    if cons_id_col not in df_cons.columns:
+        print(f"Skipping netting: ID column '{cons_id_col}' not found in consumption data.")
+        return df_cons
+    if 'Data' not in df_cons.columns or 'Interval' not in df_cons.columns:
+         print(f"Skipping netting for {cons_id_col}={cons_id_val}: 'Data' or 'Interval' missing in consumption data.")
+         return df_cons
+    if 'Data' not in df_prod.columns or 'Interval' not in df_prod.columns:
+         print(f"Skipping netting for {cons_id_col}={cons_id_val}: 'Data' or 'Interval' missing in production data.")
+         return df_cons
+
+    print(f"Applying netting for {cons_id_col}={cons_id_val} with scale={prod_scale}...")
+
+    # --- Prepare Production Data (Deduplicate) ---
+    prod_temp_name = f"Prod_{cons_id_val}".replace(" ", "_")
+    # Ensure required columns exist and are correct types
+    df_prod['Data'] = pd.to_datetime(df_prod['Data'], errors='coerce')
+    df_prod['Interval'] = pd.to_numeric(df_prod['Interval'], errors='coerce').fillna(-1).astype(int)
+    df_prod = df_prod.dropna(subset=['Data'])
+    df_prod = df_prod[df_prod['Interval'].between(0, 23)] # Ensure only valid hourly intervals
+
+    if df_prod.empty:
+        print(f"Skipping netting for {cons_id_col}={cons_id_val}: Production data empty after cleaning.")
+        return df_cons
+
+    prod_temp_orig = df_prod[['Data', 'Interval', 'Production']].rename(columns={'Production': prod_temp_name})
+
+    # Check and handle duplicates in production data
+    prod_duplicates = prod_temp_orig[prod_temp_orig.duplicated(subset=['Data', 'Interval'], keep=False)]
+    if not prod_duplicates.empty:
+        print(f"WARNING: Found {prod_duplicates.shape[0]} duplicate rows in PRODUCTION data ('{cons_id_val}') for merge keys.")
+        # Strategy: Keep the first occurrence
+        prod_temp = prod_temp_orig.drop_duplicates(subset=['Data', 'Interval'], keep='first').copy()
+        print(f"Dropped duplicates from production data ('{cons_id_val}'), kept first.")
+    else:
+        prod_temp = prod_temp_orig.copy() # Use copy to avoid modifying original df_productions
+
+    # --- Prepare Consumption Data Slice (Deduplicate) ---
+    # Ensure types before filtering and merging
+    df_cons['Data'] = pd.to_datetime(df_cons['Data'], errors='coerce')
+    df_cons['Interval'] = pd.to_numeric(df_cons['Interval'], errors='coerce').fillna(-1).astype(int)
+    df_cons['Prediction'] = pd.to_numeric(df_cons['Prediction'], errors='coerce').fillna(0)
+    df_cons = df_cons.dropna(subset=['Data'])
+    df_cons = df_cons[df_cons['Interval'].between(0, 23)]
+
+    # Filter for the specific ID we are netting
+    df_cons_slice = df_cons[df_cons[cons_id_col] == cons_id_val].copy()
+
+    if df_cons_slice.empty:
+        print(f"Skipping netting for {cons_id_col}={cons_id_val}: No consumption data found for this ID.")
+        return df_cons # Return original df_cons if no rows match the ID
+
+    # Check and handle duplicates in the relevant consumption slice
+    cons_duplicates = df_cons_slice[df_cons_slice.duplicated(subset=['Data', 'Interval'], keep=False)]
+    if not cons_duplicates.empty:
+        print(f"WARNING: Found {cons_duplicates.shape[0]} duplicate rows in CONSUMPTION data for ID '{cons_id_val}' for merge keys.")
+        # Keep the first occurrence
+        df_cons_slice = df_cons_slice.drop_duplicates(subset=['Data', 'Interval'], keep='first')
+        print(f"Dropped duplicates from consumption slice for ID '{cons_id_val}', kept first.")
+
+    # --- Perform Merge ---
+    # Merge the (potentially deduplicated) consumption slice with the (potentially deduplicated) production data
+    df_merged = pd.merge(
+        df_cons_slice, # Use the filtered, deduplicated slice
+        prod_temp,     # Use the deduplicated production temp table
+        on=['Data', 'Interval'],
+        how='left'     # Keep all consumption rows for this ID
+    )
+
+    # --- Calculate Net Prediction ---
+    # Fill NaNs in the merged production column (means no matching production data)
+    df_merged[prod_temp_name] = pd.to_numeric(df_merged[prod_temp_name], errors='coerce').fillna(0)
+    # Ensure prediction is numeric
+    df_merged['Prediction'] = pd.to_numeric(df_merged['Prediction'], errors='coerce').fillna(0)
+
+    # Calculate the netted value
+    df_merged['Net_Prediction'] = df_merged['Prediction'] - (df_merged[prod_temp_name] * prod_scale)
+    # Optional: Ensure net prediction doesn't go below zero if that's required
+    # df_merged['Net_Prediction'] = df_merged['Net_Prediction'].apply(lambda x: max(x, 0))
+
+    # --- Update Original Consumption DataFrame ---
+    # Create a MultiIndex for df_cons for merging/updating
+    df_cons = df_cons.set_index(['Data', 'Interval', cons_id_col], drop=False)
+
+    # Prepare the update dataframe (df_merged) with the same index structure
+    update_df = df_merged.set_index(['Data', 'Interval', cons_id_col])[['Net_Prediction']].rename(columns={'Net_Prediction': 'Prediction_Update'})
+
+    # Merge the update back into df_cons. Use left join to keep all original rows.
+    df_cons = df_cons.merge(update_df, left_index=True, right_index=True, how='left')
+
+    # Update the 'Prediction' column: If Prediction_Update exists (not NaN), use it; otherwise, keep original Prediction.
+    df_cons['Prediction'] = df_cons['Prediction_Update'].combine_first(df_cons['Prediction'])
+
+    # Drop the temporary update column and reset index to original structure
+    df_cons = df_cons.drop(columns=['Prediction_Update']).reset_index(drop=True)
+
+    print(f"Netting update applied for {cons_id_val}.")
+
+    return df_cons
+
+# --- This function needs the file writing logic --- 
+def creating_forecast_file(df_santimbru_netted, df_brasov_netted, template_path, output_path, forecast_start_date, forecast_end_date):
+    print(f"Starting: Create forecast file from template: {template_path}")
+    print(f"Writing data for date range: {forecast_start_date} to {forecast_end_date}") # Add print for confirmation
+    try:
+        # 1. --- Validate Input Data --- (Keep existing validation)
+        st.write("DEBUG: Received df_santimbru_netted head:")
+        if df_santimbru_netted is not None: st.dataframe(df_santimbru_netted.head())
+        st.write("DEBUG: Received df_brasov_netted head:")
+        if df_brasov_netted is not None: st.dataframe(df_brasov_netted.head())
+
+        if df_santimbru_netted is None or df_brasov_netted is None or df_santimbru_netted.empty or df_brasov_netted.empty:
+            st.error("ERROR: Netted data is missing or empty. Cannot create file.")
+            return False
+
+        # --- Simplified Data Prep: Create Indexed DataFrames --- 
+        print("Preparing simplified lookup structures...")
+        lookup_santimbru = None
+        lookup_brasov = None
+
+        if df_santimbru_netted is not None and not df_santimbru_netted.empty:
+            df_s_lookup = df_santimbru_netted.copy()
+            df_s_lookup['Data'] = pd.to_datetime(df_s_lookup['Data']).dt.normalize()
+            df_s_lookup['Interval'] = pd.to_numeric(df_s_lookup['Interval'], errors='coerce').fillna(-1).astype(int)
+            df_s_lookup['IBD'] = df_s_lookup['IBD'].astype(str)
+            df_s_lookup['Value'] = pd.to_numeric(df_s_lookup['Prediction'], errors='coerce')
+            # --- Replace source identifier ("Abator") with the template map identifier ("Abator Oiejdea") ---
+            df_s_lookup.loc[df_s_lookup['IBD'] == 'Abator', 'IBD'] = 'Abator Oiejdea'
+            df_s_lookup = df_s_lookup[df_s_lookup['Interval'].between(0, 23)]
+            # Set index for direct lookup
+            lookup_santimbru = df_s_lookup.set_index(['Data', 'Interval', 'IBD'])['Value']
+            if not lookup_santimbru.index.is_unique:
+                print("WARNING: Duplicate keys found in Santimbru data. Keeping first.")
+                lookup_santimbru = lookup_santimbru[~lookup_santimbru.index.duplicated(keep='first')]
+            print("Santimbru lookup structure prepared.")
+
+        if df_brasov_netted is not None and not df_brasov_netted.empty:
+            df_b_lookup = df_brasov_netted.copy()
+            df_b_lookup['Data'] = pd.to_datetime(df_b_lookup['Data']).dt.normalize()
+            df_b_lookup['Interval'] = pd.to_numeric(df_b_lookup['Interval'], errors='coerce').fillna(-1).astype(int)
+            df_b_lookup['POD'] = df_b_lookup['POD'].astype(str)
+            df_b_lookup['Value'] = pd.to_numeric(df_b_lookup['Prediction'], errors='coerce')
+            df_b_lookup = df_b_lookup[df_b_lookup['Interval'].between(0, 23)]
+            # Set index for direct lookup
+            lookup_brasov = df_b_lookup.set_index(['Data', 'Interval', 'POD'])['Value']
+            if not lookup_brasov.index.is_unique:
+                print("WARNING: Duplicate keys found in Brasov data. Keeping first.")
+                lookup_brasov = lookup_brasov[~lookup_brasov.index.duplicated(keep='first')]
+            print("Brasov lookup structure prepared.")
+        # --- End Simplified Data Prep ---
+
+        # 2. --- Load Excel Template --- (Keep existing)
+        print("Loading Excel template...")
+        try:
+             wb = openpyxl.load_workbook(template_path, data_only=False) # Changed data_only to False to preserve formulas
+             ws = wb.active
+             print("Template loaded with data_only=False (formulas preserved).")
+        except FileNotFoundError:
+             print(f"ERROR: Template file not found at {template_path}")
+             st.error(f"ERROR: Template file not found at {template_path}")
+             return False
+        except Exception as e:
+             print(f"ERROR loading template workbook: {e}")
+             st.error(f"ERROR loading template workbook: {e}")
+             return False
+
+        # 4. --- Define Column Mapping (As verified) --- (Keep existing)
+        template_col_map = {
+            'F_Cristian': 'G', 'Abator Oiejdea': 'H', 'F3': 'I', 'F4': 'J',
+            'F5': 'K', 'F6': 'L', 'F7': 'M', 'F8': 'N', 'F9': 'O', 'F10': 'P',
+            'F17': 'Q', 
+            'F20-F21': 'R',
+            'FNC': 'S', 'Ciugud': 'T',
+            'Abator_Bocsa': 'U',
+            'Ferma_Bocsa': 'V',
+            'Jebel1': 'W',
+            # Brasov PODs
+            "594020100002382970": "X", "594020100002383007": "Y",
+            "594020100002383502": "Z", "594020100002836497": "AA", # Target POD
+            "594020100002967269": "AB", "594020100002841279": "AC",
+            "594020100002383014": "AD", "594020100002384691": "AE",
+            "594020100002383069": "AF", "594020100002224041": "AG",
+            '594020100002273568': 'AH'
+        }
+        # Identify which identifiers belong to Brasov for lookup routing
+        brasov_identifiers = {
+            pod for pod in template_col_map.keys()
+            if pod.startswith("594") # Simple check for Brasov PODs
+        }
+        print("Template column map defined.")
+
+        # 5. --- Determine Date Range & Forecast Month/Year --- (Use passed dates)
+        # REMOVED: Deriving min/max date from lookup data
+        min_date = pd.to_datetime(forecast_start_date) # Use passed start date
+        max_date = pd.to_datetime(forecast_end_date)   # Use passed end date
+        forecast_month = min_date.month # Use start date for month/year
+        forecast_year = min_date.year
+        print(f"Using passed date range: {min_date.date()} to {max_date.date()}. Report Month/Year: {forecast_month}/{forecast_year}")
+
+        # 6. --- Iterate Template and Write --- (Modified Lookup)
+        print("Writing values to template using direct lookup...")
+        data_start_row = 4
+        date_col = 'A'
+        interval_col = 'B' # Quarterly interval (1-96)
+
+        for row_num in range(data_start_row, ws.max_row + 1):
+            try:
+                day_val = ws[f"{date_col}{row_num}"].value
+                quarter_interval_val = ws[f"{interval_col}{row_num}"].value
+
+                # Basic validation for row
+                if day_val is None or quarter_interval_val is None: continue
+                try:
+                    day = int(day_val)
+                    quarter_interval = int(quarter_interval_val)
+                    if not (1 <= day <= 31) or not (1 <= quarter_interval <= 96): continue
+                except (ValueError, TypeError): continue # Skip if values aren't integers
+
+                # Construct date and hour key components
+                try:
+                    # Use pandas to handle potential date errors more robustly
+                    current_date = pd.Timestamp(year=forecast_year, month=forecast_month, day=day)
+                except ValueError: continue # Skip invalid day
+
+                # --->>> Check: Only process rows within the SELECTED forecast date range <<< ---
+                if not (min_date <= current_date <= max_date):
+                    continue # Skip rows outside the selected forecast period
+
+                hour_interval = (quarter_interval - 1) // 4 # 0-23
+
+                # Write values for all mapped columns in this row
+                for identifier_header, target_col_letter in template_col_map.items():
+                    hourly_pred = np.nan # Default to NaN
+                    try:
+                        lookup_key = (current_date, hour_interval, identifier_header)
+
+                        # Route lookup to the correct structure
+                        if identifier_header in brasov_identifiers:
+                            if lookup_brasov is not None:
+                                # Use .get on the index to handle missing keys gracefully
+                                if lookup_brasov.index.isin([lookup_key]).any():
+                                     hourly_pred = lookup_brasov[lookup_key]
+                        else:
+                            if lookup_santimbru is not None:
+                                 if lookup_santimbru.index.isin([lookup_key]).any():
+                                     hourly_pred = lookup_santimbru[lookup_key]
+
+                        # Check if lookup was successful and value is not NaN
+                        if not pd.isna(hourly_pred):
+                            quarterly_value = hourly_pred / 4.0
+                            target_cell = f"{target_col_letter}{row_num}"
+                            ws[target_cell].value = quarterly_value
+                            ws[target_cell].number_format = '0.00'
+
+                            # Minimal Debug Print (only for first valid row written, target ID)
+                            target_pod_aa = "594020100002836497"
+                            if row_num == data_start_row and identifier_header == target_pod_aa:
+                                print(f"DEBUG Sample Write: Row={row_num}, ID={identifier_header}, Key=({current_date.date()},{hour_interval}), Hourly={hourly_pred:.4f}, Quarterly={quarterly_value:.4f} -> Cell={target_cell}")
+                        # else: # Optional: Debugging for failed lookups or NaN values
+                            # target_pod_aa = "594020100002836497"
+                            # if identifier_header == target_pod_aa:
+                            #     print(f"DEBUG SKIP/NaN: Row={row_num}, ID={identifier_header}, Key=({current_date.date()},{hour_interval}), Hourly Value={hourly_pred}")
+
+                    except Exception as e:
+                         print(f"ERROR during simplified lookup/write for Row {row_num}, ID {identifier_header}, Key {lookup_key}: {e}")
+                         continue # Skip to next identifier on error
+
+                # --- Calculate Sintetic Consumption (Keep existing logic) ---
+                try:
+                    row_sum = 0.0
+                    sintetic_cons_col = 'AI'
+                    sintetic_cons_cell_coord = f"{sintetic_cons_col}{row_num}"
+
+                    for col_letter in template_col_map.values():
+                        cell_coord = f"{col_letter}{row_num}"
+                        written_value = ws[cell_coord].value
+                        try:
+                            numeric_val = float(written_value) if written_value is not None else 0.0
+                        except (ValueError, TypeError):
+                            numeric_val = 0.0
+                        row_sum += numeric_val
+
+                    sintetic_value = row_sum * 0.05
+                    if row_sum > 0.00001:
+                        ws[sintetic_cons_cell_coord].value = sintetic_value
+                        ws[sintetic_cons_cell_coord].number_format = '0.00'
+
+                except Exception as e:
+                     print(f"ERROR calculating/writing Sintetic Consumption for row {row_num}: {e}")
+                     ws[sintetic_cons_cell_coord].value = "#ERR!"
+
+            except Exception as e:
+                print(f"ERROR processing template row {row_num}: {type(e).__name__} - {e}")
+
+        print("Finished writing values loop.")
+
+        # 7. --- Update Cell B1 --- (Keep existing logic)
+        print("Updating Month/Year cell...")
+        try:
+            locale.setlocale(locale.LC_TIME, 'ro_RO.UTF-8')
+            month_name_ro = min_date.strftime("%B").capitalize()
+        except locale.Error:
+            print("Warning: Romanian locale not found, using default.")
+            locale.setlocale(locale.LC_TIME, '')
+            month_name_ro = min_date.strftime("%B").capitalize()
+        month_year_string = f"{month_name_ro} {forecast_year}"
+
+        target_cell_coord = 'B1'
+        merged_range = None
+        for rng in ws.merged_cells.ranges:
+            if target_cell_coord in rng:
+                merged_range = rng
+                break
+
+        if merged_range:
+            print(f"Cell {target_cell_coord} is part of merged range {merged_range}. Handling merge.")
+            min_col, min_row, max_col, max_row = merged_range.bounds
+            top_left_cell_coord = get_column_letter(min_col) + str(min_row)
+            range_string = str(merged_range)
+            ws.unmerge_cells(range_string)
+            ws[top_left_cell_coord].value = month_year_string
+            ws.merge_cells(range_string)
+            print(f"Re-merged range {range_string}.")
+        else:
+            print(f"Cell {target_cell_coord} is not merged. Writing directly.")
+            ws[target_cell_coord].value = month_year_string
+
+        # 8. --- Save Output --- (Keep existing logic)
+        print(f"Saving updated file to: {output_path}")
+        try:
+            wb.save(output_path)
+            print("File saved successfully.")
+            return True # Success
+        except Exception as e:
+            print(f"ERROR saving workbook: {e}")
+            st.error(f"ERROR saving workbook: {e}")
+            return False # Failure
+
+    except Exception as e:
+        print(f"FATAL ERROR in creating_forecast_file: {e}")
+        import traceback
+        traceback.print_exc()
+        st.error(f"FATAL ERROR in creating_forecast_file: {e}")
+        return False # Failure

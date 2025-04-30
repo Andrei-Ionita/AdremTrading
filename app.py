@@ -15,6 +15,7 @@ from ml import render_forecast_page, render_balancing_market_page
 from fundamentals import render_fundamentals_page
 from balancing import render_balancing_market_intraday_page
 # from Balancing_Market_intraday_layout import render_balancing_market_intraday_page
+from Transavia.transavia import render_Transavia_page
 
 # Load Lottie animation
 def load_lottie_url(url: str):
@@ -179,7 +180,8 @@ def render_sidebar():
         "Home": "🏠 Home",
         "Forecast": "📈 Forecast",
         "Market Fundamentals": "📊 Market Fundamentals",
-        "Balancing Market": "⚡ Balancing Market"
+        "Balancing Market": "⚡ Balancing Market",
+        # "Transavia": "🚄 Transavia"
     }
 
     selected_page = st.radio("", list(menu_options.keys()), key="page_select", format_func=lambda x: menu_options[x])
@@ -199,6 +201,9 @@ def main():
     elif page == "Balancing Market":
         render_balancing_market_page()
         render_balancing_market_intraday_page()
+    # elif page == "Transavia":
+    #     render_Transavia_page()
+
 
 if __name__ == "__main__":
     main()

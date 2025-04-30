@@ -222,11 +222,11 @@ def render_indisponibility_db(table_name, title):
 # def render_indisponibility_db_Solina():
 #     return render_indisponibility_db("indisponibility_solina", "Solina")
 
-# def render_indisponibility_db_Astro():
-#     return render_indisponibility_db("indisponibility_astro", "Astro")
+def render_indisponibility_db_Astro():
+    return render_indisponibility_db("indisponibility_astro", "Astro")
 
-# def render_indisponibility_db_Imperial():
-#     return render_indisponibility_db("indisponibility_imperial", "Imperial")
+def render_indisponibility_db_Imperial():
+    return render_indisponibility_db("indisponibility_imperial", "Imperial")
 
 # def render_indisponibility_db_RES_Energy():
 #     return render_indisponibility_db("indisponibility_res", "RES Energy")

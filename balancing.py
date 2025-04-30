@@ -29,7 +29,7 @@ from database import render_indisponibility_db_Kahraman
 from data_fetching.entsoe_newapi_data import fetch_process_wind_notified, fetch_process_wind_actual_production, fetch_process_solar_notified, fetch_process_solar_actual_production
 from data_fetching.entsoe_newapi_data import fetch_consumption_forecast, fetch_actual_consumption, render_test_entsoe_newapi_functions
 from data_fetching.entsoe_newapi_data import fetch_process_hydro_water_reservoir_actual_production, fetch_process_hydro_river_actual_production, fetch_volue_hydro_data, align_and_combine_hydro_data
-
+from data_fetching.entsoe_newapi_data import fetch_igcc_netting_flows
 #=====================================================================Data Engineering============================================================================================================
 api_key_entsoe = os.getenv("api_key_entsoe")
 client = EntsoePandasClient(api_key=api_key_entsoe)
@@ -690,7 +690,9 @@ def render_balancing_market_intraday_page():
 		df_hydro_river_actual = fetch_process_hydro_river_actual_production()
 		df_hydro_volue = fetch_volue_hydro_data()
 		df_hydro = align_and_combine_hydro_data(df_hydro_reservoir_actual, df_hydro_river_actual, df_hydro_volue)
-
+		# Fetching the IGCC Flows
+		df_igcc_flows = fetch_igcc_netting_flows()
+		
 	if st.button("Balancing Market Monitoring"):
 		# Fetching the Imbalance volume and Prices
 		df_imbalance_prices = imbalance_prices(start_cet, end_cet)

@@ -2013,6 +2013,75 @@ def combine_consumption_data(df_forecast, df_actual):
 
 # ===========================Activation Energy=======================================================================================
 
+def fetch_igcc_netting_flows_range(start_date, end_date):
+    """
+    Fetch IGCC netting import/export values from Transelectrica over a range of CET dates.
+    Aligns timestamps in CET and computes quarter-hour indices (1–96 per day).
+    """
+    cet = pytz.timezone("Europe/Berlin")
+    utc = pytz.utc
+    rows = []
+    current_day = start_date
+
+    while current_day <= end_date:
+        # Time window: from CET midnight minus 2 hours to next CET midnight
+        start_cet = datetime.combine(current_day, datetime.min.time()).replace(tzinfo=cet)
+        end_cet = start_cet + timedelta(days=1)
+
+        start_utc = start_cet.astimezone(utc) - timedelta(hours=2)
+        end_utc = end_cet.astimezone(utc)
+
+        url = (
+            "https://newmarkets.transelectrica.ro/usy-durom-publicreportg01/00121002500000000000000000000100/publicReport/estimatedPowerSystemImbalance"
+            f"?timeInterval.from={start_utc.strftime('%Y-%m-%dT%H:%M:%S.000Z')}"
+            f"&timeInterval.to={end_utc.strftime('%Y-%m-%dT%H:%M:%S.000Z')}"
+            f"&pageInfo.pageSize=3000"
+        )
+
+        response = requests.get(url)
+        if response.status_code != 200:
+            print(f"❌ Failed for {current_day}: {response.status_code}")
+            current_day += timedelta(days=1)
+            continue
+
+        try:
+            data = response.json().get("itemList", [])
+            if not data:
+                print(f"⚠️ No IGCC data for {current_day}")
+                current_day += timedelta(days=1)
+                continue
+
+            for item in data:
+                ts = datetime.fromisoformat(item['timeInterval']['from'].replace("Z", "+00:00")).astimezone(cet)
+                import_val = float(item.get("imbalanceNettingImport", 0) or 0)
+                export_val = float(item.get("imbalanceNettingExport", 0) or 0)
+                rows.append([ts.replace(second=0, microsecond=0), import_val, export_val])
+
+        except Exception as e:
+            print(f"❌ Error for {current_day}: {e}")
+
+        current_day += timedelta(days=1)
+
+    # --- Build final DataFrame
+    df = pd.DataFrame(rows, columns=["Timestamp (CET)", "IGCC Import (MW)", "IGCC Export (MW)"])
+    if df.empty:
+        print("⚠️ No IGCC data collected.")
+        return df
+
+    df["Timestamp (CET)"] = pd.to_datetime(df["Timestamp (CET)"]).dt.tz_localize(None)
+    df = df[df["Timestamp (CET)"].dt.date.between(start_date, end_date)]
+    df = df.sort_values("Timestamp (CET)").reset_index(drop=True)
+
+    df["Quarter"] = df["Timestamp (CET)"].apply(lambda ts: (ts.hour * 60 + ts.minute) // 15 + 1)
+    df["Lookup"] = df["Timestamp (CET)"].dt.strftime('%d.%m.%Y') + df["Quarter"].astype(str)
+
+    # --- Save to Excel
+    df.to_excel("./data_fetching/Entsoe/IGCC_Netting_Flows_Historical.xlsx", index=False)
+    print("✅ Saved IGCC Netting data.")
+
+    return df
+
+	
 # def fetch_intraday_balancing_activations(start_date, end_date):
 #     """
 #     Fetch activated balancing energy data (aFRR & mFRR) from Transelectrica API
@@ -3634,6 +3703,8 @@ def render_fundamentals_page():
 		# Fetching the Unintended Deviation Data
 		st.dataframe(fetch_unintended_deviation_data(start_date, end_date))
 		
+		# Fetching the IGCC flows
+		st.dataframe(fetch_igcc_netting_flows_range(start_date, end_date))
 
 
 
