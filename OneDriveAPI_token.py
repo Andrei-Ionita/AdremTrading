@@ -82,4 +82,32 @@ def upload_file_to_onedrive():
 
     # Your upload logic here...
 
-print(upload_file_to_onedrive())
+# get_token()
+# print(upload_file_to_onedrive())
+
+import requests
+
+# Access token from your previous script
+access_token = get_token()
+st.write(access_token)
+# User email or ID (replace with actual user email or user ID)
+user_principal_name = 'andrei.ionita@adrem.ro'
+
+# Endpoint to list root contents
+list_url = f"https://graph.microsoft.com/v1.0/users/{user_principal_name}/drive/root/children"
+
+# Set headers
+headers = {
+    "Authorization": f"Bearer {access_token}"
+}
+
+# Make the GET request to list the items in the root directory
+response = requests.get(list_url, headers=headers)
+
+if response.status_code == 200:
+    items = response.json().get('value', [])
+    for item in items:
+        print(f"Name: {item['name']}, Type: {item['folder'] if 'folder' in item else 'File'}")
+else:
+    print(f"Failed to list root contents. Status code: {response.status_code}")
+    print(response.json())

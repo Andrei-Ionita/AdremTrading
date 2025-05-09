@@ -1901,7 +1901,7 @@ def predicting_exporting_Astro(interval_from, interval_to, limitation_percentage
 	# Completing the Humidity column
 	forecast_dataset["Umiditate"] = data["relative_humidity"].values
 
-	xgb_loaded = joblib.load("./Astro/rs_xgb_Astro_default_0924.pkl")
+	xgb_loaded = joblib.load("./Astro/rs_xgb_Astro_default_0325.pkl")
 
 	forecast_dataset["Month"] = pd.to_datetime(forecast_dataset.Data).dt.month
 	dataset = forecast_dataset.copy()
@@ -1991,11 +1991,11 @@ def predicting_exporting_Astro_15min(interval_from, interval_to, limitation_perc
 
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Zenith", "Azimuth", "Umiditate"]]
 
-	xgb_loaded = joblib.load("./Astro/rs_xgb_Astro_prod_15min_0924.pkl")
+	xgb_loaded = joblib.load("./Astro/rs_xgb_Astro_prod_15min_0325.pkl")
 
 	df["Month"] = df.Data.dt.month
 	dataset = df.copy()
-	forecast_dataset = dataset[["Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Azimuth", "Umiditate", "Month"]]
+	forecast_dataset = dataset[["Interval", "Temperatura", "Nori", "Radiatie", "Month"]]
 
 	preds = xgb_loaded.predict(forecast_dataset.values)
 	
@@ -2488,7 +2488,7 @@ def predicting_exporting_Imperial(interval_from, interval_to, limitation_percent
 	# Completing the Humidity column
 	forecast_dataset["Umiditate"] = data["relative_humidity"].values
 
-	xgb_loaded = joblib.load("./Imperial/rs_xgb_Imperial_default_0924.pkl")
+	xgb_loaded = joblib.load("./Imperial/rs_xgb_Imperial_default_0325.pkl")
 
 	forecast_dataset["Month"] = pd.to_datetime(forecast_dataset.Data).dt.month
 	dataset = forecast_dataset.copy()
@@ -2582,9 +2582,9 @@ def predicting_exporting_Imperial_15min(interval_to, interval_from, limitation_p
 
 	df["Month"] = df.Data.dt.month
 	dataset = df.copy()
-	forecast_dataset = dataset[["Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate", "Azimuth", "Month"]]
+	forecast_dataset = dataset[["Interval", "Temperatura", "Nori", "Radiatie", "Month"]]
 
-	xgb_loaded = joblib.load("./Imperial/rs_xgb_Imperial_prod_15min_0924.pkl")
+	xgb_loaded = joblib.load("./Imperial/rs_xgb_Imperial_prod_15min_0325.pkl")
 
 	preds = xgb_loaded.predict(forecast_dataset.values)
 	
