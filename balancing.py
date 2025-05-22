@@ -23,9 +23,9 @@ import xml.etree.ElementTree as ET
 from pytz import timezone
 
 # Importing from other pages
-from ml import fetching_Imperial_data, fetching_Astro_data, predicting_exporting_Astro, predicting_exporting_Imperial, fetching_Imperial_data_15min, fetching_Astro_data_15min, predicting_exporting_Astro_15min, predicting_exporting_Imperial_15min, fetching_Kahraman_data, fetching_Kahraman_data_15min, predicting_exporting_Kahraman, predicting_exporting_Kahraman_15min
+from ml import fetching_Imperial_data, fetching_Astro_data, predicting_exporting_Astro, predicting_exporting_Imperial, fetching_Imperial_data_15min, fetching_Astro_data_15min, predicting_exporting_Astro_15min, predicting_exporting_Imperial_15min, fetching_Kahraman_data, fetching_Kahraman_data_15min, predicting_exporting_Kahraman, predicting_exporting_Kahraman_15min, fetching_SunEnergy_data, fetching_SunEnergy_data_15min, predicting_exporting_SunEnergy, predicting_exporting_SunEnergy_15min
 from ml import uploading_onedrive_file, upload_file_with_retries, check_file_sync
-from database import render_indisponibility_db_Kahraman, render_indisponibility_db_Astro, render_indisponibility_db_Imperial
+from database import render_indisponibility_db_Kahraman, render_indisponibility_db_Astro, render_indisponibility_db_Imperial, render_indisponibility_db_SunEnergy
 from data_fetching.entsoe_newapi_data import fetch_process_wind_notified, fetch_process_wind_actual_production, fetch_process_solar_notified, fetch_process_solar_actual_production
 from data_fetching.entsoe_newapi_data import fetch_consumption_forecast, fetch_actual_consumption, render_test_entsoe_newapi_functions
 from data_fetching.entsoe_newapi_data import fetch_process_hydro_water_reservoir_actual_production, fetch_process_hydro_river_actual_production, fetch_volue_hydro_data, align_and_combine_hydro_data
@@ -412,6 +412,7 @@ def create_excel_file_with_all_forecasts():
 	df_Astro = pd.read_excel("./Astro/Results_Production_Astro_xgb.xlsx")
 	df_Imperial = pd.read_excel("./Imperial/Results_Production_Imperial_xgb.xlsx")
 	df_Kahraman = pd.read_excel("./Kahraman/Results_Production_Kahraman_xgb.xlsx")
+	df_SunEnergy = pd.read_excel("./PC SunEnergy/Results_Production_SunEnergy_xgb.xlsx")
 	df_all = pd.read_excel("./Forecast_template.xlsx")
 
 	# Writing in the Excel file
@@ -420,6 +421,7 @@ def create_excel_file_with_all_forecasts():
 	df_all["Prediction_Astro"] = df_Astro["Prediction"]
 	df_all["Prediction_Imperial"] = df_Imperial["Prediction"]
 	df_all["Prediction_Kahraman"] = df_Kahraman["Prediction"]
+	df_all["Prediction_SunEnergy"] = df_SunEnergy["Prediction"]
 	df_all["Lookup"] = df_Astro["Lookup"]
 
 	df_all.to_excel("./Forecast.xlsx", index=False)
@@ -429,6 +431,7 @@ def create_excel_file_with_all_forecasts_15min():
 	df_Astro = pd.read_excel("./Astro/Results_Production_Astro_xgb_15min.xlsx")
 	df_Imperial = pd.read_excel("./Imperial/Results_Production_Imperial_xgb_15min.xlsx")
 	df_Kahraman = pd.read_excel("./Kahraman/Results_Production_Kahraman_xgb_15min.xlsx")
+	df_SunEnergy = pd.read_excel("./PC SunEnergy/Results_Production_SunEnergy_xgb_15min.xlsx")
 	df_all = pd.read_excel("./Forecast_template.xlsx")
 
 	# Writing in the Excel file
@@ -437,6 +440,7 @@ def create_excel_file_with_all_forecasts_15min():
 	df_all["Prediction_Astro"] = df_Astro["Prediction"]
 	df_all["Prediction_Imperial"] = df_Imperial["Prediction"]
 	df_all["Prediction_Kahraman"] = df_Kahraman["Prediction"]
+	df_all["Prediction_SunEnergy"] = df_SunEnergy["Prediction"]
 	df_all["Lookup"] = df_Astro["Lookup"]
 
 	df_all.to_excel("./Forecast_15min.xlsx", index=False)
@@ -526,6 +530,32 @@ def render_balancing_market_intraday_page():
 		# check_file_sync(file_path, access_token)
 		st.dataframe(predicting_exporting_Kahraman_15min(interval_to, interval_from, limitation_percentage))
 		file_path = './Kahraman/Production/Results_Production_Kahraman_xgb_15min.xlsx'
+		# uploading_onedrive_file(file_path, access_token)
+		# access_token = upload_file_with_retries(file_path)
+		# check_file_sync(file_path, access_token)
+
+		# Forecasting SunEnergy
+		# Updating the indisponibility, if any
+		result_SunEnergy = render_indisponibility_db_SunEnergy()
+		if result_SunEnergy[0] is not None:
+			interval_from, interval_to, limitation_percentage = result_SunEnergy
+		else:
+			# Handle the case where no data is found
+			# st.text("No indisponibility found for tomorrow")
+			# Fallback logic: Add your fallback actions here
+			# st.write("Running fallback logic because no indisponibility data is found.")
+			interval_from = 1
+			interval_to = 24
+			limitation_percentage = 0
+		fetching_SunEnergy_data()
+		fetching_SunEnergy_data_15min()
+		df = predicting_exporting_SunEnergy(interval_from, interval_to, limitation_percentage)
+		file_path = './SunEnergy/Production/Results_Production_SunEnergy_xgb.xlsx'
+		# uploading_onedrive_file(file_path, access_token)
+		# access_token = upload_file_with_retries(file_path)
+		# check_file_sync(file_path, access_token)
+		st.dataframe(predicting_exporting_SunEnergy_15min(interval_to, interval_from, limitation_percentage))
+		file_path = './SunEnergy/Production/Results_Production_SunEnergy_xgb_15min.xlsx'
 		# uploading_onedrive_file(file_path, access_token)
 		# access_token = upload_file_with_retries(file_path)
 		# check_file_sync(file_path, access_token)

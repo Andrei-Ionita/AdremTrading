@@ -239,3 +239,6 @@ def render_indisponibility_db_Imperial():
 
 def render_indisponibility_db_Kahraman():
     return render_indisponibility_db("indisponibility_kahraman", "Kahraman")
+
+def render_indisponibility_db_SunEnergy():
+    return render_indisponibility_db("indisponibility_sunenergy", "SunEnergy")
