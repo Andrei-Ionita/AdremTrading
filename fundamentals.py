@@ -29,11 +29,13 @@ issue_date_str = issue_date.isoformat()
 issue_date_str = issue_date.strftime('%Y-%m-%dT%H:%M')
 print(issue_date_str)
 
+issue_date_str_yesterday = issue_date - timedelta(days=1)
+issue_date_str_yesterday = issue_date_str_yesterday.strftime('%Y-%m-%dT%H:%M')
+
 def get_issue_date():
 	issue_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 	print(issue_date)
 	# Format the date as a string in the desired format
-	issue_date_str = issue_date.isoformat()
 	issue_date_str = issue_date.strftime('%Y-%m-%dT%H:%M')
 	print(issue_date_str)
 	return issue_date_str, issue_date
@@ -341,8 +343,14 @@ def fetch_volue_hydro_data(issue_date_str):
 	# INSTANCES curves contain a timeseries for each defined issue dates
 	# Get a list of available curves with issue dates within a timerange with:
 	# curve.search_instances(issue_date_from='2018-01-01', issue_date_to='2018-01-01')
-	ts_h = curve.get_instance(issue_date=issue_date_str)
-	pd_s_h = ts_h.to_pandas() # convert TS object to pandas.Series object
+	try:
+		ts_h = curve.get_instance(issue_date=issue_date_str)
+		pd_s_h = ts_h.to_pandas() # convert TS object to pandas.Series object
+	except:
+		st.write("No data available for tomorrow to write into the Excel file.")
+		ts_h = curve.get_instance(issue_date=issue_date_str_yesterday)
+		pd_s_h = ts_h.to_pandas() # convert TS object to pandas.Series object
+
 	pd_df_h = pd_s_h.to_frame() # convert pandas.Series to pandas.DataFrame
 	st.dataframe(pd_df_h)
 	# Writing the hourly values to the Trading Tool file

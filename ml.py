@@ -1791,8 +1791,8 @@ def fetching_RAAL_data():
 	data_adjusted.to_csv("./RAAL/Solcast/Prundu_raw.csv", index=False)
 
 def fetching_Astro_data():
-	lat = 46.937810
-	lon = 23.749303
+	lat = 46.971281
+	lon = 23.674705
 	# Fetch data from the API
 	api_url = "https://api.solcast.com.au/data/forecast/radiation_and_weather?latitude={}&longitude={}&hours=168&output_parameters=air_temp,ghi,azimuth,cloud_opacity,dewpoint_temp,relative_humidity,zenith&period=PT60M&format=csv&api_key={}".format(lat, lon, solcast_api_key)
 	response = requests.get(api_url)
@@ -1872,8 +1872,8 @@ def fetching_Imperial_data_15min():
 	data = pd.read_csv("./Imperial/Solcast/Jucu_15min.csv")
 
 def fetching_Astro_data_15min():
-	lat = 46.937810
-	lon = 23.749303
+	lat = 46.971281
+	lon = 23.674705
 	# Fetch data from the API
 	api_url = "https://api.solcast.com.au/data/forecast/radiation_and_weather?latitude={}&longitude={}&hours=168&output_parameters=air_temp,ghi,azimuth,cloud_opacity,dewpoint_temp,relative_humidity,zenith&period=PT15M&format=csv&time_zone=3&api_key={}".format(lat, lon, solcast_api_key)
 	response = requests.get(api_url)
