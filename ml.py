@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Importing apps and pages
-from database import render_indisponibility_db_Kahraman, render_indisponibility_db_Astro, render_indisponibility_db_Imperial, render_indisponibility_db_SunEnergy
+from database import render_indisponibility_db_Kahraman, render_indisponibility_db_Astro, render_indisponibility_db_Imperial, render_indisponibility_db_SunEnergy, render_indisponibility_db_SolarEnergy
 # from OneDriveAPI_token import get_token
 
 session_start_time = time.time()
@@ -1709,6 +1709,55 @@ def fetching_SunEnergy_data_15min():
 	# Adjusting the values to EET time
 	data = pd.read_csv("./PC SunEnergy/Solcast/Oltenita_15min.csv")
 
+def fetching_SolarEnergy_data():
+	lat = 44.086577
+	lon = 26.638170
+	# Fetch data from the API
+	api_url = "https://api.solcast.com.au/data/forecast/radiation_and_weather?latitude={}&longitude={}&hours=168&output_parameters=air_temp,ghi,azimuth,cloud_opacity,dewpoint_temp,relative_humidity,zenith&period=PT60M&format=csv&api_key={}".format(lat, lon, solcast_api_key)
+	response = requests.get(api_url)
+	print("Fetching data...")
+	if response.status_code == 200:
+		# Write the content to a CSV file
+		with open("./Solar Energy Ulmeni/Solcast/Oltenita_raw.csv", 'wb') as file:
+			file.write(response.content)
+	else:
+		print(response.text)  # Add this line to see the error message returned by the API
+		raise Exception(f"Failed to fetch data: Status code {response.status_code}")
+	# Adjusting the values to EET time
+	data = pd.read_csv("./Solar Energy Ulmeni/Solcast/Oltenita_raw.csv")
+
+	# Assuming 'period_end' is the column to keep fixed and all other columns are to be shifted
+	columns_to_shift = data.columns.difference(['period_end'])
+
+	# Shift the data columns by 2 intervals
+	data_shifted = data[columns_to_shift].shift(2)
+
+	# Combine the fixed 'period_end' with the shifted data columns
+	data_adjusted = pd.concat([data[['period_end']], data_shifted], axis=1)
+
+	# Optionally, handle the NaN values in the first two rows after shifting
+	data_adjusted.fillna(0, inplace=True)  # Or use another method as appropriate
+
+	# Save the adjusted DataFrame
+	data_adjusted.to_csv("./Solar Energy Ulmeni/Solcast/Oltenita_raw.csv", index=False)
+
+def fetching_SolarEnergy_data_15min():
+	lat = 44.086577
+	lon = 26.638170
+	# Fetch data from the API
+	api_url = "https://api.solcast.com.au/data/forecast/radiation_and_weather?latitude={}&longitude={}&hours=168&output_parameters=air_temp,ghi,azimuth,cloud_opacity,dewpoint_temp,relative_humidity,zenith&period=PT15M&format=csv&time_zone=3&api_key={}".format(lat, lon, solcast_api_key)
+	response = requests.get(api_url)
+	print("Fetching data...")
+	if response.status_code == 200:
+		# Write the content to a CSV file
+		with open("./Solar Energy Ulmeni/Solcast/Oltenita_15min.csv", 'wb') as file:
+			file.write(response.content)
+	else:
+		print(response.text)  # Add this line to see the error message returned by the API
+		raise Exception(f"Failed to fetch data: Status code {response.status_code}")
+	# Adjusting the values to EET time
+	data = pd.read_csv("./Solar Energy Ulmeni/Solcast/Oltenita_15min.csv")
+
 def fetching_Kek_Hal_data():
 	lat = 46.339628
 	lon = 25.379678
@@ -3384,6 +3433,204 @@ def predicting_exporting_SunEnergy(interval_from, interval_to, limitation_percen
 	df.to_excel(file_path, index=False)
 	return dataset
 
+def predicting_exporting_SolarEnergy_15min(interval_from, interval_to, limitation_percentage):
+	# Creating the forecast_dataset df
+	df= pd.read_csv('./Solar Energy Ulmeni/Solcast/Oltenita_15min.csv')
+	# Convert the 'period_end' column to datetime, handling errors
+	df['period_end'] = pd.to_datetime(df['period_end'], errors='coerce', format='%Y-%m-%dT%H:%M:%SZ')
+
+	# Drop any rows with NaT in 'period_end'
+	df.dropna(subset=['period_end'], inplace=True)
+
+	# Shift the 'period_end' column by 2 hours
+	df['period_end'] = df['period_end'] + pd.Timedelta(hours=3)
+
+	# Creating the Interval column
+	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
+
+	df.rename(columns={'period_end': 'Data', 'ghi': 'Radiatie', "air_temp": "Temperatura", "cloud_opacity": "Nori", "azimuth": "Azimuth", "zenith": "Zenith", "dewpoint_temp": "Dewpoint", "relative_humidity": "Umiditate"}, inplace=True)
+
+	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate"]]
+
+	xgb_loaded = joblib.load("./Solar Energy Ulmeni/rs_xgb_SolarEnergy_prod_15min_0425.pkl")
+
+	df["Month"] = df.Data.dt.month
+	dataset = df.copy()
+	forecast_dataset = dataset[["Interval","Temperatura", "Nori", "Radiatie", "Month"]]
+		
+	preds = xgb_loaded.predict(forecast_dataset.values)
+	today = datetime.now()
+	if today.month == 3:
+		# Rounding each value in the list to the third decimal
+		rounded_values = [round(value, 3) for value in preds]
+	else:
+		# Rounding each value in the list to the third decimal
+		rounded_values = [round(value, 3) for value in preds]
+	
+	#Exporting Results to Excel
+	workbook = xlsxwriter.Workbook("./Solar Energy Ulmeni/Results_Production_SolarEnergy_xgb_15min.xlsx")
+	worksheet = workbook.add_worksheet("Production_Predictions")
+	date_format = workbook.add_format({'num_format':'dd.mm.yyyy'})
+	# Define a format for cells with three decimal places
+	decimal_format = workbook.add_format({'num_format': '0.000'})
+	row = 1
+	col = 0
+	worksheet.write(0,0,"Data")
+	worksheet.write(0,1,"Interval")
+	worksheet.write(0,2,"Prediction")
+
+	for value, interval in zip(rounded_values, dataset.Interval):
+		if interval_from * 4 <= interval <= interval_to * 4:
+			worksheet.write(row, col + 2, value * (1 - limitation_percentage / 100), decimal_format)
+			row += 1
+		else:
+			worksheet.write(row, col + 2, value, decimal_format)
+			row += 1
+
+	row = 1
+	for Data, Interval in zip(dataset.Data, dataset.Interval):
+		worksheet.write(row, col + 0, Data, date_format)
+		worksheet.write(row, col + 1, Interval)
+		row += 1
+	workbook.close()
+	# Formatting the Results file
+	# Step 1: Open the Excel file
+	file_path = "./Solar Energy Ulmeni/Results_Production_SolarEnergy_xgb_15min.xlsx"
+	workbook = load_workbook(filename=file_path)
+	worksheet = workbook['Production_Predictions']  # Adjust the sheet name as necessary
+
+	# Step 2: Directly round the values in column C and write them back
+	for row in range(2, worksheet.max_row + 1):
+		original_value = worksheet.cell(row, 3).value  # Column C is the 3rd column
+		if original_value is not None:  # Check if the cell is not empty
+			# Round the value to 3 decimal places and write it back to column C
+			worksheet.cell(row, 3).value = round(original_value, 3)
+		
+	for row in range(2, worksheet.max_row + 1):
+		original_value = worksheet.cell(row, 3).value  # Column C is the 3rd column
+		if original_value < 0.01:  # Check if the value is less than 0.01
+			# Residual values are rounded to 0.000
+			worksheet.cell(row, 3).value = 0
+	# Save the workbook with the rounded values
+	workbook.save(filename=file_path)
+	workbook.close()
+	# Open the existing workbook
+	# Load the Excel file into a DataFrame
+	df = pd.read_excel(file_path)
+	
+	# Ensure the 'Data' column is in datetime format
+	df["Data"] = pd.to_datetime(df["Data"])
+	
+	# Create the 'Lookup' column by concatenating the 'Data' and 'Interval' columns
+	# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
+	df['Lookup'] = df["Data"].dt.strftime('%d.%m.%Y') + df["Interval"].astype(str)
+	df.to_excel(file_path, index=False)
+	return dataset
+
+def predicting_exporting_SolarEnergy(interval_from, interval_to, limitation_percentage):
+	# Creating the forecast_dataset df
+	data = pd.read_csv("./Solar Energy Ulmeni/Solcast/Oltenita_raw.csv")
+	forecast_dataset = pd.read_excel("./Solar Energy Ulmeni/Input_SolarEnergy.xlsx", sheet_name="Forecast_Dataset")
+	# Convert 'period_end' in santimbru to datetime
+	data['period_end'] = pd.to_datetime(data['period_end'], errors='coerce')
+	# Extract just the date part in the desired format (as strings)
+	dates = data['period_end'].dt.strftime('%Y-%m-%d')
+	# Write the dates to the Input file
+	forecast_dataset['Data'] = dates.values
+	# Fill NaNs in the 'Data' column with next valid observation
+	forecast_dataset['Data'].fillna(method='bfill', inplace=True)
+	# Completing the Interval column
+	intervals = data["period_end"].dt.hour + 1
+	forecast_dataset["Interval"] = intervals
+	# Replace NaNs in the 'Interval' column with 0
+	forecast_dataset['Interval'].fillna(1, inplace=True)
+	# Completing the Temperatura column
+	forecast_dataset["Temperatura"] = data["air_temp"].values
+	# Completing the GHI column
+	forecast_dataset["Radiatie"] = data["ghi"].values
+	# Completing the Nori column
+	forecast_dataset["Nori"] = data["cloud_opacity"].values
+	# Completing the Dewpoint column
+	forecast_dataset["Dewpoint"] = data["dewpoint_temp"].values
+	# Completing the Humidity column
+	forecast_dataset["Umiditate"] = data["relative_humidity"].values
+
+	xgb_loaded = joblib.load("./Solar Energy Ulmeni/rs_xgb_SolarEnergy_default_0425.pkl")
+
+	forecast_dataset["Month"] = pd.to_datetime(forecast_dataset.Data).dt.month
+	
+	dataset = forecast_dataset.copy()
+	forecast_dataset = forecast_dataset.drop("Data", axis=1)
+	forecast_dataset = forecast_dataset[["Interval", "Radiatie", "Temperatura", "Nori", "Dewpoint", "Umiditate", "Month"]]
+	preds = xgb_loaded.predict(forecast_dataset.values)
+
+	today = datetime.now()
+	# Rounding each value in the list to the third decimal
+	if today.month == 3:
+		rounded_values = [round(value, 3) for value in preds]
+	else:
+		rounded_values = [round(value, 3) for value in preds]
+	
+	#Exporting Results to Excel
+	workbook = xlsxwriter.Workbook("./Solar Energy Ulmeni/Results_Production_SolarEnergy_xgb.xlsx")
+	worksheet = workbook.add_worksheet("Production_Predictions")
+	date_format = workbook.add_format({'num_format':'dd.mm.yyyy'})
+	# Define a format for cells with three decimal places
+	decimal_format = workbook.add_format({'num_format': '0.000'})
+	row = 1
+	col = 0
+	worksheet.write(0,0,"Data")
+	worksheet.write(0,1,"Interval")
+	worksheet.write(0,2,"Prediction")
+
+	for value, interval in zip(rounded_values, dataset.Interval):
+		if interval_from <= interval <= interval_to:
+			worksheet.write(row, col + 2, value * (1 - limitation_percentage / 100), decimal_format)
+			row += 1
+		else:
+			worksheet.write(row, col + 2, value, decimal_format)
+			row += 1
+
+	row = 1
+	for Data, Interval in zip(dataset.Data, dataset.Interval):
+		worksheet.write(row, col + 0, Data, date_format)
+		worksheet.write(row, col + 1, Interval)
+		row += 1
+	workbook.close()
+	# Formatting the Results file
+	# Step 1: Open the Excel file
+	file_path = "./Solar Energy Ulmeni/Results_Production_SolarEnergy_xgb.xlsx"
+	workbook = load_workbook(filename=file_path)
+	worksheet = workbook['Production_Predictions']  # Adjust the sheet name as necessary
+
+	# Step 2: Directly round the values in column C and write them back
+	for row in range(2, worksheet.max_row + 1):
+		original_value = worksheet.cell(row, 3).value  # Column C is the 3rd column
+		if original_value is not None:  # Check if the cell is not empty
+			# Round the value to 3 decimal places and write it back to column C
+			worksheet.cell(row, 3).value = round(original_value, 3)
+		
+	for row in range(2, worksheet.max_row + 1):
+		original_value = worksheet.cell(row, 3).value  # Column C is the 3rd column
+		if original_value < 0.01:  # Check if the value is less than 0.01
+			# Residual values are rounded to 0.000
+			worksheet.cell(row, 3).value = 0
+	# Save the workbook with the rounded values
+	workbook.save(filename=file_path)
+	workbook.close()
+	# Open the existing workbook
+	# Load the Excel file into a DataFrame
+	df = pd.read_excel(file_path)
+	
+	# Ensure the 'Data' column is in datetime format
+	df["Data"] = pd.to_datetime(df["Data"])
+	
+	# Create the 'Lookup' column by concatenating the 'Data' and 'Interval' columns
+	# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
+	df['Lookup'] = df["Data"].dt.strftime('%d.%m.%Y') + df["Interval"].astype(str)
+	df.to_excel(file_path, index=False)
+	return dataset
+
 def predicting_exporting_Consumption_Solina():
 	# Creating the forecast_dataset df
 	data = pd.read_csv("./Solina/Solcast/Alba_Iulia_raw.csv")
@@ -3976,7 +4223,7 @@ def render_production_forecast():
 	st.write("Production Forecast Section")
 
 	# Allow the user to choose between Consumption and Production
-	PVPP = st.radio("Choose PVPP:", options=["Kahraman", "Astro", "Imperial", "SunEnergy"], index=None)
+	PVPP = st.radio("Choose PVPP:", options=["Kahraman", "Astro", "Imperial", "SunEnergy", "SolarEnergy"], index=None)
 
 	if PVPP == "Kahraman":
 		# Updating the indisponibility, if any
@@ -4087,6 +4334,66 @@ def render_production_forecast():
 				b64 = base64.b64encode(excel_data).decode()
 				button_html = f"""
 					 <a download="Production_Forecast_SunEnergy_15min.xlsx" href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download>
+					 <button kind="secondary" data-testid="baseButton-secondary" class="st-emotion-cache-12tniow ef3psqc12">Download Forecast Results 15min</button>
+					 </a> 
+					 """
+				st.markdown(button_html, unsafe_allow_html=True)
+			# Uploading the file to the OneDrive root
+			# file_path = "./Kahraman/Results_Production_Kahraman_xgb_15min.xlsx"
+			# uploading_onedrive_file(file_path, access_token)
+			# access_token = upload_file_with_retries(file_path)
+			# check_file_sync(file_path, access_token)
+		# Forecasting using the Real-Time production data	
+	
+	elif PVPP == "SolarEnergy":
+		# Updating the indisponibility, if any
+		result_SolarEnergy = render_indisponibility_db_SolarEnergy()
+		if result_SolarEnergy[0] is not None:
+			interval_from, interval_to, limitation_percentage = result_SolarEnergy
+		else:
+			# Handle the case where no data is found
+			# st.text("No indisponibility found for tomorrow")
+			# Fallback logic: Add your fallback actions here
+			# st.write("Running fallback logic because no indisponibility data is found.")
+			interval_from = 1
+			interval_to = 24
+			limitation_percentage = 0
+		# Default 15 min Forecasting
+		st.subheader("Default Forecasting", divider = "blue")
+		# Submit button
+		if st.button("Submit"):
+			# Fetching the Solcast data
+			fetching_SolarEnergy_data()
+			fetching_SolarEnergy_data_15min()
+			df = predicting_exporting_SolarEnergy(interval_from, interval_to, limitation_percentage)
+			st.dataframe(df)
+			st.success('Forecast Ready', icon="✅")
+			file_path = './Solar Energy Ulmeni/Results_Production_SolarEnergy_xgb.xlsx'
+			with open(file_path, "rb") as f:
+				excel_data = f.read()
+
+				# Create a download link
+				b64 = base64.b64encode(excel_data).decode()
+				button_html = f"""
+					 <a download="Production_Forecast_SolarEnergy.xlsx" href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download>
+					 <button kind="secondary" data-testid="baseButton-secondary" class="st-emotion-cache-12tniow ef3psqc12">Download Forecast Results</button>
+					 </a> 
+					 """
+				st.markdown(button_html, unsafe_allow_html=True)
+			# Uploading the file to the OneDrive root
+			file_path = "./Solar Energy Ulmeni/Results_Production_SolarEnergy_xgb.xlsx"
+			# uploading_onedrive_file(file_path, access_token)
+			# access_token = upload_file_with_retries(file_path)
+			# check_file_sync(file_path, access_token)
+			st.dataframe(predicting_exporting_SolarEnergy_15min(interval_to, interval_from, limitation_percentage))
+			file_path = './Solar Energy Ulmeni/Results_Production_SolarEnergy_xgb_15min.xlsx'
+			with open(file_path, "rb") as f:
+				excel_data = f.read()
+
+				# Create a download link
+				b64 = base64.b64encode(excel_data).decode()
+				button_html = f"""
+					 <a download="Production_Forecast_SolarEnergy_15min.xlsx" href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download>
 					 <button kind="secondary" data-testid="baseButton-secondary" class="st-emotion-cache-12tniow ef3psqc12">Download Forecast Results 15min</button>
 					 </a> 
 					 """

@@ -24,8 +24,8 @@ from pytz import timezone
 
 # Importing from other pages
 from ml import fetching_Imperial_data, fetching_Astro_data, predicting_exporting_Astro, predicting_exporting_Imperial, fetching_Imperial_data_15min, fetching_Astro_data_15min, predicting_exporting_Astro_15min, predicting_exporting_Imperial_15min, fetching_Kahraman_data, fetching_Kahraman_data_15min, predicting_exporting_Kahraman, predicting_exporting_Kahraman_15min, fetching_SunEnergy_data, fetching_SunEnergy_data_15min, predicting_exporting_SunEnergy, predicting_exporting_SunEnergy_15min
-from ml import uploading_onedrive_file, upload_file_with_retries, check_file_sync
-from database import render_indisponibility_db_Kahraman, render_indisponibility_db_Astro, render_indisponibility_db_Imperial, render_indisponibility_db_SunEnergy
+from ml import uploading_onedrive_file, upload_file_with_retries, check_file_sync, predicting_exporting_SolarEnergy, predicting_exporting_SolarEnergy_15min, fetching_SolarEnergy_data, fetching_SolarEnergy_data_15min
+from database import render_indisponibility_db_Kahraman, render_indisponibility_db_Astro, render_indisponibility_db_Imperial, render_indisponibility_db_SunEnergy, render_indisponibility_db_SolarEnergy
 from data_fetching.entsoe_newapi_data import fetch_process_wind_notified, fetch_process_wind_actual_production, fetch_process_solar_notified, fetch_process_solar_actual_production
 from data_fetching.entsoe_newapi_data import fetch_consumption_forecast, fetch_actual_consumption, render_test_entsoe_newapi_functions
 from data_fetching.entsoe_newapi_data import fetch_process_hydro_water_reservoir_actual_production, fetch_process_hydro_river_actual_production, fetch_volue_hydro_data, align_and_combine_hydro_data
@@ -412,7 +412,9 @@ def create_excel_file_with_all_forecasts():
 	df_Astro = pd.read_excel("./Astro/Results_Production_Astro_xgb.xlsx")
 	df_Imperial = pd.read_excel("./Imperial/Results_Production_Imperial_xgb.xlsx")
 	df_Kahraman = pd.read_excel("./Kahraman/Results_Production_Kahraman_xgb.xlsx")
+	df_SolarEnergy = pd.read_excel("./Solar Energy Ulmeni/Results_Production_SolarEnergy_xgb.xlsx")
 	df_SunEnergy = pd.read_excel("./PC SunEnergy/Results_Production_SunEnergy_xgb.xlsx")
+
 	df_all = pd.read_excel("./Forecast_template.xlsx")
 
 	# Writing in the Excel file
@@ -421,7 +423,8 @@ def create_excel_file_with_all_forecasts():
 	df_all["Prediction_Astro"] = df_Astro["Prediction"]
 	df_all["Prediction_Imperial"] = df_Imperial["Prediction"]
 	df_all["Prediction_Kahraman"] = df_Kahraman["Prediction"]
-	df_all["Prediction_SunEnergy"] = df_SunEnergy["Prediction"]
+	df_all["Prediction_SolEn_Ulmeni"] = df_SolarEnergy["Prediction"]
+	df_all["Prediction_PCSunEn"] = df_SunEnergy["Prediction"]
 	df_all["Lookup"] = df_Astro["Lookup"]
 
 	df_all.to_excel("./Forecast.xlsx", index=False)
@@ -431,6 +434,7 @@ def create_excel_file_with_all_forecasts_15min():
 	df_Astro = pd.read_excel("./Astro/Results_Production_Astro_xgb_15min.xlsx")
 	df_Imperial = pd.read_excel("./Imperial/Results_Production_Imperial_xgb_15min.xlsx")
 	df_Kahraman = pd.read_excel("./Kahraman/Results_Production_Kahraman_xgb_15min.xlsx")
+	df_SolarEnergy = pd.read_excel("./Solar Energy Ulmeni/Results_Production_SolarEnergy_xgb_15min.xlsx")
 	df_SunEnergy = pd.read_excel("./PC SunEnergy/Results_Production_SunEnergy_xgb_15min.xlsx")
 	df_all = pd.read_excel("./Forecast_template.xlsx")
 
@@ -440,7 +444,8 @@ def create_excel_file_with_all_forecasts_15min():
 	df_all["Prediction_Astro"] = df_Astro["Prediction"]
 	df_all["Prediction_Imperial"] = df_Imperial["Prediction"]
 	df_all["Prediction_Kahraman"] = df_Kahraman["Prediction"]
-	df_all["Prediction_SunEnergy"] = df_SunEnergy["Prediction"]
+	df_all["Prediction_SolEn_Ulmeni"] = df_SolarEnergy["Prediction"]
+	df_all["Prediction_PCSunEn"] = df_SunEnergy["Prediction"]
 	df_all["Lookup"] = df_Astro["Lookup"]
 
 	df_all.to_excel("./Forecast_15min.xlsx", index=False)
@@ -454,141 +459,169 @@ def render_balancing_market_intraday_page():
 	st.write("")
 	st.write("")
 	st.subheader("Intraday Forecast", divider="blue")
-	# Forecasting the entire Intraday Portfolio at once
-	if st.button("Forecast Portfolio"):
-		# Forecasting Astro
-		# Updating the indisponibility, if any
-		result_Astro = render_indisponibility_db_Astro()
-		if result_Astro[0] is not None:
-			interval_from, interval_to, limitation_percentage = result_Astro
-		else:
-			# Handle the case where no data is found
-			# st.text("No indisponibility found for tomorrow")
-			# Fallback logic: Add your fallback actions here
-			# st.write("Running fallback logic because no indisponibility data is found.")
-			interval_from = 1
-			interval_to = 24
-			limitation_percentage = 0
-		fetching_Astro_data()
-		fetching_Astro_data_15min()
-		df = predicting_exporting_Astro(interval_from, interval_to, limitation_percentage)
-		file_path = './Astro/Results_Production_Astro_xgb.xlsx'
-		# uploading_onedrive_file(file_path, access_token)
-		# access_token = upload_file_with_retries(file_path)
-		# check_file_sync(file_path, access_token)
-		st.dataframe(predicting_exporting_Astro_15min(interval_from, interval_to, limitation_percentage))
-		file_path = './Astro/Results_Production_Astro_xgb_15min.xlsx'
-		# uploading_onedrive_file(file_path, access_token)
-		# access_token = upload_file_with_retries(file_path)
-		# check_file_sync(file_path, access_token)
+	col1, col2= st.columns([3, 1])
+	with col1:
+		# Forecasting the entire Intraday Portfolio at once
+		if st.button("Forecast Portfolio"):
+			# Forecasting Astro
+			# Updating the indisponibility, if any
+			result_Astro = render_indisponibility_db_Astro()
+			if result_Astro[0] is not None:
+				interval_from, interval_to, limitation_percentage = result_Astro
+			else:
+				# Handle the case where no data is found
+				# st.text("No indisponibility found for tomorrow")
+				# Fallback logic: Add your fallback actions here
+				# st.write("Running fallback logic because no indisponibility data is found.")
+				interval_from = 1
+				interval_to = 24
+				limitation_percentage = 0
+			fetching_Astro_data()
+			fetching_Astro_data_15min()
+			df = predicting_exporting_Astro(interval_from, interval_to, limitation_percentage)
+			file_path = './Astro/Results_Production_Astro_xgb.xlsx'
+			# uploading_onedrive_file(file_path, access_token)
+			# access_token = upload_file_with_retries(file_path)
+			# check_file_sync(file_path, access_token)
+			st.dataframe(predicting_exporting_Astro_15min(interval_from, interval_to, limitation_percentage))
+			file_path = './Astro/Results_Production_Astro_xgb_15min.xlsx'
+			# uploading_onedrive_file(file_path, access_token)
+			# access_token = upload_file_with_retries(file_path)
+			# check_file_sync(file_path, access_token)
 
-		# Forecasting Imperial
-		# Updating the indisponibility, if any
-		result_Imperial = render_indisponibility_db_Imperial()
-		if result_Imperial[0] is not None:
-			interval_from, interval_to, limitation_percentage = result_Imperial
-		else:
-			# Handle the case where no data is found
-			# st.text("No indisponibility found for tomorrow")
-			# Fallback logic: Add your fallback actions here
-			# st.write("Running fallback logic because no indisponibility data is found.")
-			interval_from = 1
-			interval_to = 24
-			limitation_percentage = 0
-		fetching_Imperial_data()
-		fetching_Imperial_data_15min()
-		df = predicting_exporting_Imperial(interval_from, interval_to, limitation_percentage)
-		file_path = './Imperial/Results_Production_Imperial_xgb.xlsx'
-		# uploading_onedrive_file(file_path, access_token)
-		# access_token = upload_file_with_retries(file_path)
-		# check_file_sync(file_path, access_token)
-		st.dataframe(predicting_exporting_Imperial_15min(interval_to, interval_from, limitation_percentage))
-		file_path = './Imperial/Results_Production_Imperial_xgb_15min.xlsx'
-		# uploading_onedrive_file(file_path, access_token)
-		# access_token = upload_file_with_retries(file_path)
-		# check_file_sync(file_path, access_token)
+			# Forecasting Imperial
+			# Updating the indisponibility, if any
+			result_Imperial = render_indisponibility_db_Imperial()
+			if result_Imperial[0] is not None:
+				interval_from, interval_to, limitation_percentage = result_Imperial
+			else:
+				# Handle the case where no data is found
+				# st.text("No indisponibility found for tomorrow")
+				# Fallback logic: Add your fallback actions here
+				# st.write("Running fallback logic because no indisponibility data is found.")
+				interval_from = 1
+				interval_to = 24
+				limitation_percentage = 0
+			fetching_Imperial_data()
+			fetching_Imperial_data_15min()
+			df = predicting_exporting_Imperial(interval_from, interval_to, limitation_percentage)
+			file_path = './Imperial/Results_Production_Imperial_xgb.xlsx'
+			# uploading_onedrive_file(file_path, access_token)
+			# access_token = upload_file_with_retries(file_path)
+			# check_file_sync(file_path, access_token)
+			st.dataframe(predicting_exporting_Imperial_15min(interval_to, interval_from, limitation_percentage))
+			file_path = './Imperial/Results_Production_Imperial_xgb_15min.xlsx'
+			# uploading_onedrive_file(file_path, access_token)
+			# access_token = upload_file_with_retries(file_path)
+			# check_file_sync(file_path, access_token)
 
-		# Forecasting Kahraman
-		# Updating the indisponibility, if any
-		result_Kahraman = render_indisponibility_db_Kahraman()
-		if result_Kahraman[0] is not None:
-			interval_from, interval_to, limitation_percentage = result_Kahraman
-		else:
-			# Handle the case where no data is found
-			# st.text("No indisponibility found for tomorrow")
-			# Fallback logic: Add your fallback actions here
-			# st.write("Running fallback logic because no indisponibility data is found.")
-			interval_from = 1
-			interval_to = 24
-			limitation_percentage = 0
-		fetching_Kahraman_data()
-		fetching_Kahraman_data_15min()
-		df = predicting_exporting_Kahraman(interval_from, interval_to, limitation_percentage)
-		file_path = './Kahraman/Production/Results_Production_Kahraman_xgb.xlsx'
-		# uploading_onedrive_file(file_path, access_token)
-		# access_token = upload_file_with_retries(file_path)
-		# check_file_sync(file_path, access_token)
-		st.dataframe(predicting_exporting_Kahraman_15min(interval_to, interval_from, limitation_percentage))
-		file_path = './Kahraman/Production/Results_Production_Kahraman_xgb_15min.xlsx'
-		# uploading_onedrive_file(file_path, access_token)
-		# access_token = upload_file_with_retries(file_path)
-		# check_file_sync(file_path, access_token)
+			# Forecasting Kahraman
+			# Updating the indisponibility, if any
+			result_Kahraman = render_indisponibility_db_Kahraman()
+			if result_Kahraman[0] is not None:
+				interval_from, interval_to, limitation_percentage = result_Kahraman
+			else:
+				# Handle the case where no data is found
+				# st.text("No indisponibility found for tomorrow")
+				# Fallback logic: Add your fallback actions here
+				# st.write("Running fallback logic because no indisponibility data is found.")
+				interval_from = 1
+				interval_to = 24
+				limitation_percentage = 0
+			fetching_Kahraman_data()
+			fetching_Kahraman_data_15min()
+			df = predicting_exporting_Kahraman(interval_from, interval_to, limitation_percentage)
+			file_path = './Kahraman/Production/Results_Production_Kahraman_xgb.xlsx'
+			# uploading_onedrive_file(file_path, access_token)
+			# access_token = upload_file_with_retries(file_path)
+			# check_file_sync(file_path, access_token)
+			st.dataframe(predicting_exporting_Kahraman_15min(interval_to, interval_from, limitation_percentage))
+			file_path = './Kahraman/Production/Results_Production_Kahraman_xgb_15min.xlsx'
+			# uploading_onedrive_file(file_path, access_token)
+			# access_token = upload_file_with_retries(file_path)
+			# check_file_sync(file_path, access_token)
 
-		# Forecasting SunEnergy
-		# Updating the indisponibility, if any
-		result_SunEnergy = render_indisponibility_db_SunEnergy()
-		if result_SunEnergy[0] is not None:
-			interval_from, interval_to, limitation_percentage = result_SunEnergy
-		else:
-			# Handle the case where no data is found
-			# st.text("No indisponibility found for tomorrow")
-			# Fallback logic: Add your fallback actions here
-			# st.write("Running fallback logic because no indisponibility data is found.")
-			interval_from = 1
-			interval_to = 24
-			limitation_percentage = 0
-		fetching_SunEnergy_data()
-		fetching_SunEnergy_data_15min()
-		df = predicting_exporting_SunEnergy(interval_from, interval_to, limitation_percentage)
-		file_path = './SunEnergy/Production/Results_Production_SunEnergy_xgb.xlsx'
-		# uploading_onedrive_file(file_path, access_token)
-		# access_token = upload_file_with_retries(file_path)
-		# check_file_sync(file_path, access_token)
-		st.dataframe(predicting_exporting_SunEnergy_15min(interval_to, interval_from, limitation_percentage))
-		file_path = './SunEnergy/Production/Results_Production_SunEnergy_xgb_15min.xlsx'
-		# uploading_onedrive_file(file_path, access_token)
-		# access_token = upload_file_with_retries(file_path)
-		# check_file_sync(file_path, access_token)
+			# Forecasting SunEnergy
+			# Updating the indisponibility, if any
+			result_SunEnergy = render_indisponibility_db_SunEnergy()
+			if result_SunEnergy[0] is not None:
+				interval_from, interval_to, limitation_percentage = result_SunEnergy
+			else:
+				# Handle the case where no data is found
+				# st.text("No indisponibility found for tomorrow")
+				# Fallback logic: Add your fallback actions here
+				# st.write("Running fallback logic because no indisponibility data is found.")
+				interval_from = 1
+				interval_to = 24
+				limitation_percentage = 0
+			fetching_SunEnergy_data()
+			fetching_SunEnergy_data_15min()
+			df = predicting_exporting_SunEnergy(interval_from, interval_to, limitation_percentage)
+			file_path = './SunEnergy/Production/Results_Production_SunEnergy_xgb.xlsx'
+			# uploading_onedrive_file(file_path, access_token)
+			# access_token = upload_file_with_retries(file_path)
+			# check_file_sync(file_path, access_token)
+			st.dataframe(predicting_exporting_SunEnergy_15min(interval_to, interval_from, limitation_percentage))
+			file_path = './SunEnergy/Production/Results_Production_SunEnergy_xgb_15min.xlsx'
+			# uploading_onedrive_file(file_path, access_token)
+			# access_token = upload_file_with_retries(file_path)
+			# check_file_sync(file_path, access_token)
 
-	if st.button("Create Excel File with all the forecasts"):
-		# Creating a single Excel file with all the forecasts
-		create_excel_file_with_all_forecasts()
-		create_excel_file_with_all_forecasts_15min()
-		file_path = './Forecast.xlsx'
-		with open(file_path, "rb") as f:
-			excel_data = f.read()
+			# Forecasting SolarEnergy
+			# Updating the indisponibility, if any
+			result_SolarEnergy = render_indisponibility_db_SolarEnergy()
+			if result_SolarEnergy[0] is not None:
+				interval_from, interval_to, limitation_percentage = result_SolarEnergy
+			else:
+				# Handle the case where no data is found
+				# st.text("No indisponibility found for tomorrow")
+				# Fallback logic: Add your fallback actions here
+				# st.write("Running fallback logic because no indisponibility data is found.")
+				interval_from = 1
+				interval_to = 24
+				limitation_percentage = 0
+			fetching_SolarEnergy_data()
+			fetching_SolarEnergy_data_15min()
+			df = predicting_exporting_SolarEnergy(interval_from, interval_to, limitation_percentage)
+			file_path = './Solar Energy Ulmeni/Results_Production_SolarEnergy_xgb.xlsx'
+			# uploading_onedrive_file(file_path, access_token)
+			# access_token = upload_file_with_retries(file_path)
+			# check_file_sync(file_path, access_token)
+			st.dataframe(predicting_exporting_SolarEnergy_15min(interval_to, interval_from, limitation_percentage))
+			file_path = './Solar Energy Ulmeni/Results_Production_SolarEnergy_xgb_15min.xlsx'
+			# uploading_onedrive_file(file_path, access_token)
+			# access_token = upload_file_with_retries(file_path)
+			# check_file_sync(file_path, access_token)
+	with col2:
+		if st.button("Create Excel File with all the forecasts"):
+			# Creating a single Excel file with all the forecasts
+			create_excel_file_with_all_forecasts()
+			create_excel_file_with_all_forecasts_15min()
+			file_path = './Forecast.xlsx'
+			with open(file_path, "rb") as f:
+				excel_data = f.read()
 
-			# Create a download link
-			b64 = base64.b64encode(excel_data).decode()
-			button_html = f"""
-					<a download="Forecast.xlsx" href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download>
-					<button kind="secondary" data-testid="baseButton-secondary" class="st-emotion-cache-12tniow ef3psqc12">Download Forecast Results</button>
-					</a> 
-					"""
-			st.markdown(button_html, unsafe_allow_html=True)
-		file_path = './Forecast_15min.xlsx'
-		with open(file_path, "rb") as f:
-			excel_data = f.read()
+				# Create a download link
+				b64 = base64.b64encode(excel_data).decode()
+				button_html = f"""
+						<a download="Forecast.xlsx" href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download>
+						<button kind="secondary" data-testid="baseButton-secondary" class="st-emotion-cache-12tniow ef3psqc12">Download Forecast Results</button>
+						</a> 
+						"""
+				st.markdown(button_html, unsafe_allow_html=True)
+			file_path = './Forecast_15min.xlsx'
+			with open(file_path, "rb") as f:
+				excel_data = f.read()
 
-			# Create a download link
-			b64 = base64.b64encode(excel_data).decode()
-			button_html = f"""
-					<a download="Forecast_15min.xlsx" href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download>
-					<button kind="secondary" data-testid="baseButton-secondary" class="st-emotion-cache-12tniow ef3psqc12">Download 15min Forecast Results</button>
-					</a> 
-					"""
-			st.markdown(button_html, unsafe_allow_html=True)
-			
+				# Create a download link
+				b64 = base64.b64encode(excel_data).decode()
+				button_html = f"""
+						<a download="Forecast_15min.xlsx" href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download>
+						<button kind="secondary" data-testid="baseButton-secondary" class="st-emotion-cache-12tniow ef3psqc12">Download 15min Forecast Results</button>
+						</a> 
+						"""
+				st.markdown(button_html, unsafe_allow_html=True)
+				
 	st.markdown("<br>", unsafe_allow_html=True)
 	st.markdown("<br>", unsafe_allow_html=True)
 

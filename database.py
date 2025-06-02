@@ -242,3 +242,6 @@ def render_indisponibility_db_Kahraman():
 
 def render_indisponibility_db_SunEnergy():
     return render_indisponibility_db("indisponibility_sunenergy", "SunEnergy")
+
+def render_indisponibility_db_SolarEnergy():
+    return render_indisponibility_db("indisponibility_solarenergy", "SolarEnergy")
