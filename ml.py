@@ -81,7 +81,7 @@ solcast_api_key = os.getenv("solcast_api_key")
 # output_path = "./Transavia/data/Bocsa.csv"
 # print("API Key:", solcast_api_key)  # Remove after debugging
 if 'solcast_api_key' not in st.session_state:
-	st.session_state['solcast_api_key'] = solcast_api_key = "pJFKpjXVuATTf72TB4hRc6lfu5W3Ww4_"
+	st.session_state['solcast_api_key'] = solcast_api_key = "7sEypbLW0NCaQvF1LBJPG5fN8vWHUQB_"
 
 
 # Defining the fetching data function
