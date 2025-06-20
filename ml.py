@@ -1844,6 +1844,7 @@ def fetching_Astro_data():
 	lon = 23.674705
 	# Fetch data from the API
 	api_url = "https://api.solcast.com.au/data/forecast/radiation_and_weather?latitude={}&longitude={}&hours=168&output_parameters=air_temp,ghi,azimuth,cloud_opacity,dewpoint_temp,relative_humidity,zenith&period=PT60M&format=csv&api_key={}".format(lat, lon, solcast_api_key)
+	# api_url = "https://api.solcast.com.au/data/forecast/radiation_and_weather?latitude=45.005108&longitude=23.075944&hours=336&output_parameters=ghi,air_temp,azimuth,cloud_opacity,dewpoint_temp,relative_humidity,zenith&period=PT60M&format=csv&api_key={}".format(solcast_api_key)
 	response = requests.get(api_url)
 	print("Fetching data...")
 	if response.status_code == 200:
