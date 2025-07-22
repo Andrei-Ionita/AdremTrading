@@ -24,8 +24,8 @@ from pytz import timezone
 
 # Importing from other pages
 from ml import fetching_Imperial_data, fetching_Astro_data, predicting_exporting_Astro, predicting_exporting_Imperial, fetching_Imperial_data_15min, fetching_Astro_data_15min, predicting_exporting_Astro_15min, predicting_exporting_Imperial_15min, fetching_Kahraman_data, fetching_Kahraman_data_15min, predicting_exporting_Kahraman, predicting_exporting_Kahraman_15min, fetching_SunEnergy_data, fetching_SunEnergy_data_15min, predicting_exporting_SunEnergy, predicting_exporting_SunEnergy_15min
-from ml import uploading_onedrive_file, upload_file_with_retries, check_file_sync, predicting_exporting_SolarEnergy, predicting_exporting_SolarEnergy_15min, fetching_SolarEnergy_data, fetching_SolarEnergy_data_15min
-from database import render_indisponibility_db_Kahraman, render_indisponibility_db_Astro, render_indisponibility_db_Imperial, render_indisponibility_db_SunEnergy, render_indisponibility_db_SolarEnergy
+from ml import uploading_onedrive_file, upload_file_with_retries, check_file_sync, predicting_exporting_SolarEnergy, predicting_exporting_SolarEnergy_15min, fetching_SolarEnergy_data, fetching_SolarEnergy_data_15min, fetching_Elnet_data, fetching_Elnet_data_15min, predicting_exporting_Elnet, predicting_exporting_Elnet_15min
+from database import render_indisponibility_db_Kahraman, render_indisponibility_db_Astro, render_indisponibility_db_Imperial, render_indisponibility_db_SunEnergy, render_indisponibility_db_SolarEnergy, render_indisponibility_db_Elnet		
 from data_fetching.entsoe_newapi_data import fetch_process_wind_notified, fetch_process_wind_actual_production, fetch_process_solar_notified, fetch_process_solar_actual_production
 from data_fetching.entsoe_newapi_data import fetch_consumption_forecast, fetch_actual_consumption, render_test_entsoe_newapi_functions
 from data_fetching.entsoe_newapi_data import fetch_process_hydro_water_reservoir_actual_production, fetch_process_hydro_river_actual_production, fetch_volue_hydro_data, align_and_combine_hydro_data
@@ -414,7 +414,7 @@ def create_excel_file_with_all_forecasts():
 	df_Kahraman = pd.read_excel("./Kahraman/Results_Production_Kahraman_xgb.xlsx")
 	df_SolarEnergy = pd.read_excel("./Solar Energy Ulmeni/Results_Production_SolarEnergy_xgb.xlsx")
 	df_SunEnergy = pd.read_excel("./PC SunEnergy/Results_Production_SunEnergy_xgb.xlsx")
-
+	df_Elnet = pd.read_excel("./Elnet/Results_Production_Elnet_xgb.xlsx")
 	df_all = pd.read_excel("./Forecast_template.xlsx")
 
 	# Writing in the Excel file
@@ -425,6 +425,7 @@ def create_excel_file_with_all_forecasts():
 	df_all["Prediction_Kahraman"] = df_Kahraman["Prediction"]
 	df_all["Prediction_SolEn_Ulmeni"] = df_SolarEnergy["Prediction"]
 	df_all["Prediction_PCSunEn"] = df_SunEnergy["Prediction"]
+	df_all["Prediction_Elnet"] = df_Elnet["Prediction"]
 	df_all["Lookup"] = df_Astro["Lookup"]
 
 	df_all.to_excel("./Forecast.xlsx", index=False)
@@ -436,6 +437,7 @@ def create_excel_file_with_all_forecasts_15min():
 	df_Kahraman = pd.read_excel("./Kahraman/Results_Production_Kahraman_xgb_15min.xlsx")
 	df_SolarEnergy = pd.read_excel("./Solar Energy Ulmeni/Results_Production_SolarEnergy_xgb_15min.xlsx")
 	df_SunEnergy = pd.read_excel("./PC SunEnergy/Results_Production_SunEnergy_xgb_15min.xlsx")
+	df_Elnet = pd.read_excel("./Elnet/Results_Production_Elnet_xgb_15min.xlsx")
 	df_all = pd.read_excel("./Forecast_template.xlsx")
 
 	# Writing in the Excel file
@@ -446,6 +448,7 @@ def create_excel_file_with_all_forecasts_15min():
 	df_all["Prediction_Kahraman"] = df_Kahraman["Prediction"]
 	df_all["Prediction_SolEn_Ulmeni"] = df_SolarEnergy["Prediction"]
 	df_all["Prediction_PCSunEn"] = df_SunEnergy["Prediction"]
+	df_all["Prediction_Elnet"] = df_Elnet["Prediction"]
 	df_all["Lookup"] = df_Astro["Lookup"]
 
 	df_all.to_excel("./Forecast_15min.xlsx", index=False)
@@ -592,6 +595,33 @@ def render_balancing_market_intraday_page():
 			# uploading_onedrive_file(file_path, access_token)
 			# access_token = upload_file_with_retries(file_path)
 			# check_file_sync(file_path, access_token)
+
+			# Forecasting Elnet
+			# Updating the indisponibility, if any
+			result_Elnet = render_indisponibility_db_Elnet()
+			if result_Elnet[0] is not None:
+				interval_from, interval_to, limitation_percentage = result_Elnet
+			else:
+				# Handle the case where no data is found
+				# st.text("No indisponibility found for tomorrow")
+				# Fallback logic: Add your fallback actions here
+				# st.write("Running fallback logic because no indisponibility data is found.")
+				interval_from = 1
+				interval_to = 24
+				limitation_percentage = 0
+			fetching_Elnet_data()
+			fetching_Elnet_data_15min()
+			df = predicting_exporting_Elnet(interval_from, interval_to, limitation_percentage)
+			file_path = './Elnet/Results_Production_Elnet_xgb.xlsx'
+			# uploading_onedrive_file(file_path, access_token)
+			# access_token = upload_file_with_retries(file_path)
+			# check_file_sync(file_path, access_token)
+			st.dataframe(predicting_exporting_Elnet_15min(interval_to, interval_from, limitation_percentage))
+			file_path = './Elnet/Results_Production_Elnet_xgb_15min.xlsx'
+			# uploading_onedrive_file(file_path, access_token)
+			# access_token = upload_file_with_retries(file_path)
+			# check_file_sync(file_path, access_token)
+
 	with col2:
 		if st.button("Create Excel File with all the forecasts"):
 			# Creating a single Excel file with all the forecasts

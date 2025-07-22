@@ -245,3 +245,6 @@ def render_indisponibility_db_SunEnergy():
 
 def render_indisponibility_db_SolarEnergy():
     return render_indisponibility_db("indisponibility_solarenergy", "SolarEnergy")
+
+def render_indisponibility_db_Elnet():
+    return render_indisponibility_db("indisponibility_elnet", "Elnet")
