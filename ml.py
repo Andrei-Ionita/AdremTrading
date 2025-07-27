@@ -3704,7 +3704,7 @@ def predicting_exporting_Elnet_15min(interval_from, interval_to, limitation_perc
 
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate"]]
 
-	xgb_loaded = joblib.load("./Elnet/rs_xgb_Elnet_prod_15min_0425.pkl")
+	xgb_loaded = joblib.load("./Elnet/rs_xgb_Elnet_prod_15min_2_0425.pkl")
 
 	df["Month"] = df.Data.dt.month
 	dataset = df.copy()
