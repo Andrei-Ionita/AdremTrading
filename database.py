@@ -248,3 +248,6 @@ def render_indisponibility_db_SolarEnergy():
 
 def render_indisponibility_db_Elnet():
     return render_indisponibility_db("indisponibility_elnet", "Elnet")
+
+def render_indisponibility_db_Horeco():
+    return render_indisponibility_db("indisponibility_horeco", "Horeco")
