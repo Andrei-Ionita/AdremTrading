@@ -254,3 +254,6 @@ def render_indisponibility_db_Horeco():
 
 def render_indisponibility_db_3D_Steel():
     return render_indisponibility_db("indisponibility_3d_steel", "3D Steel")
+
+def render_indisponibility_db_Dragosel():
+    return render_indisponibility_db("indisponibility_dragosel", "Dragosel")
