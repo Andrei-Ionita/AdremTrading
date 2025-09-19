@@ -4247,7 +4247,7 @@ def predicting_exporting_3D_Steel_15min(interval_from, interval_to, limitation_p
 
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate"]]
 
-	xgb_loaded = joblib.load("./3D_Steel/rs_xgb_3D_Steel_prod_15min_0825.pkl")
+	xgb_loaded = joblib.load("./3D_Steel/rs_xgb_3D_Steel_prod_15min_0625.pkl")
 
 	df["Month"] = df.Data.dt.month
 	dataset = df.copy()
