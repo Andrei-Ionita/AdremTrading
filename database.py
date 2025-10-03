@@ -257,3 +257,6 @@ def render_indisponibility_db_3D_Steel():
 
 def render_indisponibility_db_Dragosel():
     return render_indisponibility_db("indisponibility_dragosel", "Dragosel")
+
+def render_indisponibility_db_GESS():    
+    return render_indisponibility_db("indisponibility_gess", "GESS")
