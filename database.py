@@ -260,3 +260,6 @@ def render_indisponibility_db_Dragosel():
 
 def render_indisponibility_db_GESS():    
     return render_indisponibility_db("indisponibility_gess", "GESS")
+
+def render_indisponibility_db_NRG():    
+    return render_indisponibility_db("indisponibility_nrg", "NRG")

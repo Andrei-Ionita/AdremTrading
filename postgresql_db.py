@@ -157,6 +157,20 @@ def create_indisponibility_tables():
                 );
             ''')
 
+            # Create indisponibility_nrg table
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS indisponibility_nrg (
+                    id SERIAL PRIMARY KEY,
+                    type VARCHAR(255) NOT NULL,
+                    start_date DATE NOT NULL,
+                    end_date DATE NOT NULL,
+                    interval_from INT NOT NULL,
+                    interval_to INT NOT NULL,
+                    limitation_percentage FLOAT NOT NULL
+                );
+            ''')
+
             conn.commit()
             cursor.close()
             conn.close()
