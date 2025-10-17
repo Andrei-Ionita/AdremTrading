@@ -1976,8 +1976,8 @@ def fetching_GESS_data_15min():
 	data = pd.read_csv("./GESS/Solcast/Brezoaia_15min.csv")
 
 def fetching_NRG_data_15min():
-	lat = 45.102365
-	lon = 25.010853
+	lat = 45.022728
+	lon = 24.244272
 	# Fetch data from the API
 	api_url = "https://api.solcast.com.au/data/forecast/radiation_and_weather?latitude={}&longitude={}&hours=168&output_parameters=air_temp,ghi,azimuth,cloud_opacity,dewpoint_temp,relative_humidity,zenith&period=PT15M&format=csv&time_zone=3&api_key={}".format(lat, lon, solcast_api_key)
 	response = requests.get(api_url)
