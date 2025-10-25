@@ -2315,7 +2315,7 @@ def predicting_exporting_Astro_15min(interval_from, interval_to, limitation_perc
 	df.dropna(subset=['period_end'], inplace=True)
 
 	# Shift the 'period_end' column by 2 hours
-	df['period_end'] = df['period_end'] + pd.Timedelta(hours=3)
+	df['period_end'] = df['period_end'] + pd.Timedelta(hours=2)
 
 	# Creating the Interval column
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
@@ -2628,7 +2628,7 @@ def predicting_exporting_Astro_Intraday_15min(real_time_data):
 	weather_data_future.dropna(subset=['period_end'], inplace=True)
 
 	# Shift the 'period_end' column by 3 hours
-	weather_data_future['period_end'] = weather_data_future['period_end'] + pd.Timedelta(hours=1)
+	weather_data_future['period_end'] = weather_data_future['period_end'] + pd.Timedelta(hours=2)
 
 	# Creating the Interval column
 	weather_data_future['Interval'] = weather_data_future.period_end.dt.hour * 4 + weather_data_future.period_end.dt.minute // 15 + 1
@@ -2904,7 +2904,7 @@ def predicting_exporting_Imperial_15min(interval_to, interval_from, limitation_p
 	df.dropna(subset=['period_end'], inplace=True)
 
 	# Shift the 'period_end' column by 2 hours
-	df['period_end'] = df['period_end'] + pd.Timedelta(hours=3)
+	df['period_end'] = df['period_end'] + pd.Timedelta(hours=2)
 
 	# Creating the Interval column
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
@@ -3282,7 +3282,7 @@ def predicting_exporting_Kahraman_15min(interval_from, interval_to, limitation_p
 	df.dropna(subset=['period_end'], inplace=True)
 
 	# Shift the 'period_end' column by 2 hours
-	df['period_end'] = df['period_end'] + pd.Timedelta(hours=3)
+	df['period_end'] = df['period_end'] + pd.Timedelta(hours=2)
 
 	# Creating the Interval column
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
@@ -3480,7 +3480,7 @@ def predicting_exporting_SunEnergy_15min(interval_from, interval_to, limitation_
 	df.dropna(subset=['period_end'], inplace=True)
 
 	# Shift the 'period_end' column by 2 hours
-	df['period_end'] = df['period_end'] + pd.Timedelta(hours=3)
+	df['period_end'] = df['period_end'] + pd.Timedelta(hours=2)
 
 	# Creating the Interval column
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
@@ -3678,7 +3678,7 @@ def predicting_exporting_SolarEnergy_15min(interval_from, interval_to, limitatio
 	df.dropna(subset=['period_end'], inplace=True)
 
 	# Shift the 'period_end' column by 2 hours
-	df['period_end'] = df['period_end'] + pd.Timedelta(hours=3)
+	df['period_end'] = df['period_end'] + pd.Timedelta(hours=2)
 
 	# Creating the Interval column
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
@@ -3876,7 +3876,7 @@ def predicting_exporting_Elnet_15min(interval_from, interval_to, limitation_perc
 	df.dropna(subset=['period_end'], inplace=True)
 
 	# Shift the 'period_end' column by 2 hours
-	df['period_end'] = df['period_end'] + pd.Timedelta(hours=3)
+	df['period_end'] = df['period_end'] + pd.Timedelta(hours=2)
 
 	# Creating the Interval column
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
@@ -4074,7 +4074,7 @@ def predicting_exporting_Horeco_15min(interval_from, interval_to, limitation_per
 	df.dropna(subset=['period_end'], inplace=True)
 
 	# Shift the 'period_end' column by 2 hours
-	df['period_end'] = df['period_end'] + pd.Timedelta(hours=3)
+	df['period_end'] = df['period_end'] + pd.Timedelta(hours=2)
 
 	# Creating the Interval column
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
@@ -4272,7 +4272,7 @@ def predicting_exporting_3D_Steel_15min(interval_from, interval_to, limitation_p
 	df.dropna(subset=['period_end'], inplace=True)
 
 	# Shift the 'period_end' column by 2 hours
-	df['period_end'] = df['period_end'] + pd.Timedelta(hours=3)
+	df['period_end'] = df['period_end'] + pd.Timedelta(hours=2)
 
 	# Creating the Interval column
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
@@ -4470,7 +4470,7 @@ def predicting_exporting_Dragosel_15min(interval_from, interval_to, limitation_p
 	df.dropna(subset=['period_end'], inplace=True)
 
 	# Shift the 'period_end' column by 2 hours
-	df['period_end'] = df['period_end'] + pd.Timedelta(hours=3)
+	df['period_end'] = df['period_end'] + pd.Timedelta(hours=2)
 
 	# Creating the Interval column
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
@@ -4668,7 +4668,7 @@ def predicting_exporting_GESS_15min(interval_from, interval_to, limitation_perce
 	df.dropna(subset=['period_end'], inplace=True)
 
 	# Shift the 'period_end' column by 2 hours
-	df['period_end'] = df['period_end'] + pd.Timedelta(hours=3)
+	df['period_end'] = df['period_end'] + pd.Timedelta(hours=2)
 
 	# Creating the Interval column
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
@@ -4762,7 +4762,7 @@ def predicting_exporting_NRG_15min(interval_from, interval_to, limitation_percen
 	df.dropna(subset=['period_end'], inplace=True)
 
 	# Shift the 'period_end' column by 2 hours
-	df['period_end'] = df['period_end'] + pd.Timedelta(hours=3)
+	df['period_end'] = df['period_end'] + pd.Timedelta(hours=2)
 
 	# Creating the Interval column
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
