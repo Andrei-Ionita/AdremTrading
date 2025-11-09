@@ -3687,7 +3687,7 @@ def predicting_exporting_SolarEnergy_15min(interval_from, interval_to, limitatio
 
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate"]]
 
-	xgb_loaded = joblib.load("./Solar Energy Ulmeni/rs_xgb_Ulmeni_prod_15min_0925.pkl")
+	xgb_loaded = joblib.load("./Solar Energy Ulmeni/rs_xgb_SolarEnergy_prod_15min_0425.pkl")
 
 	df["Month"] = df.Data.dt.month
 	dataset = df.copy()
@@ -4281,7 +4281,7 @@ def predicting_exporting_3D_Steel_15min(interval_from, interval_to, limitation_p
 
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate"]]
 
-	xgb_loaded = joblib.load("./3D_Steel/rs_xgb_3D_Steel_prod_15min_0925.pkl")
+	xgb_loaded = joblib.load("./3D_Steel/rs_xgb_3D_Steel_prod_15min_0825.pkl")
 
 	df["Month"] = df.Data.dt.month
 	dataset = df.copy()
