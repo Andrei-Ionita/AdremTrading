@@ -3487,9 +3487,9 @@ def predicting_exporting_SunEnergy_15min(interval_from, interval_to, limitation_
 
 	df.rename(columns={'period_end': 'Data', 'ghi': 'Radiatie', "air_temp": "Temperatura", "cloud_opacity": "Nori", "azimuth": "Azimuth", "zenith": "Zenith", "dewpoint_temp": "Dewpoint", "relative_humidity": "Umiditate"}, inplace=True)
 
-	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate"]]
+	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie"]]
 
-	xgb_loaded = joblib.load("./PC SunEnergy/rs_xgb_PC_SUN_prod_15min_0925.pkl")
+	xgb_loaded = joblib.load("./PC SunEnergy/rs_xgb_PCSunEnergy_prod_15min_0425.pkl")
 
 	df["Month"] = df.Data.dt.month
 	dataset = df.copy()
