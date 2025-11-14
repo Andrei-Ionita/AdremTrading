@@ -15,6 +15,7 @@ import requests
 from openpyxl import load_workbook
 import pytz
 from dotenv import load_dotenv
+import json
 
 # Load environment variables from .env file
 load_dotenv()
@@ -3489,11 +3490,15 @@ def predicting_exporting_SunEnergy_15min(interval_from, interval_to, limitation_
 
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie"]]
 
-	xgb_loaded = joblib.load("./PC SunEnergy/rs_xgb_PCSunEnergy_prod_15min_0425.pkl")
+	xgb_loaded = joblib.load("./PC SunEnergy/rs_xgb_Ulmeni_prod_15min_1025.pkl")
 
 	df["Month"] = df.Data.dt.month
+	IRR_COL = "Radiatie"      # <- adjust to your irradiance column name (e.g., "GHI")
+	if IRR_COL not in df.columns:
+		raise ValueError("Please set IRR_COL to your irradiance column (e.g., 'GHI').")
+	df["is_dark"] = (df[IRR_COL] <= 0).astype(int)
 	dataset = df.copy()
-	forecast_dataset = dataset[["Interval","Temperatura", "Nori", "Radiatie", "Month"]]
+	forecast_dataset = dataset[["Interval","Temperatura", "Nori", "Radiatie", "Month", "is_dark"]]
 		
 	preds = xgb_loaded.predict(forecast_dataset.values)
 	today = datetime.now()
@@ -3669,30 +3674,41 @@ def predicting_exporting_SunEnergy(interval_from, interval_to, limitation_percen
 	return dataset
 
 def predicting_exporting_SolarEnergy_15min(interval_from, interval_to, limitation_percentage):
-	# Creating the forecast_dataset df
-	df= pd.read_csv('./Solar Energy Ulmeni/Solcast/Oltenita_15min.csv')
-	# Convert the 'period_end' column to datetime, handling errors
+	# Load and process forecast data
+	df = pd.read_csv('./Solar Energy Ulmeni/Solcast/Oltenita_15min.csv')
+
 	df['period_end'] = pd.to_datetime(df['period_end'], errors='coerce', format='%Y-%m-%dT%H:%M:%SZ')
-
-	# Drop any rows with NaT in 'period_end'
 	df.dropna(subset=['period_end'], inplace=True)
-
-	# Shift the 'period_end' column by 2 hours
 	df['period_end'] = df['period_end'] + pd.Timedelta(hours=2)
 
-	# Creating the Interval column
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
 
-	df.rename(columns={'period_end': 'Data', 'ghi': 'Radiatie', "air_temp": "Temperatura", "cloud_opacity": "Nori", "azimuth": "Azimuth", "zenith": "Zenith", "dewpoint_temp": "Dewpoint", "relative_humidity": "Umiditate"}, inplace=True)
+	df.rename(columns={
+		'period_end': 'Data', 
+		'ghi': 'Radiatie', 
+		"air_temp": "Temperatura", 
+		"cloud_opacity": "Nori", 
+		"azimuth": "Azimuth", 
+		"zenith": "Zenith", 
+		"dewpoint_temp": "Dewpoint", 
+		"relative_humidity": "Umiditate"
+	}, inplace=True)
 
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate"]]
 
-	xgb_loaded = joblib.load("./Solar Energy Ulmeni/rs_xgb_SolarEnergy_prod_15min_0425.pkl")
+	# Load model
+	xgb_loaded = joblib.load("./Solar Energy Ulmeni/rs_xgb_PC_Sun_prod_15min_1025.pkl")
 
 	df["Month"] = df.Data.dt.month
+	IRR_COL = "Radiatie"      # <- adjust to your irradiance column name (e.g., "GHI")
+	if IRR_COL not in df.columns:
+		raise ValueError("Please set IRR_COL to your irradiance column (e.g., 'GHI').")
+	df["is_dark"] = (df[IRR_COL] <= 0).astype(int)
+
 	dataset = df.copy()
-	forecast_dataset = dataset[["Interval","Temperatura", "Nori", "Radiatie", "Month"]]
-		
+	forecast_dataset = dataset[["Interval","Temperatura", "Nori", "Radiatie", "Month", "is_dark"]]
+
+	# Predict with constraints
 	preds = xgb_loaded.predict(forecast_dataset.values)
 	today = datetime.now()
 	if today.month == 3:
@@ -3883,13 +3899,17 @@ def predicting_exporting_Elnet_15min(interval_from, interval_to, limitation_perc
 
 	df.rename(columns={'period_end': 'Data', 'ghi': 'Radiatie', "air_temp": "Temperatura", "cloud_opacity": "Nori", "azimuth": "Azimuth", "zenith": "Zenith", "dewpoint_temp": "Dewpoint", "relative_humidity": "Umiditate"}, inplace=True)
 
-	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate"]]
+	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate", "Azimuth", "Zenith"]]
 
-	xgb_loaded = joblib.load("./Elnet/rs_xgb_Elnet_prod_15min_0825.pkl")
+	xgb_loaded = joblib.load("./Elnet/rs_xgb_Elnet_prod_15min_0925.pkl")
 
 	df["Month"] = df.Data.dt.month
+	IRR_COL = "Radiatie"      # <- adjust to your irradiance column name (e.g., "GHI")
+	if IRR_COL not in df.columns:
+		raise ValueError("Please set IRR_COL to your irradiance column (e.g., 'GHI').")
+	df["is_dark"] = (df[IRR_COL] <= 0).astype(int)
 	dataset = df.copy()
-	forecast_dataset = dataset[["Interval","Temperatura", "Nori", "Radiatie", "Month"]]
+	forecast_dataset = dataset[["Interval","Temperatura", "Nori", "Radiatie", "Month", "is_dark"]]
 		
 	preds = xgb_loaded.predict(forecast_dataset.values)
 	today = datetime.now()
@@ -4281,12 +4301,16 @@ def predicting_exporting_3D_Steel_15min(interval_from, interval_to, limitation_p
 
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate"]]
 
-	xgb_loaded = joblib.load("./3D_Steel/rs_xgb_3D_Steel_prod_15min_0825.pkl")
+	xgb_loaded = joblib.load("./3D_Steel/rs_xgb_3D_Steel_prod_15min_1025.pkl")
 
 	df["Month"] = df.Data.dt.month
+	IRR_COL = "Radiatie"      # <- adjust to your irradiance column name (e.g., "GHI")
+	if IRR_COL not in df.columns:
+		raise ValueError("Please set IRR_COL to your irradiance column (e.g., 'GHI').")
+	df["is_dark"] = (df[IRR_COL] <= 0).astype(int)
 	dataset = df.copy()
-	forecast_dataset = dataset[["Interval","Temperatura", "Nori", "Radiatie", "Month"]]
-		
+	forecast_dataset = dataset[["Interval","Temperatura", "Nori", "Radiatie", "Month", "is_dark"]]
+	st.write(forecast_dataset)
 	preds = xgb_loaded.predict(forecast_dataset.values)
 	today = datetime.now()
 	if today.month == 3:
@@ -4771,11 +4795,15 @@ def predicting_exporting_NRG_15min(interval_from, interval_to, limitation_percen
 
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate"]]
 
-	xgb_loaded = joblib.load("./NRG/rs_xgb_NRG_prod_15min_0925.pkl")
+	xgb_loaded = joblib.load("./NRG/rs_xgb_NRG_prod_15min_1025.pkl")
 
 	df["Month"] = df.Data.dt.month
+	IRR_COL = "Radiatie"      # <- adjust to your irradiance column name (e.g., "GHI")
+	if IRR_COL not in df.columns:
+		raise ValueError("Please set IRR_COL to your irradiance column (e.g., 'GHI').")
+	df["is_dark"] = (df[IRR_COL] <= 0).astype(int)
 	dataset = df.copy()
-	forecast_dataset = dataset[["Interval","Temperatura", "Nori", "Radiatie", "Month"]]
+	forecast_dataset = dataset[["Interval","Temperatura", "Nori", "Radiatie", "Month", "is_dark"]]
 		
 	preds = xgb_loaded.predict(forecast_dataset.values)
 	today = datetime.now()

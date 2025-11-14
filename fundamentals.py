@@ -3688,7 +3688,9 @@ def render_fundamentals_page():
 
 		# Fetching the Wind Historical Production
 		df_wind_notified = fetch_process_wind_notified(start_date, end_date)
+		st.dataframe(df_wind_notified)
 		df_wind_actual = fetch_process_wind_actual_production(start_date, end_date)
+		st.dataframe(df_wind_actual)
 		df_wind_data = combine_wind_production_data(df_wind_notified, df_wind_actual)
 		
 		# Fetching the Solar Historical Prodution
