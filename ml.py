@@ -3901,7 +3901,7 @@ def predicting_exporting_Elnet_15min(interval_from, interval_to, limitation_perc
 
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate", "Azimuth", "Zenith"]]
 
-	xgb_loaded = joblib.load("./Elnet/rs_xgb_Elnet_prod_15min_0925.pkl")
+	xgb_loaded = joblib.load("./Elnet/rs_xgb_Elnet_prod_15min_1025.pkl")
 
 	df["Month"] = df.Data.dt.month
 	IRR_COL = "Radiatie"      # <- adjust to your irradiance column name (e.g., "GHI")
