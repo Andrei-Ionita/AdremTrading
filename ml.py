@@ -4930,7 +4930,7 @@ def predicting_exporting_Sun_Grow_Lucia_15min(interval_from, interval_to, limita
 		rounded_values = [round(value, 3) for value in preds]
 	
 	#Exporting Results to Excel
-	workbook = xlsxwriter.Workbook("./NRG/Results_Production_Sun_Grow_Lucia_xgb_15min.xlsx")
+	workbook = xlsxwriter.Workbook("./Sun_Grow_Lucia/Results_Production_Sun_Grow_Lucia_xgb_15min.xlsx")
 	worksheet = workbook.add_worksheet("Production_Predictions")
 	date_format = workbook.add_format({'num_format':'dd.mm.yyyy'})
 	# Define a format for cells with three decimal places
@@ -4957,7 +4957,7 @@ def predicting_exporting_Sun_Grow_Lucia_15min(interval_from, interval_to, limita
 	workbook.close()
 	# Formatting the Results file
 	# Step 1: Open the Excel file
-	file_path = "./NRG/Results_Production_Sun_Grow_Lucia_xgb_15min.xlsx"
+	file_path = "./Sun_Grow_Lucia/Results_Production_Sun_Grow_Lucia_xgb_15min.xlsx"
 	workbook = load_workbook(filename=file_path)
 	worksheet = workbook['Production_Predictions']  # Adjust the sheet name as necessary
 
@@ -6100,7 +6100,7 @@ def render_production_forecast():
 		if st.button("Submit"):
 			# Fetching the Solcast data
 			fetching_Sun_Grow_Lucia_data_15min()
-			st.dataframe(predicting_exporting_NRG_15min(interval_to, interval_from, limitation_percentage))
+			st.dataframe(predicting_exporting_Sun_Grow_Lucia_15min(interval_to, interval_from, limitation_percentage))
 			file_path = './Sun_Grow_Lucia/Results_Production_Sun_Grow_Lucia_xgb_15min.xlsx'
 			with open(file_path, "rb") as f:
 				excel_data = f.read()
