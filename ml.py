@@ -4318,7 +4318,7 @@ def predicting_exporting_3D_Steel_15min(interval_from, interval_to, limitation_p
 
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate"]]
 
-	xgb_loaded = joblib.load("./3D_Steel/rs_xgb_3D_Steel_prod_15min_1025.pkl")
+	xgb_loaded = joblib.load("./3D_Steel/rs_xgb_3D_Steel_prod_15min_1125.pkl")
 
 	df["Month"] = df.Data.dt.month
 	IRR_COL = "Radiatie"      # <- adjust to your irradiance column name (e.g., "GHI")
