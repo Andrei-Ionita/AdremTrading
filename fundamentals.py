@@ -3393,12 +3393,12 @@ def render_fundamentals_page():
 						current_month = current_date.month
 
 						# Filter the data for the current year and month
-						filtered_data = processed_data[(processed_data['Date'].dt.year == current_year) & (processed_data['Date'].dt.month == current_month)]
+						filtered_data = processed_data[(processed_data['Date'].dt.year == current_year+1) & (processed_data['Date'].dt.month == 1)]
 
 						filtered_data.dropna(inplace=True)
 						# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
 						filtered_data['Lookup'] = filtered_data["Date"].dt.strftime('%d.%m.%Y') + filtered_data["Interval"].astype(str)
-						filtered_data.to_excel('./Market Fundamentals/Transelectrica_data/Cons_Prod_final/Weekly_Consumption_2025.xlsx', index=False)
+						filtered_data.to_excel('./Market Fundamentals/Transelectrica_data/Cons_Prod_final/Weekly_Consumption_2026.xlsx', index=False)
 					elif uploaded_file.name == "weekly_production_2023.xls":
 						production = pd.read_excel("./Market Fundamentals/Transelectrica_data/weekly_production_2023.xls")
 						production.to_excel('./Market Fundamentals/Transelectrica_data/weekly_production_2023.xlsx', engine='openpyxl', index=False)
@@ -3424,11 +3424,11 @@ def render_fundamentals_page():
 						current_month = current_date.month
 
 						# Filter for April 2024
-						filtered_data = processed_data[(processed_data['Date'].dt.year == current_year) & (processed_data['Date'].dt.month == current_month)]
+						filtered_data = processed_data[(processed_data['Date'].dt.year == current_year+1) & (processed_data['Date'].dt.month == 1)]
 						filtered_data.dropna(inplace=True)
 						# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
 						filtered_data['Lookup'] = filtered_data["Date"].dt.strftime('%d.%m.%Y') + filtered_data["Interval"].astype(str)
-						filtered_data.to_excel('./Market Fundamentals/Transelectrica_data/Cons_Prod_final/Weekly_Production_2025.xlsx', index=False)
+						filtered_data.to_excel('./Market Fundamentals/Transelectrica_data/Cons_Prod_final/Weekly_Production_2026.xlsx', index=False)
 
 		# Downloading the Files
 		folder_path = './Market Fundamentals/Transelectrica_data/Cons_Prod_final/'

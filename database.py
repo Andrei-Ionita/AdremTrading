@@ -266,3 +266,12 @@ def render_indisponibility_db_NRG():
 
 def render_indisponibility_db_Sun_Grow_Lucia():
     return render_indisponibility_db("indisponibility_sun_grow_lucia", "Sun Grow Lucia")
+
+def render_indisponibility_db_Photovoltaic_Energy_Project():
+    return render_indisponibility_db("indisponibility_photovoltaic_energy_project", "Photovoltaic Energy Project")
+
+def render_indisponibility_db_MM_MV():
+    return render_indisponibility_db("indisponibility_mm_mv", "MM MV")
+     
+def render_indisponibility_db_Rosiori():
+    return render_indisponibility_db("indisponibility_rosiori", "Rosiori")
