@@ -3558,7 +3558,7 @@ def predicting_exporting_SunEnergy_15min(interval_from, interval_to, limitation_
 
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie"]]
 
-	xgb_loaded = joblib.load("./PC SunEnergy/rs_xgb_Ulmeni_prod_15min_1025.pkl")
+	xgb_loaded = joblib.load("./PC SunEnergy/rs_xgb_PCSun_prod_15min_1225.pkl")
 
 	df["Month"] = df.Data.dt.month
 	IRR_COL = "Radiatie"      # <- adjust to your irradiance column name (e.g., "GHI")
@@ -3765,7 +3765,7 @@ def predicting_exporting_SolarEnergy_15min(interval_from, interval_to, limitatio
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate"]]
 
 	# Load model
-	xgb_loaded = joblib.load("./Solar Energy Ulmeni/rs_xgb_Ulmeni_prod_15min_1025_2.pkl")
+	xgb_loaded = joblib.load("./Solar Energy Ulmeni/rs_xgb_Ulmeni_prod_15min_1225.pkl")
 
 	df["Month"] = df.Data.dt.month
 	IRR_COL = "Radiatie"      # <- adjust to your irradiance column name (e.g., "GHI")
@@ -3969,7 +3969,7 @@ def predicting_exporting_Elnet_15min(interval_from, interval_to, limitation_perc
 
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate", "Azimuth", "Zenith"]]
 
-	xgb_loaded = joblib.load("./Elnet/rs_xgb_Elnet_prod_15min_1025.pkl")
+	xgb_loaded = joblib.load("./Elnet/rs_xgb_Elnet_prod_15min_1225.pkl")
 
 	df["Month"] = df.Data.dt.month
 	IRR_COL = "Radiatie"      # <- adjust to your irradiance column name (e.g., "GHI")
@@ -4571,7 +4571,7 @@ def predicting_exporting_Dragosel_15min(interval_from, interval_to, limitation_p
 
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate"]]
 
-	xgb_loaded = joblib.load("./Dragosel/rs_xgb_Dragosel_prod_15min_1125.pkl")
+	xgb_loaded = joblib.load("./Dragosel/rs_xgb_Laslea_prod_15min_1225.pkl")
 
 	df["Month"] = df.Data.dt.month
 	IRR_COL = "Radiatie"      # <- adjust to your irradiance column name (e.g., "GHI")
@@ -4867,7 +4867,7 @@ def predicting_exporting_NRG_15min(interval_from, interval_to, limitation_percen
 
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate"]]
 
-	xgb_loaded = joblib.load("./NRG/rs_xgb_NRG_prod_15min_1025.pkl")
+	xgb_loaded = joblib.load("./NRG/rs_xgb_NRG_prod_15min_1225.pkl")
 
 	df["Month"] = df.Data.dt.month
 	IRR_COL = "Radiatie"      # <- adjust to your irradiance column name (e.g., "GHI")
@@ -4965,7 +4965,7 @@ def predicting_exporting_Sun_Grow_Lucia_15min(interval_from, interval_to, limita
 
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate"]]
 
-	xgb_loaded = joblib.load("./Sun_Grow_Lucia/rs_xgb_Sun_Grow_Lucia_prod_15min_1025.pkl")
+	xgb_loaded = joblib.load("./Sun_Grow_Lucia/rs_xgb_Sun_Grow_prod_15min_1225.pkl")
 
 	df["Month"] = df.Data.dt.month
 	IRR_COL = "Radiatie"      # <- adjust to your irradiance column name (e.g., "GHI")

@@ -1043,7 +1043,7 @@ def render_balancing_market_intraday_page():
 		# Fetch the Actual Consumption
 		fetch_actual_consumption()
 		# Fetch Border Flows
-		render_test_entsoe_newapi_functions()
+		# render_test_entsoe_newapi_functions()
 		# Fetch Hydro Production
 		df_hydro_reservoir_actual = fetch_process_hydro_water_reservoir_actual_production()
 		df_hydro_river_actual = fetch_process_hydro_river_actual_production()

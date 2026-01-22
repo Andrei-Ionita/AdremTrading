@@ -569,7 +569,7 @@ def updating_PZU_date():
 # 1. Consumption
 def process_file_consumption_transelectrica(file_path):
 	# Read the file, skipping initial rows to get to the actual data
-	data_cleaned = pd.read_excel(file_path, skiprows=4)
+	data_cleaned = pd.read_excel(file_path, skiprows=2)
 	
 	# Drop the unnecessary first two columns (index and "Update day")
 	data_cleaned.drop(columns=data_cleaned.columns[:2], inplace=True)
@@ -3393,7 +3393,7 @@ def render_fundamentals_page():
 						current_month = current_date.month
 
 						# Filter the data for the current year and month
-						filtered_data = processed_data[(processed_data['Date'].dt.year == current_year+1) & (processed_data['Date'].dt.month == 1)]
+						filtered_data = processed_data[(processed_data['Date'].dt.year == current_year) & (processed_data['Date'].dt.month == current_month)]
 
 						filtered_data.dropna(inplace=True)
 						# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
@@ -3424,7 +3424,7 @@ def render_fundamentals_page():
 						current_month = current_date.month
 
 						# Filter for April 2024
-						filtered_data = processed_data[(processed_data['Date'].dt.year == current_year+1) & (processed_data['Date'].dt.month == 1)]
+						filtered_data = processed_data[(processed_data['Date'].dt.year == current_year) & (processed_data['Date'].dt.month == current_month)]
 						filtered_data.dropna(inplace=True)
 						# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
 						filtered_data['Lookup'] = filtered_data["Date"].dt.strftime('%d.%m.%Y') + filtered_data["Interval"].astype(str)

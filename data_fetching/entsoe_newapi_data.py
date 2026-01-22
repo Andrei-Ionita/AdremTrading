@@ -1574,98 +1574,7 @@ def align_and_combine_hydro_data(df_notified, df_actual, df_volue_forecast):
 # st.dataframe(df_hydro)
 
 #==========================================================================Consumption==============================================================================
-def fetch_consumption_forecast():
-    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-1)
-    end_cet = pd.Timestamp((today + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
-
-    period_start = start_cet.strftime('%Y%m%d%H%M')
-    period_end = end_cet.strftime('%Y%m%d%H%M')
-
-    url = "https://web-api.tp.entsoe.eu/api"
-
-    params = {
-        "securityToken": api_key_entsoe,  # Replace with your actual token
-        "documentType": "A65",
-        "processType": "A01",  # For notified consumption
-        "outBiddingZone_Domain": "10YRO-TEL------P",
-        "periodStart": period_start,  # Start period as per Postman
-        "periodEnd": period_end    # End period as per Postman
-    }
-
-    headers = {
-        "Content-Type": "application/xml",
-        "Accept": "application/xml",
-    }
-
-    try:
-        response = requests.get(url, params=params, headers=headers)
-        response.raise_for_status()
-       
-        # Parse XML response
-        root = ET.fromstring(response.content)
-        namespaces = {'ns': root.tag[root.tag.find("{"):root.tag.find("}")+1].strip("{}")}
-
-        timestamps_utc = []
-        quantities = []
-
-        # Extract values from XML
-        for timeseries in root.findall('ns:TimeSeries', namespaces):
-            for period in timeseries.findall('ns:Period', namespaces):
-                start_time = period.find('ns:timeInterval/ns:start', namespaces)
-                resolution = period.find('ns:resolution', namespaces)
-
-                if start_time is None or resolution is None:
-                    continue
-
-                start_time_utc = datetime.strptime(start_time.text, '%Y-%m-%dT%H:%MZ')
-
-                for point in period.findall('ns:Point', namespaces):
-                    position_tag = point.find('ns:position', namespaces)
-                    quantity_tag = point.find('ns:quantity', namespaces)
-
-                    if position_tag is None or quantity_tag is None:
-                        continue
-
-                    try:
-                        position = int(position_tag.text)
-                        quantity = float(quantity_tag.text)
-                    except ValueError as e:
-                        print(f"Error converting position or quantity: {e}, skipping.")
-                        continue
-
-                    point_time_utc = start_time_utc + timedelta(minutes=15 * (position - 1))
-                    timestamps_utc.append(point_time_utc)
-                    quantities.append(quantity)
-
-        # Create DataFrame
-        df_forecast = pd.DataFrame({
-            'Timestamp_UTC': timestamps_utc,
-            'Forecasted Consumption (MW)': quantities
-        })
-
-        df_forecast['Timestamp_UTC'] = pd.to_datetime(df_forecast['Timestamp_UTC'])
-        df_forecast['Timestamp_CET'] = df_forecast['Timestamp_UTC'].dt.tz_localize('UTC').dt.tz_convert('Europe/Berlin')
-        df_forecast.drop(columns=['Timestamp_UTC'], inplace=True)
-        df_forecast.rename(columns={'Timestamp_CET': 'Timestamp'}, inplace=True)
-
-        # Slice to intraday values
-        start_of_day = pd.Timestamp(today, tz='Europe/Berlin')
-        end_of_day = pd.Timestamp(today + timedelta(days=1), tz='Europe/Berlin') - timedelta(minutes=15)
-        df_forecast = df_forecast[(df_forecast['Timestamp'] >= start_of_day) & (df_forecast['Timestamp'] <= end_of_day)]
-
-        # Writing the Consumption Forecast to Excel
-        df_forecast_excel = df_forecast.copy()
-        # Remove timezone information from the 'Timestamp' column
-        df_forecast_excel['Timestamp'] = df_forecast_excel['Timestamp'].dt.tz_localize(None)
-        # Save to Excel
-        df_forecast_excel.to_excel("./data_fetching/Entsoe/Consumption_Forecast.xlsx", index=False)
-
-        return df_forecast
-
-    except requests.exceptions.RequestException as e:
-        print(f"An error occurred: {e}")
-        return pd.DataFrame()
+# NOTE: fetch_consumption_forecast function is defined later in this file (around line 4934)
 
 def fetch_actual_consumption():
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -4940,25 +4849,51 @@ def fetch_consumption_forecast():
        
         # Parse XML response
         root = ET.fromstring(response.content)
-        namespaces = {'ns': root.tag[root.tag.find("{"):root.tag.find("}")+1].strip("{}")}
-
+        
+        # Extract namespace from root element
+        ns = root.tag[root.tag.find("{"):root.tag.find("}")+1] if "{" in root.tag else ""
+        
         timestamps_utc = []
         quantities = []
 
-        # Extract values from XML
-        for timeseries in root.findall('ns:TimeSeries', namespaces):
-            for period in timeseries.findall('ns:Period', namespaces):
-                start_time = period.find('ns:timeInterval/ns:start', namespaces)
-                resolution = period.find('ns:resolution', namespaces)
+        # Find all TimeSeries elements (namespace-aware)
+        timeseries_list = root.findall(f'.//{ns}TimeSeries')
 
-                if start_time is None or resolution is None:
+        # Extract values from XML
+        for timeseries in timeseries_list:
+            periods = timeseries.findall(f'.//{ns}Period')
+            
+            for period in periods:
+                # Find timeInterval start
+                time_interval = period.find(f'{ns}timeInterval')
+                if time_interval is None:
+                    continue
+                    
+                start_elem = time_interval.find(f'{ns}start')
+                resolution_elem = period.find(f'{ns}resolution')
+
+                if start_elem is None or resolution_elem is None:
                     continue
 
-                start_time_utc = datetime.strptime(start_time.text, '%Y-%m-%dT%H:%MZ')
+                start_time_utc = datetime.strptime(start_elem.text, '%Y-%m-%dT%H:%MZ')
 
-                for point in period.findall('ns:Point', namespaces):
-                    position_tag = point.find('ns:position', namespaces)
-                    quantity_tag = point.find('ns:quantity', namespaces)
+                # Find all Point elements within this Period
+                points = period.findall(f'{ns}Point')
+                
+                # If no points found with namespace, try without (fallback)
+                if len(points) == 0:
+                    points = list(period.iter())
+                    points = [p for p in points if p.tag.endswith('Point')]
+                
+                for point in points:
+                    # Try to find position and quantity with namespace first, then without
+                    position_tag = point.find(f'{ns}position')
+                    if position_tag is None:
+                        position_tag = point.find('position')
+                    
+                    quantity_tag = point.find(f'{ns}quantity')
+                    if quantity_tag is None:
+                        quantity_tag = point.find('quantity')
 
                     if position_tag is None or quantity_tag is None:
                         continue
@@ -4973,6 +4908,7 @@ def fetch_consumption_forecast():
                     point_time_utc = start_time_utc + timedelta(minutes=15 * (position - 1))
                     timestamps_utc.append(point_time_utc)
                     quantities.append(quantity)
+
 
         # Create DataFrame
         df_forecast = pd.DataFrame({
@@ -4989,6 +4925,17 @@ def fetch_consumption_forecast():
         start_of_day = pd.Timestamp(today, tz='Europe/Berlin')
         end_of_day = pd.Timestamp(today + timedelta(days=1), tz='Europe/Berlin') - timedelta(minutes=15)
         df_forecast = df_forecast[(df_forecast['Timestamp'] >= start_of_day) & (df_forecast['Timestamp'] <= end_of_day)]
+        
+        # Sort by timestamp and remove duplicates (keep first occurrence)
+        df_forecast = df_forecast.sort_values('Timestamp').drop_duplicates(subset='Timestamp', keep='first')
+        
+        # Reindex to ensure all 96 15-minute intervals are present (fill gaps with forward fill)
+        full_index_cet = pd.date_range(start=start_of_day, end=end_of_day, freq='15min', tz='Europe/Berlin')
+        df_forecast = df_forecast.set_index('Timestamp').reindex(full_index_cet).rename_axis('Timestamp').reset_index()
+        
+        # Forward fill to populate missing values, then backward fill any remaining NaN at start
+        df_forecast['Forecasted Consumption (MW)'] = df_forecast['Forecasted Consumption (MW)'].ffill().bfill()
+
 
         # Writing the Consumption Forecast to Excel
         df_forecast_excel = df_forecast.copy()
