@@ -2393,11 +2393,15 @@ def predicting_exporting_Astro_15min(interval_from, interval_to, limitation_perc
 
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Zenith", "Azimuth", "Umiditate"]]
 
-	xgb_loaded = joblib.load("./Astro/rs_xgb_Astro_prod_15min_0325.pkl")
+	xgb_loaded = joblib.load("./Astro/rs_xgb_Astro_prod_15min_1225.pkl")
 
 	df["Month"] = df.Data.dt.month
+	IRR_COL = "Radiatie"      # <- adjust to your irradiance column name (e.g., "GHI")
+	if IRR_COL not in df.columns:
+		raise ValueError("Please set IRR_COL to your irradiance column (e.g., 'GHI').")
+	df["is_dark"] = (df[IRR_COL] <= 0).astype(int)
 	dataset = df.copy()
-	forecast_dataset = dataset[["Interval", "Temperatura", "Nori", "Radiatie", "Month"]]
+	forecast_dataset = dataset[["Interval","Temperatura", "Nori", "Radiatie", "Month", "is_dark"]]
 
 	preds = xgb_loaded.predict(forecast_dataset.values)
 	
