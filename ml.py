@@ -3566,7 +3566,7 @@ def predicting_exporting_SunEnergy_15min(interval_from, interval_to, limitation_
 
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie"]]
 
-	xgb_loaded = joblib.load("./PC SunEnergy/rs_xgb_PCSun_prod_15min_1225.pkl")
+	xgb_loaded = joblib.load("./PC SunEnergy/rs_xgb_PCSun_prod_15min_1225_2.pkl")
 
 	df["Month"] = df.Data.dt.month
 	IRR_COL = "Radiatie"      # <- adjust to your irradiance column name (e.g., "GHI")
@@ -3773,7 +3773,7 @@ def predicting_exporting_SolarEnergy_15min(interval_from, interval_to, limitatio
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate"]]
 
 	# Load model
-	xgb_loaded = joblib.load("./Solar Energy Ulmeni/rs_xgb_Ulmeni_prod_15min_1225.pkl")
+	xgb_loaded = joblib.load("./Solar Energy Ulmeni/rs_xgb_Ulmeni_prod_15min_1225_2.pkl")
 
 	df["Month"] = df.Data.dt.month
 	IRR_COL = "Radiatie"      # <- adjust to your irradiance column name (e.g., "GHI")
