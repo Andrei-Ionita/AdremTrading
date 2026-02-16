@@ -275,3 +275,6 @@ def render_indisponibility_db_MM_MV():
      
 def render_indisponibility_db_Rosiori():
     return render_indisponibility_db("indisponibility_rosiori", "Rosiori")
+
+def render_indisponibility_db_Necaluxan():
+    return render_indisponibility_db("indisponibility_necaluxan", "Necaluxan")
