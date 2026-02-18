@@ -278,3 +278,6 @@ def render_indisponibility_db_Rosiori():
 
 def render_indisponibility_db_Necaluxan():
     return render_indisponibility_db("indisponibility_necaluxan", "Necaluxan")
+
+def render_indisponibility_db_Adrem():
+    return render_indisponibility_db("indisponibility_adrem", "Adrem")
