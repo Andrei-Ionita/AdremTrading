@@ -4213,7 +4213,7 @@ def predicting_exporting_Horeco_15min(interval_from, interval_to, limitation_per
 
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate"]]
 
-	xgb_loaded = joblib.load("./Horeco/rs_xgb_Horeco_prod_15min_1225.pkl")
+	xgb_loaded = joblib.load("./Horeco/rs_xgb_Horeco_prod_15min_0126.pkl")
 
 	df["Month"] = df.Data.dt.month
 	IRR_COL = "Radiatie"      # <- adjust to your irradiance column name (e.g., "GHI")
