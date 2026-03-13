@@ -5015,7 +5015,7 @@ def predicting_exporting_Sun_Grow_Lucia_15min(interval_from, interval_to, limita
 
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate"]]
 
-	xgb_loaded = joblib.load("./Sun_Grow_Lucia/rs_xgb_Sun_Grow_Lucia_prod_15min_0126.pkl")
+	xgb_loaded = joblib.load("./Sun_Grow_Lucia/rs_xgb_SunGrow_prod_15min_0226.pkl")
 
 	df["Month"] = df.Data.dt.month
 	IRR_COL = "Radiatie"      # <- adjust to your irradiance column name (e.g., "GHI")
