@@ -46,7 +46,11 @@ client_id = os.getenv("volue_client_id")
 client_secret = os.getenv("volue_client_secret")
 
 # Replace 'client_id' and 'client_secret' with your actual credentials
-session = wapi.Session(client_id = client_id, client_secret = client_secret)
+try:
+	session = wapi.Session(client_id = client_id, client_secret = client_secret)
+except Exception as e:
+	print(f"Warning: WAPI authentication failed: {e}")
+	session = None
 
 def fetch_token(client_id, client_secret):
 	"""

@@ -7,7 +7,7 @@ load_dotenv()
 
 def get_connection():
     """Function to establish a connection to the Heroku PostgreSQL database."""
-    DATABASE_URL = os.getenv("pulseai-db-url")  
+    DATABASE_URL = os.getenv("pulseai_db_url")  
     try:
         # Enforce SSL mode for Heroku PostgreSQL
         conn = psycopg2.connect(DATABASE_URL, sslmode='require')
