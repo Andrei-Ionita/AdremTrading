@@ -281,3 +281,6 @@ def render_indisponibility_db_Necaluxan():
 
 def render_indisponibility_db_Adrem():
     return render_indisponibility_db("indisponibility_adrem", "Adrem")
+
+def render_indisponibility_db_Anto():
+    return render_indisponibility_db("indisponibility_anto", "Anto")
