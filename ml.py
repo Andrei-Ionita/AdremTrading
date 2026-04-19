@@ -5228,7 +5228,7 @@ def predicting_exporting_MM_MV_15min(interval_from, interval_to, limitation_perc
 
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate"]]
 
-	xgb_loaded = joblib.load("./MM_MV/rs_xgb_mm_mv_prod_15min_0326.pkl")
+	xgb_loaded = joblib.load("./MM_MV/rs_xgb_mm_mv_prod_15min_0226.pkl")
 
 	df["Month"] = df.Data.dt.month
 	IRR_COL = "Radiatie"      # <- adjust to your irradiance column name (e.g., "GHI")
