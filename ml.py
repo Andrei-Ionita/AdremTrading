@@ -4652,7 +4652,7 @@ def predicting_exporting_Dragosel_15min(interval_from, interval_to, limitation_p
 
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate"]]
 
-	xgb_loaded = joblib.load("./Dragosel/rs_xgb_Laslea_prod_15min_0126.pkl")
+	xgb_loaded = joblib.load("./Dragosel/rs_xgb_laslea_prod_15min_0326.pkl")
 
 	df["Month"] = df.Data.dt.month
 	IRR_COL = "Radiatie"      # <- adjust to your irradiance column name (e.g., "GHI")
