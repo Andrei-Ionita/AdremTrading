@@ -5344,7 +5344,7 @@ def predicting_exporting_Rosiori_15min(interval_from, interval_to, limitation_pe
 
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate"]]
 
-	xgb_loaded = joblib.load("./Rosiori/rs_xgb_rosiori_prod_15min_0326.pkl")
+	xgb_loaded = joblib.load("./Rosiori/rs_xgb_rosiori_prod_15min_0426.pkl")
 
 	df["Month"] = df.Data.dt.month
 	IRR_COL = "Radiatie"      # <- adjust to your irradiance column name (e.g., "GHI")
