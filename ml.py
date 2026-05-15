@@ -5442,7 +5442,7 @@ def predicting_exporting_Necaluxan_15min(interval_from, interval_to, limitation_
 
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate"]]
 
-	xgb_loaded = joblib.load("./Necaluxan/rs_xgb_necaluxan_prod_15min_0326.pkl")
+	xgb_loaded = joblib.load("./Necaluxan/rs_xgb_necaluxan_prod_15min_0426.pkl")
 
 	df["Month"] = df.Data.dt.month
 	IRR_COL = "Radiatie"      # <- adjust to your irradiance column name (e.g., "GHI")
