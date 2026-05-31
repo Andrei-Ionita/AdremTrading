@@ -287,3 +287,6 @@ def render_indisponibility_db_Anto():
 
 def render_indisponibility_db_Motif():
     return render_indisponibility_db("indisponibility_motif", "Motif")
+
+def render_indisponibility_db_Ferma():
+    return render_indisponibility_db("indisponibility_ferma", "Ferma")
