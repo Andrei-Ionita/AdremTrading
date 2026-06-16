@@ -3080,7 +3080,7 @@ def predicting_exporting_Imperial_15min(interval_to, interval_from, limitation_p
 	dataset = df.copy()
 	forecast_dataset = dataset[["Interval","Temperatura", "Nori", "Radiatie", "Month", "is_dark"]]
 
-	xgb_loaded = joblib.load("./Imperial/rs_xgb_imperial_prod_15min_0226.pkl")
+	xgb_loaded = joblib.load("./Imperial/rs_xgb_imperial_prod_15min_0526.pkl")
 
 	preds = xgb_loaded.predict(forecast_dataset.values)
 	
