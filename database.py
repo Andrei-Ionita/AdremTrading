@@ -7,12 +7,36 @@ import uuid
 from dotenv import load_dotenv
 
 load_dotenv()
-# Heroku PostgreSQL connection details
-DB_URL = os.getenv("pulseai_db_url")
+
+def get_database_url():
+    """Read the PostgreSQL URL from local env or Streamlit secrets."""
+    database_url = (
+        os.getenv("pulseai-db-url")
+        or os.getenv("pulseai_db_url")
+        or os.getenv("DATABASE_URL")
+    )
+
+    if not database_url:
+        try:
+            database_url = (
+                st.secrets.get("pulseai-db-url")
+                or st.secrets.get("pulseai_db_url")
+                or st.secrets.get("DATABASE_URL")
+            )
+        except Exception:
+            database_url = None
+
+    return database_url
+
 # Establish a connection to the PostgreSQL database
 def get_connection():
+    db_url = get_database_url()
+    if not db_url:
+        st.error("Database URL is not configured. Set pulseai-db-url, pulseai_db_url, or DATABASE_URL.")
+        return None
+
     try:
-        conn = psycopg2.connect(DB_URL, sslmode='require')
+        conn = psycopg2.connect(db_url, sslmode='require')
         return conn
     except Exception as e:
         st.error(f"Error connecting to the database: {e}")

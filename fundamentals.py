@@ -5,10 +5,16 @@ import requests
 from datetime import datetime, timedelta, time
 import os
 from dotenv import load_dotenv
-import wapi
+try:
+	import wapi
+except ImportError:
+	wapi = None
 from openpyxl import load_workbook
 from datetime import datetime
-from entsoe import EntsoePandasClient
+try:
+	from entsoe import EntsoePandasClient
+except ImportError:
+	EntsoePandasClient = None
 import xml.etree.ElementTree as ET
 import openpyxl
 import base64
@@ -47,7 +53,7 @@ client_secret = os.getenv("volue_client_secret")
 
 # Replace 'client_id' and 'client_secret' with your actual credentials
 try:
-	session = wapi.Session(client_id = client_id, client_secret = client_secret)
+	session = wapi.Session(client_id = client_id, client_secret = client_secret) if wapi else None
 except Exception as e:
 	print(f"Warning: WAPI authentication failed: {e}")
 	session = None
@@ -639,7 +645,41 @@ def zip_files(folder_path, zip_name):
 api_key_entsoe = os.getenv("api_key_entsoe")
 if api_key_entsoe is None:
 	api_key_entsoe = "api_key_entsoe = ad0626ec-bccb-4d39-9b90-30b2e50c18e0"
-client = EntsoePandasClient(api_key=api_key_entsoe)
+client = EntsoePandasClient(api_key=api_key_entsoe) if EntsoePandasClient else None
+
+def _entsoe_cet_period(start_date, end_date):
+	start_cet = pd.Timestamp(start_date.strftime('%Y%m%d') + '0000', tz='Europe/Berlin')
+	end_cet = pd.Timestamp((end_date + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Berlin')
+	return start_cet.tz_convert('UTC').strftime('%Y%m%d%H%M'), end_cet.tz_convert('UTC').strftime('%Y%m%d%H%M')
+
+def _complete_entsoe_cet_series(df, value_column, start_date, end_date, fill_policy='zero'):
+	start_cet = pd.Timestamp(start_date.strftime('%Y-%m-%dT00:00:00'), tz='Europe/Berlin')
+	end_cet = pd.Timestamp(end_date.strftime('%Y-%m-%dT23:45:00'), tz='Europe/Berlin')
+
+	df = df[(df['Timestamp'] >= start_cet) & (df['Timestamp'] <= end_cet)]
+	df = df.sort_values('Timestamp').drop_duplicates(subset='Timestamp', keep='first')
+
+	request_end_date = pd.Timestamp(end_date).date()
+	today_cet_date = pd.Timestamp.now(tz='Europe/Berlin').date()
+	if fill_policy != 'forecast_step' and request_end_date >= today_cet_date:
+		if df.empty:
+			return pd.DataFrame({
+				'Timestamp': pd.DatetimeIndex([], tz='Europe/Berlin'),
+				value_column: pd.Series(dtype='float64'),
+			})
+		end_cet = min(end_cet, df['Timestamp'].max())
+
+	full_index_cet = pd.date_range(start=start_cet, end=end_cet, freq='15T', tz='Europe/Berlin')
+	df = df.set_index('Timestamp').reindex(full_index_cet).rename_axis('Timestamp').reset_index()
+
+	if fill_policy == 'step':
+		df[value_column] = df[value_column].ffill().fillna(0)
+	elif fill_policy == 'forecast_step':
+		df[value_column] = df[value_column].ffill().bfill()
+	else:
+		df[value_column] = df[value_column].fillna(0)
+
+	return df
 
 
 # ===========================Imbalance Volumes and Prices================================================================
@@ -648,12 +688,14 @@ client = EntsoePandasClient(api_key=api_key_entsoe)
 def fetching_imbalance_volumes(start_date, end_date):
 	# Setting up the start and end dates (today and tomorrow)
 	today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-	start_cet = pd.Timestamp(start_date.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-1)
-	end_cet = pd.Timestamp((end_date + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
+	start_cet = pd.Timestamp(start_date.strftime('%Y%m%d') + '0000', tz='Europe/Berlin')
+	end_cet = pd.Timestamp((end_date + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Berlin')
+	start_utc = start_cet.tz_convert('UTC')
+	end_utc = end_cet.tz_convert('UTC')
 
 	# Format the start and end dates to match the API requirements (yyyymmddhhmm)
-	period_start = start_cet.strftime('%Y%m%d%H%M')
-	period_end = end_cet.strftime('%Y%m%d%H%M')
+	period_start = start_utc.strftime('%Y%m%d%H%M')
+	period_end = end_utc.strftime('%Y%m%d%H%M')
 
 	# Define the endpoint and parameters for fetching imbalance volumes via ENTSO-E API
 	url = "https://web-api.tp.entsoe.eu/api"
@@ -790,8 +832,10 @@ def process_imbalance_volumes(start_date, end_date, zip_filepath='./data_fetchin
 def fetch_imbalance_prices(start_date, end_date):
 	# Setting up the start and end dates (today and tomorrow)
 	today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-	start_cet = pd.Timestamp(start_date.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-1)
-	end_cet = pd.Timestamp((end_date + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
+	start_cet = pd.Timestamp(start_date.strftime('%Y%m%d') + '0000', tz='Europe/Berlin')
+	end_cet = pd.Timestamp((end_date + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Berlin')
+	start_utc = start_cet.tz_convert('UTC')
+	end_utc = end_cet.tz_convert('UTC')
 
 	# Define the endpoint and parameters for fetching imbalance prices via ENTSO-E API
 	url = "https://web-api.tp.entsoe.eu/api"
@@ -801,8 +845,8 @@ def fetch_imbalance_prices(start_date, end_date):
 		"securityToken": api_key_entsoe,
 		"documentType": "A85",  # Document type for imbalance prices
 		"controlArea_Domain": "10YRO-TEL------P",  # Romania's area EIC code
-		"periodStart": start_cet.strftime('%Y%m%d%H%M'),  # Start date in yyyymmddhhmm format
-		"periodEnd": end_cet.strftime('%Y%m%d%H%M'),  # End date in yyyymmddhhmm format
+		"periodStart": start_utc.strftime('%Y%m%d%H%M'),  # Start date in yyyymmddhhmm format
+		"periodEnd": end_utc.strftime('%Y%m%d%H%M'),  # End date in yyyymmddhhmm format
 	}
 
 	# Headers for the API request
@@ -972,13 +1016,8 @@ def fetch_process_wind_notified(start_date, end_date):
 	"""
 	Fetch and process wind notified production data from ENTSO-E API for a given date range.
 	"""
-	# Convert start_date and end_date to CET timestamps
-	start_cet = pd.Timestamp(start_date.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
-	end_cet = pd.Timestamp((end_date + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
-
-	# Format the start and end dates to match the API requirements (yyyymmddhhmm)
-	period_start = start_cet.strftime('%Y%m%d%H%M')
-	period_end = end_cet.strftime('%Y%m%d%H%M')
+	# ENTSO-E period params are UTC strings for the requested CET day range.
+	period_start, period_end = _entsoe_cet_period(start_date, end_date)
 
 	url = "https://web-api.tp.entsoe.eu/api"
 
@@ -1055,23 +1094,9 @@ def fetch_process_wind_notified(start_date, end_date):
 		df_notified_production.drop(columns=['Timestamp_UTC'], inplace=True)
 		df_notified_production.rename(columns={'Timestamp_CET': 'Timestamp'}, inplace=True)
 
-		# Filter by user-provided date range
-		start_cet = pd.Timestamp(start_date.strftime('%Y-%m-%dT00:00:00'), tz='Europe/Berlin')
-		end_cet = pd.Timestamp(end_date.strftime('%Y-%m-%dT23:45:00'), tz='Europe/Berlin')
-
-		# Create a complete index for 15-minute intervals
-		full_index_cet = pd.date_range(start=start_cet, end=end_cet, freq='15T', tz='Europe/Berlin')
-
-		# Merge actual data with the full index to ensure all intervals are covered
-		df_full = pd.DataFrame({'Timestamp': full_index_cet}).set_index('Timestamp')
-		df_notified_production = df_full.merge(
-			df_notified_production.set_index('Timestamp'),
-			how='left',
-			left_index=True,
-			right_index=True
+		df_notified_production = _complete_entsoe_cet_series(
+			df_notified_production, 'Notified Production (MW)', start_date, end_date, fill_policy='step'
 		)
-		df_notified_production.fillna(0, inplace=True)  # Replace missing values with 0
-		df_notified_production.reset_index(inplace=True)
 
 		# Write the DataFrame to Excel
 		df_notified_production_excel = df_notified_production.copy()
@@ -1088,13 +1113,8 @@ def fetch_process_wind_actual_production(start_date, end_date):
 	"""
 	Fetch and process actual wind production data from ENTSO-E API for a given date range.
 	"""
-	# Convert start_date and end_date to CET timestamps
-	start_cet = pd.Timestamp(start_date.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
-	end_cet = pd.Timestamp((end_date + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
-
-	# Format the start and end dates to match the API requirements (yyyymmddhhmm)
-	period_start = start_cet.strftime('%Y%m%d%H%M')
-	period_end = end_cet.strftime('%Y%m%d%H%M')
+	# ENTSO-E period params are UTC strings for the requested CET day range.
+	period_start, period_end = _entsoe_cet_period(start_date, end_date)
 
 	url = "https://web-api.tp.entsoe.eu/api"
 
@@ -1172,23 +1192,9 @@ def fetch_process_wind_actual_production(start_date, end_date):
 		df_actual_production.drop(columns=['Timestamp_UTC'], inplace=True)
 		df_actual_production.rename(columns={'Timestamp_CET': 'Timestamp'}, inplace=True)
 
-		# Filter by user-provided date range
-		start_cet = pd.Timestamp(start_date.strftime('%Y-%m-%dT00:00:00'), tz='Europe/Berlin')
-		end_cet = pd.Timestamp(end_date.strftime('%Y-%m-%dT23:45:00'), tz='Europe/Berlin')
-
-		# Create a complete index for 15-minute intervals
-		full_index_cet = pd.date_range(start=start_cet, end=end_cet, freq='15T', tz='Europe/Berlin')
-
-		# Merge actual data with the full index to ensure all intervals are covered
-		df_full = pd.DataFrame({'Timestamp': full_index_cet}).set_index('Timestamp')
-		df_actual_production = df_full.merge(
-			df_actual_production.set_index('Timestamp'),
-			how='left',
-			left_index=True,
-			right_index=True
+		df_actual_production = _complete_entsoe_cet_series(
+			df_actual_production, 'Actual Production (MW)', start_date, end_date, fill_policy='step'
 		)
-		df_actual_production.fillna(0, inplace=True)  # Replace missing values with 0
-		df_actual_production.reset_index(inplace=True)
 
 		# Write the DataFrame to Excel
 		df_actual_production_excel = df_actual_production.copy()
@@ -1203,8 +1209,8 @@ def fetch_process_wind_actual_production(start_date, end_date):
 
 def combine_wind_production_data(df_notified, df_actual):
 	# Step 1: Sort and align the wind notified and actual production DataFrames
-	df_notified = df_notified.sort_values(by='Timestamp').set_index('Timestamp')
-	df_actual = df_actual.sort_values(by='Timestamp').set_index('Timestamp')
+	df_notified = df_notified[['Timestamp', 'Notified Production (MW)']].sort_values(by='Timestamp').set_index('Timestamp')
+	df_actual = df_actual[['Timestamp', 'Actual Production (MW)']].sort_values(by='Timestamp').set_index('Timestamp')
 	
 	# Step 2: Concatenate the notified and actual data based on Timestamp
 	df_combined = pd.concat([df_notified, df_actual], axis=1)
@@ -1212,9 +1218,6 @@ def combine_wind_production_data(df_notified, df_actual):
 	# Step 3: Reset index to make Timestamp a column again
 	df_combined.reset_index(inplace=True)
 	
-	# Step 4: Rename the columns for better readability
-	df_combined.columns = ['Timestamp', 'Notified Production (MW)', 'Actual Production (MW)']
-
 	# Step 5: Add the volue forecast to the combined dataframe by aligning timestamps
 	# df_forecast = df_forecast.sort_values(by='Timestamp').set_index('Timestamp')
 
@@ -1243,13 +1246,8 @@ def fetch_process_solar_notified(start_date, end_date):
 	"""
 	Fetch and process solar notified production data from ENTSO-E API for a given date range.
 	"""
-	# Convert start_date and end_date to CET timestamps
-	start_cet = pd.Timestamp(start_date.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
-	end_cet = pd.Timestamp((end_date + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
-
-	# Format the start and end dates to match the API requirements (yyyymmddhhmm)
-	period_start = start_cet.strftime('%Y%m%d%H%M')
-	period_end = end_cet.strftime('%Y%m%d%H%M')
+	# ENTSO-E period params are UTC strings for the requested CET day range.
+	period_start, period_end = _entsoe_cet_period(start_date, end_date)
 
 	url = "https://web-api.tp.entsoe.eu/api"
 
@@ -1326,23 +1324,9 @@ def fetch_process_solar_notified(start_date, end_date):
 		df_notified_production.drop(columns=['Timestamp_UTC'], inplace=True)
 		df_notified_production.rename(columns={'Timestamp_CET': 'Timestamp'}, inplace=True)
 
-		# Filter by user-provided date range
-		start_cet = pd.Timestamp(start_date.strftime('%Y-%m-%dT00:00:00'), tz='Europe/Berlin')
-		end_cet = pd.Timestamp(end_date.strftime('%Y-%m-%dT23:45:00'), tz='Europe/Berlin')
-
-		# Create a complete index for 15-minute intervals
-		full_index_cet = pd.date_range(start=start_cet, end=end_cet, freq='15T', tz='Europe/Berlin')
-
-		# Merge actual data with the full index to ensure all intervals are covered
-		df_full = pd.DataFrame({'Timestamp': full_index_cet}).set_index('Timestamp')
-		df_notified_production = df_full.merge(
-			df_notified_production.set_index('Timestamp'),
-			how='left',
-			left_index=True,
-			right_index=True
+		df_notified_production = _complete_entsoe_cet_series(
+			df_notified_production, 'Notified Production (MW)', start_date, end_date, fill_policy='step'
 		)
-		df_notified_production.fillna(0, inplace=True)  # Replace missing values with 0
-		df_notified_production.reset_index(inplace=True)
 
 		# Write the DataFrame to Excel
 		df_notified_production_excel = df_notified_production.copy()
@@ -1359,13 +1343,8 @@ def fetch_process_solar_actual_production(start_date, end_date):
 	"""
 	Fetch and process solar actual production data from ENTSO-E API for a given date range.
 	"""
-	# Convert start_date and end_date to CET timestamps
-	start_cet = pd.Timestamp(start_date.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
-	end_cet = pd.Timestamp((end_date + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
-
-	# Format the start and end dates to match the API requirements (yyyymmddhhmm)
-	period_start = start_cet.strftime('%Y%m%d%H%M')
-	period_end = end_cet.strftime('%Y%m%d%H%M')
+	# ENTSO-E period params are UTC strings for the requested CET day range.
+	period_start, period_end = _entsoe_cet_period(start_date, end_date)
 
 	url = "https://web-api.tp.entsoe.eu/api"
 
@@ -1443,23 +1422,9 @@ def fetch_process_solar_actual_production(start_date, end_date):
 		df_actual_production.drop(columns=['Timestamp_UTC'], inplace=True)
 		df_actual_production.rename(columns={'Timestamp_CET': 'Timestamp'}, inplace=True)
 
-		# Filter by user-provided date range
-		start_cet = pd.Timestamp(start_date.strftime('%Y-%m-%dT00:00:00'), tz='Europe/Berlin')
-		end_cet = pd.Timestamp(end_date.strftime('%Y-%m-%dT23:45:00'), tz='Europe/Berlin')
-
-		# Create a complete index for 15-minute intervals
-		full_index_cet = pd.date_range(start=start_cet, end=end_cet, freq='15T', tz='Europe/Berlin')
-
-		# Merge actual data with the full index to ensure all intervals are covered
-		df_full = pd.DataFrame({'Timestamp': full_index_cet}).set_index('Timestamp')
-		df_actual_production = df_full.merge(
-			df_actual_production.set_index('Timestamp'),
-			how='left',
-			left_index=True,
-			right_index=True
+		df_actual_production = _complete_entsoe_cet_series(
+			df_actual_production, 'Actual Production (MW)', start_date, end_date, fill_policy='step'
 		)
-		df_actual_production.fillna(0, inplace=True)  # Replace missing values with 0
-		df_actual_production.reset_index(inplace=True)
 
 		# Write the DataFrame to Excel
 		df_actual_production_excel = df_actual_production.copy()
@@ -1474,8 +1439,8 @@ def fetch_process_solar_actual_production(start_date, end_date):
 
 def combine_solar_production_data(df_notified, df_actual):
 	# Step 1: Sort and align the wind notified and actual production DataFrames
-	df_notified = df_notified.sort_values(by='Timestamp').set_index('Timestamp')
-	df_actual = df_actual.sort_values(by='Timestamp').set_index('Timestamp')
+	df_notified = df_notified[['Timestamp', 'Notified Production (MW)']].sort_values(by='Timestamp').set_index('Timestamp')
+	df_actual = df_actual[['Timestamp', 'Actual Production (MW)']].sort_values(by='Timestamp').set_index('Timestamp')
 	
 	# Step 2: Concatenate the notified and actual data based on Timestamp
 	df_combined = pd.concat([df_notified, df_actual], axis=1)
@@ -1483,9 +1448,6 @@ def combine_solar_production_data(df_notified, df_actual):
 	# Step 3: Reset index to make Timestamp a column again
 	df_combined.reset_index(inplace=True)
 	
-	# Step 4: Rename the columns for better readability
-	df_combined.columns = ['Timestamp', 'Notified Production (MW)', 'Actual Production (MW)']
-
 	# Step 5: Add the volue forecast to the combined dataframe by aligning timestamps
 	# df_forecast = df_forecast.sort_values(by='Timestamp').set_index('Timestamp')
 
@@ -1515,13 +1477,8 @@ def fetch_process_hydro_water_reservoir_actual_production(start_date, end_date):
 	"""
 	Fetch and process hydro water reservoir actual production data from ENTSO-E API for a given date range.
 	"""
-	# Convert start_date and end_date to CET timestamps
-	start_cet = pd.Timestamp(start_date.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
-	end_cet = pd.Timestamp((end_date + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
-
-	# Format the start and end dates to match the API requirements (yyyymmddhhmm)
-	period_start = start_cet.strftime('%Y%m%d%H%M')
-	period_end = end_cet.strftime('%Y%m%d%H%M')
+	# ENTSO-E period params are UTC strings for the requested CET day range.
+	period_start, period_end = _entsoe_cet_period(start_date, end_date)
 
 	url = "https://web-api.tp.entsoe.eu/api"
 
@@ -1599,23 +1556,9 @@ def fetch_process_hydro_water_reservoir_actual_production(start_date, end_date):
 		df_actual_production.drop(columns=['Timestamp_UTC'], inplace=True)
 		df_actual_production.rename(columns={'Timestamp_CET': 'Timestamp'}, inplace=True)
 
-		# Filter by user-provided date range
-		start_cet = pd.Timestamp(start_date.strftime('%Y-%m-%dT00:00:00'), tz='Europe/Berlin')
-		end_cet = pd.Timestamp(end_date.strftime('%Y-%m-%dT23:45:00'), tz='Europe/Berlin')
-
-		# Create a complete index for 15-minute intervals
-		full_index_cet = pd.date_range(start=start_cet, end=end_cet, freq='15T', tz='Europe/Berlin')
-
-		# Merge actual data with the full index to ensure all intervals are covered
-		df_full = pd.DataFrame({'Timestamp': full_index_cet}).set_index('Timestamp')
-		df_actual_production = df_full.merge(
-			df_actual_production.set_index('Timestamp'),
-			how='left',
-			left_index=True,
-			right_index=True
+		df_actual_production = _complete_entsoe_cet_series(
+			df_actual_production, 'Actual Production (MW)', start_date, end_date, fill_policy='step'
 		)
-		df_actual_production.fillna(0, inplace=True)  # Replace missing values with 0
-		df_actual_production.reset_index(inplace=True)
 
 		# Write the DataFrame to Excel
 		df_actual_production_excel = df_actual_production.copy()
@@ -1633,13 +1576,8 @@ def fetch_process_hydro_river_actual_production(start_date, end_date):
 	"""
 	Fetch and process hydro river actual production data from ENTSO-E API for a given date range.
 	"""
-	# Convert start_date and end_date to CET timestamps
-	start_cet = pd.Timestamp(start_date.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
-	end_cet = pd.Timestamp((end_date + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
-
-	# Format the start and end dates to match the API requirements (yyyymmddhhmm)
-	period_start = start_cet.strftime('%Y%m%d%H%M')
-	period_end = end_cet.strftime('%Y%m%d%H%M')
+	# ENTSO-E period params are UTC strings for the requested CET day range.
+	period_start, period_end = _entsoe_cet_period(start_date, end_date)
 
 	url = "https://web-api.tp.entsoe.eu/api"
 
@@ -1717,23 +1655,9 @@ def fetch_process_hydro_river_actual_production(start_date, end_date):
 		df_actual_production.drop(columns=['Timestamp_UTC'], inplace=True)
 		df_actual_production.rename(columns={'Timestamp_CET': 'Timestamp'}, inplace=True)
 
-		# Filter by user-provided date range
-		start_cet = pd.Timestamp(start_date.strftime('%Y-%m-%dT00:00:00'), tz='Europe/Berlin')
-		end_cet = pd.Timestamp(end_date.strftime('%Y-%m-%dT23:45:00'), tz='Europe/Berlin')
-
-		# Create a complete index for 15-minute intervals
-		full_index_cet = pd.date_range(start=start_cet, end=end_cet, freq='15T', tz='Europe/Berlin')
-
-		# Merge actual data with the full index to ensure all intervals are covered
-		df_full = pd.DataFrame({'Timestamp': full_index_cet}).set_index('Timestamp')
-		df_actual_production = df_full.merge(
-			df_actual_production.set_index('Timestamp'),
-			how='left',
-			left_index=True,
-			right_index=True
+		df_actual_production = _complete_entsoe_cet_series(
+			df_actual_production, 'Actual Production (MW)', start_date, end_date, fill_policy='step'
 		)
-		df_actual_production.fillna(0, inplace=True)  # Replace missing values with 0
-		df_actual_production.reset_index(inplace=True)
 
 		# Write the DataFrame to Excel
 		df_actual_production_excel = df_actual_production.copy()
@@ -1749,8 +1673,8 @@ def fetch_process_hydro_river_actual_production(start_date, end_date):
 
 def align_and_combine_hydro_data(df_water_reservoir, df_river):
 	# Ensure notified and actual dataframes are sorted and set the index to Timestamp
-	df_water_reservoir = df_water_reservoir.sort_values(by='Timestamp').set_index('Timestamp')
-	df_river = df_river.sort_values(by='Timestamp').set_index('Timestamp')
+	df_water_reservoir = df_water_reservoir[['Timestamp', 'Actual Production (MW)']].sort_values(by='Timestamp').set_index('Timestamp')
+	df_river = df_river[['Timestamp', 'Actual Production (MW)']].sort_values(by='Timestamp').set_index('Timestamp')
 
 	# Load volue forecast data and rename the columns appropriately
 	# df_volue_forecast = df_volue_forecast.rename(columns={df_volue_forecast.columns[0]: 'Volue Forecast (MW)'})
@@ -1794,13 +1718,8 @@ def fetch_consumption_forecast(start_date, end_date):
 	"""
 	Fetch forecasted consumption data for the specified date range and save it to an Excel file.
 	"""
-	# Convert start_date and end_date to CET timestamps
-	start_cet = pd.Timestamp(start_date.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
-	end_cet = pd.Timestamp((end_date + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
-
-	# Format the start and end dates to match the API requirements (yyyymmddhhmm)
-	period_start = start_cet.strftime('%Y%m%d%H%M')
-	period_end = end_cet.strftime('%Y%m%d%H%M')
+	# ENTSO-E period params are UTC strings for the requested CET day range.
+	period_start, period_end = _entsoe_cet_period(start_date, end_date)
 
 	# API request parameters
 	url = "https://web-api.tp.entsoe.eu/api"
@@ -1868,18 +1787,9 @@ def fetch_consumption_forecast(start_date, end_date):
 		df_forecast.drop(columns=['Timestamp_UTC'], inplace=True)
 		df_forecast.rename(columns={'Timestamp_CET': 'Timestamp'}, inplace=True)
 
-		# Filter by user-provided date range
-		start_cet = pd.Timestamp(start_date.strftime('%Y-%m-%dT00:00:00'), tz='Europe/Berlin')
-		end_cet = pd.Timestamp(end_date.strftime('%Y-%m-%dT23:45:00'), tz='Europe/Berlin')
-
-		# Create a complete index for 15-minute intervals
-		full_index_cet = pd.date_range(start=start_cet, end=end_cet, freq='15T', tz='Europe/Berlin')
-		df_full = pd.DataFrame({'Timestamp': full_index_cet}).set_index('Timestamp')
-
-		# Merge the full index with actual data to ensure all intervals are included
-		df_forecast = df_full.merge(df_forecast.set_index('Timestamp'), how='left', left_index=True, right_index=True)
-		df_forecast.fillna(0, inplace=True)  # Fill missing values with 0
-		df_forecast.reset_index(inplace=True)
+		df_forecast = _complete_entsoe_cet_series(
+			df_forecast, 'Forecasted Consumption (MW)', start_date, end_date, fill_policy='forecast_step'
+		)
 
 		# Save the DataFrame to an Excel file
 		df_forecast_excel = df_forecast.copy()
@@ -1899,12 +1809,7 @@ def fetch_consumption_forecast(start_date, end_date):
 def fetch_actual_consumption(start_date, end_date):
 	# Setting up the start and end dates (today and tomorrow)
 	today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-	start_cet = pd.Timestamp(start_date.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
-	end_cet = pd.Timestamp((end_date + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
-
-	# Format the start and end dates to match the API requirements (yyyymmddhhmm)
-	period_start = start_cet.strftime('%Y%m%d%H%M')
-	period_end = end_cet.strftime('%Y%m%d%H%M')
+	period_start, period_end = _entsoe_cet_period(start_date, end_date)
 
 	url = "https://web-api.tp.entsoe.eu/api"
 
@@ -1973,18 +1878,9 @@ def fetch_actual_consumption(start_date, end_date):
 		df_actual.drop(columns=['Timestamp_UTC'], inplace=True)
 		df_actual.rename(columns={'Timestamp_CET': 'Timestamp'}, inplace=True)
 
-		# Filter by user-provided date range
-		start_cet = pd.Timestamp(start_date.strftime('%Y-%m-%dT00:00:00'), tz='Europe/Berlin')
-		end_cet = pd.Timestamp(end_date.strftime('%Y-%m-%dT23:45:00'), tz='Europe/Berlin')
-
-		# Create a complete index for 15-minute intervals
-		full_index_cet = pd.date_range(start=start_cet, end=end_cet, freq='15T', tz='Europe/Berlin')
-		df_full = pd.DataFrame({'Timestamp': full_index_cet}).set_index('Timestamp')
-
-		# Merge the full index with actual data to ensure all intervals are included
-		df_actual = df_full.merge(df_actual.set_index('Timestamp'), how='left', left_index=True, right_index=True)
-		df_actual.fillna(0, inplace=True)  # Fill missing values with 0
-		df_actual.reset_index(inplace=True)
+		df_actual = _complete_entsoe_cet_series(
+			df_actual, 'Actual Consumption (MW)', start_date, end_date, fill_policy='step'
+		)
 
 		# Writing the Consumption Actual to Excel
 		df_actual_excel = df_actual.copy()
@@ -2005,8 +1901,8 @@ def fetch_actual_consumption(start_date, end_date):
 
 def combine_consumption_data(df_forecast, df_actual):
 	# Step 1: Sort and align the wind notified and actual production DataFrames
-	df_forecast = df_forecast.sort_values(by='Timestamp').set_index('Timestamp')
-	df_actual = df_actual.sort_values(by='Timestamp').set_index('Timestamp')
+	df_forecast = df_forecast[['Timestamp', 'Forecasted Consumption (MW)']].sort_values(by='Timestamp').set_index('Timestamp')
+	df_actual = df_actual[['Timestamp', 'Actual Consumption (MW)']].sort_values(by='Timestamp').set_index('Timestamp')
 	
 	# Step 2: Concatenate the notified and actual data based on Timestamp
 	df_combined = pd.concat([df_forecast, df_actual], axis=1)
@@ -2015,7 +1911,7 @@ def combine_consumption_data(df_forecast, df_actual):
 	df_combined.reset_index(inplace=True)
 	
 	# Step 4: Rename the columns for better readability
-	df_combined.columns = ['Timestamp', 'Consumption Forecast (MW)', 'Actual Consumption (MW)']
+	df_combined.rename(columns={'Forecasted Consumption (MW)': 'Consumption Forecast (MW)'}, inplace=True)
 
 	# Step 6: Fill any missing values if required (e.g., with 0 or 'NaN')
 	# df_combined.fillna(method='ffill', inplace=True)  # Forward fill any missing values if necessary
@@ -2036,11 +1932,11 @@ def fetch_igcc_netting_flows_range(start_date, end_date):
     current_day = start_date
 
     while current_day <= end_date:
-        # Time window: from CET midnight minus 2 hours to next CET midnight
-        start_cet = datetime.combine(current_day, datetime.min.time()).replace(tzinfo=cet)
+        # Time window: exact CET day converted to UTC for the API.
+        start_cet = cet.localize(datetime.combine(current_day, datetime.min.time()))
         end_cet = start_cet + timedelta(days=1)
 
-        start_utc = start_cet.astimezone(utc) - timedelta(hours=2)
+        start_utc = start_cet.astimezone(utc)
         end_utc = end_cet.astimezone(utc)
 
         url = (
@@ -2549,12 +2445,12 @@ def fetch_intraday_balancing_activations(start_date, end_date):
     current_day = start_date
 
     while current_day <= end_date:
-        # --- Build the UTC time window: 2 hours before CET midnight to next CET midnight
-        start_cet_dt = datetime.combine(current_day, datetime.min.time()).replace(tzinfo=cet)
+        # --- Build the UTC time window for the exact CET day.
+        start_cet_dt = cet.localize(datetime.combine(current_day, datetime.min.time()))
         end_cet_dt = start_cet_dt + timedelta(days=1)
 
-        start_utc = start_cet_dt - timedelta(hours=2)  # Covers 00:00 CET = 22:00 UTC
-        end_utc = end_cet_dt
+        start_utc = start_cet_dt.astimezone(utc)
+        end_utc = end_cet_dt.astimezone(utc)
 
         url = (
             "https://newmarkets.transelectrica.ro/usy-durom-publicreportg01/"
@@ -2892,9 +2788,9 @@ def fetch_unintended_deviation_data(start_cet, end_cet):
     # Loop through each day in the range
     current_day = start_cet
     while current_day <= end_cet:
-        # Set start & end of the day in CET
-        start_cet_adjusted = datetime.combine(current_day - timedelta(days=1), time(23, 45)).replace(tzinfo=cet_timezone)
-        end_cet_midnight = datetime.combine(current_day, datetime.min.time()).replace(tzinfo=cet_timezone) + timedelta(days=1)
+        # Set start & end of the exact CET day
+        start_cet_adjusted = cet_timezone.localize(datetime.combine(current_day, datetime.min.time()))
+        end_cet_midnight = start_cet_adjusted + timedelta(days=1)
 
         # Convert CET times to UTC for API request
         start_utc = start_cet_adjusted.astimezone(pytz.utc)
@@ -3687,9 +3583,11 @@ def render_fundamentals_page():
 		fetching_imbalance_volumes(start_date, end_date)
 		fetch_imbalance_prices(start_date, end_date)
 		df_volumes = process_imbalance_volumes(start_date, end_date)
+		st.write(df_volumes)
 		df_prices = process_imbalance_prices(start_date, end_date)
-		df_imbalance = create_combined_imbalance_dataframe(df_volumes, df_prices)
-
+		st.write(df_prices)
+		df_imbalance = create_combined_imbalance_dataframe(df_prices, df_volumes)
+		st.write(df_imbalance)
 		# Fetching the Wind Historical Production
 		df_wind_notified = fetch_process_wind_notified(start_date, end_date)
 		st.dataframe(df_wind_notified)

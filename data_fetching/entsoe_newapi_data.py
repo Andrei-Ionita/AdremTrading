@@ -18,6 +18,41 @@ import pytz
 load_dotenv()
 api_key_entsoe = os.getenv("api_key_entsoe")
 
+def _today_cet_period():
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Berlin')
+    end_cet = pd.Timestamp((today + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Berlin')
+    return (
+        today,
+        start_cet.tz_convert('UTC').strftime('%Y%m%d%H%M'),
+        end_cet.tz_convert('UTC').strftime('%Y%m%d%H%M'),
+    )
+
+def _complete_today_cet_series(df, value_column, today, fill_policy='step'):
+    start_of_day = pd.Timestamp(today, tz='Europe/Berlin')
+    end_of_day = pd.Timestamp(today + timedelta(days=1), tz='Europe/Berlin') - timedelta(minutes=15)
+
+    df = df[(df['Timestamp'] >= start_of_day) & (df['Timestamp'] <= end_of_day)]
+    df = df.sort_values('Timestamp').drop_duplicates(subset='Timestamp', keep='first')
+
+    if fill_policy != 'forecast_step':
+        if df.empty:
+            return pd.DataFrame({
+                'Timestamp': pd.DatetimeIndex([], tz='Europe/Berlin'),
+                value_column: pd.Series(dtype='float64'),
+            })
+        end_of_day = min(end_of_day, df['Timestamp'].max())
+
+    full_index_cet = pd.date_range(start=start_of_day, end=end_of_day, freq='15T', tz='Europe/Berlin')
+    df = df.set_index('Timestamp').reindex(full_index_cet).rename_axis('Timestamp').reset_index()
+
+    if fill_policy == 'forecast_step':
+        df[value_column] = df[value_column].ffill().bfill()
+    else:
+        df[value_column] = df[value_column].ffill().fillna(0)
+
+    return df
+
 # Loading the Volue API key
 client_id = os.getenv("volue_client_id")
 client_secret = os.getenv("volue_client_secret")
@@ -520,13 +555,7 @@ def create_combined_imbalance_dataframe(df_prices, df_volumes):
 #==========================================================================Wind Production==============================================================================
 def fetch_process_wind_notified():
     # Setting up the start and end dates (today for intraday)
-    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
-    end_cet = pd.Timestamp((today + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
-
-    # Format the start and end dates to match the API requirements (yyyymmddhhmm)
-    period_start = start_cet.strftime('%Y%m%d%H%M')
-    period_end = end_cet.strftime('%Y%m%d%H%M')
+    today, period_start, period_end = _today_cet_period()
 
     url = "https://web-api.tp.entsoe.eu/api"
     
@@ -610,22 +639,9 @@ def fetch_process_wind_notified():
         df_notified_production.drop(columns=['Timestamp_UTC'], inplace=True)
         df_notified_production.rename(columns={'Timestamp_CET': 'Timestamp'}, inplace=True)
 
-        # Sort DataFrame by Timestamp to ensure it's ordered
-        df_notified_production.sort_values(by='Timestamp', inplace=True)
-
-        # Ensure all timestamps for the day are covered (assuming 15-min intervals)
-        start_of_day = pd.Timestamp(today, tz='Europe/Berlin')
-        end_of_day = pd.Timestamp(today + timedelta(days=1), tz='Europe/Berlin') - timedelta(minutes=15)
-        full_index_cet = pd.date_range(start=start_of_day, end=end_of_day, freq='15T', tz='Europe/Berlin')
-
-        # Set index and reindex to ensure completeness, handling missing intervals
-        df_notified_production = df_notified_production.set_index('Timestamp').reindex(full_index_cet, fill_value=np.nan).rename_axis('Timestamp').reset_index()
-
-        # **Shift All Timestamps One Interval Ahead**: Start from 00:15 for intraday alignment
-        df_notified_production['Timestamp'] = df_notified_production['Timestamp'] + timedelta(minutes=15)
-
-        # Replace NaNs with zeros after reindexing to maintain a complete timeline
-        df_notified_production['Notified Production (MW)'].fillna(0, inplace=True)
+        df_notified_production = _complete_today_cet_series(
+            df_notified_production, 'Notified Production (MW)', today
+        )
 
         # Writing the Notified Production to Excel
         df_notified_production_excel = df_notified_production.copy()
@@ -643,13 +659,7 @@ def fetch_process_wind_notified():
 
 def fetch_process_wind_actual_production():
     # Setting up the start and end dates (today for intraday)
-    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
-    end_cet = pd.Timestamp((today + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
-
-    # Format the start and end dates to match the API requirements (yyyymmddhhmm)
-    period_start = start_cet.strftime('%Y%m%d%H%M')
-    period_end = end_cet.strftime('%Y%m%d%H%M')
+    today, period_start, period_end = _today_cet_period()
 
     url = "https://web-api.tp.entsoe.eu/api"
     
@@ -734,22 +744,9 @@ def fetch_process_wind_actual_production():
         df_actual_production.drop(columns=['Timestamp_UTC'], inplace=True)
         df_actual_production.rename(columns={'Timestamp_CET': 'Timestamp'}, inplace=True)
 
-        # Sort DataFrame by Timestamp to ensure it's ordered
-        df_actual_production.sort_values(by='Timestamp', inplace=True)
-
-        # Ensure all timestamps for the day are covered (assuming 15-min intervals)
-        start_of_day = pd.Timestamp(today, tz='Europe/Berlin')
-        end_of_day = pd.Timestamp(today + timedelta(days=1), tz='Europe/Berlin') - timedelta(minutes=15)
-        full_index_cet = pd.date_range(start=start_of_day, end=end_of_day, freq='15T', tz='Europe/Berlin')
-
-        # Set index and reindex to ensure completeness, handling missing intervals
-        df_actual_production = df_actual_production.set_index('Timestamp').reindex(full_index_cet, fill_value=np.nan).rename_axis('Timestamp').reset_index()
-
-        # **Shift All Timestamps One Interval Ahead**: This should align it with notified values
-        df_actual_production['Timestamp'] = df_actual_production['Timestamp'] + timedelta(minutes=15)
-
-        # Replace NaNs with zeros after reindexing to maintain a complete timeline
-        df_actual_production['Actual Production (MW)'].fillna(0, inplace=True)
+        df_actual_production = _complete_today_cet_series(
+            df_actual_production, 'Actual Production (MW)', today
+        )
 
         # Writing the Notified Production to Excel
         df_actual_production_excel = df_actual_production.copy()
@@ -767,8 +764,8 @@ def fetch_process_wind_actual_production():
 
 def combine_wind_production_data(df_notified, df_actual, df_forecast):
     # Step 1: Sort and align the wind notified and actual production DataFrames
-    df_notified = df_notified.sort_values(by='Timestamp').set_index('Timestamp')
-    df_actual = df_actual.sort_values(by='Timestamp').set_index('Timestamp')
+    df_notified = df_notified[['Timestamp', 'Notified Production (MW)']].sort_values(by='Timestamp').set_index('Timestamp')
+    df_actual = df_actual[['Timestamp', 'Actual Production (MW)']].sort_values(by='Timestamp').set_index('Timestamp')
     
     # Step 2: Concatenate the notified and actual data based on Timestamp
     df_combined = pd.concat([df_notified, df_actual], axis=1)
@@ -776,9 +773,6 @@ def combine_wind_production_data(df_notified, df_actual, df_forecast):
     # Step 3: Reset index to make Timestamp a column again
     df_combined.reset_index(inplace=True)
     
-    # Step 4: Rename the columns for better readability
-    df_combined.columns = ['Timestamp', 'Notified Production (MW)', 'Actual Production (MW)']
-
     # Step 5: Add the volue forecast to the combined dataframe by aligning timestamps
     df_forecast = df_forecast.sort_values(by='Timestamp').set_index('Timestamp')
 
@@ -977,13 +971,7 @@ def add_solcast_forecast_to_wind_dataframe(df_combined, df_solcast_forecast):
 #==========================================================================Solar Production==============================================================================
 def fetch_process_solar_notified():
     # Setting up the start and end dates (today for intraday)
-    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
-    end_cet = pd.Timestamp((today + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
-
-    # Format the start and end dates to match the API requirements (yyyymmddhhmm)
-    period_start = start_cet.strftime('%Y%m%d%H%M')
-    period_end = end_cet.strftime('%Y%m%d%H%M')
+    today, period_start, period_end = _today_cet_period()
 
     url = "https://web-api.tp.entsoe.eu/api"
     
@@ -1067,22 +1055,9 @@ def fetch_process_solar_notified():
         df_notified_production.drop(columns=['Timestamp_UTC'], inplace=True)
         df_notified_production.rename(columns={'Timestamp_CET': 'Timestamp'}, inplace=True)
 
-        # Sort DataFrame by Timestamp to ensure it's ordered
-        df_notified_production.sort_values(by='Timestamp', inplace=True)
-
-        # Ensure all timestamps for the day are covered (assuming 15-min intervals)
-        start_of_day = pd.Timestamp(today, tz='Europe/Berlin')
-        end_of_day = pd.Timestamp(today + timedelta(days=1), tz='Europe/Berlin') - timedelta(minutes=15)
-        full_index_cet = pd.date_range(start=start_of_day, end=end_of_day, freq='15T', tz='Europe/Berlin')
-
-        # Set index and reindex to ensure completeness, handling missing intervals
-        df_notified_production = df_notified_production.set_index('Timestamp').reindex(full_index_cet, fill_value=np.nan).rename_axis('Timestamp').reset_index()
-
-        # **Shift All Timestamps One Interval Ahead**: Start from 00:15 for intraday alignment
-        df_notified_production['Timestamp'] = df_notified_production['Timestamp'] + timedelta(minutes=15)
-
-        # Replace NaNs with zeros after reindexing to maintain a complete timeline
-        df_notified_production['Notified Production (MW)'].fillna(0, inplace=True)
+        df_notified_production = _complete_today_cet_series(
+            df_notified_production, 'Notified Production (MW)', today
+        )
 
          # Writing the Notified Production to Excel
         df_notified_production_excel = df_notified_production.copy()
@@ -1100,13 +1075,7 @@ def fetch_process_solar_notified():
 
 def fetch_process_solar_actual_production():
     # Setting up the start and end dates (today for intraday)
-    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
-    end_cet = pd.Timestamp((today + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
-
-    # Format the start and end dates to match the API requirements (yyyymmddhhmm)
-    period_start = start_cet.strftime('%Y%m%d%H%M')
-    period_end = end_cet.strftime('%Y%m%d%H%M')
+    today, period_start, period_end = _today_cet_period()
 
     url = "https://web-api.tp.entsoe.eu/api"
     
@@ -1191,22 +1160,9 @@ def fetch_process_solar_actual_production():
         df_actual_production.drop(columns=['Timestamp_UTC'], inplace=True)
         df_actual_production.rename(columns={'Timestamp_CET': 'Timestamp'}, inplace=True)
 
-        # Sort DataFrame by Timestamp to ensure it's ordered
-        df_actual_production.sort_values(by='Timestamp', inplace=True)
-
-        # Ensure all timestamps for the day are covered (assuming 15-min intervals)
-        start_of_day = pd.Timestamp(today, tz='Europe/Berlin')
-        end_of_day = pd.Timestamp(today + timedelta(days=1), tz='Europe/Berlin') - timedelta(minutes=15)
-        full_index_cet = pd.date_range(start=start_of_day, end=end_of_day, freq='15T', tz='Europe/Berlin')
-
-        # Set index and reindex to ensure completeness, handling missing intervals
-        df_actual_production = df_actual_production.set_index('Timestamp').reindex(full_index_cet, fill_value=np.nan).rename_axis('Timestamp').reset_index()
-
-        # **Shift All Timestamps One Interval Ahead**: This should align it with notified values
-        df_actual_production['Timestamp'] = df_actual_production['Timestamp'] + timedelta(minutes=15)
-
-        # Replace NaNs with zeros after reindexing to maintain a complete timeline
-        df_actual_production['Actual Production (MW)'].fillna(0, inplace=True)
+        df_actual_production = _complete_today_cet_series(
+            df_actual_production, 'Actual Production (MW)', today
+        )
 
         # Writing the Notified Production to Excel
         df_actual_production_excel = df_actual_production.copy()
@@ -1236,8 +1192,8 @@ def fetch_volue_solar_data():
 
 def combine_solar_production_data(df_notified, df_actual, df_forecast):
     # Step 1: Sort and align the wind notified and actual production DataFrames
-    df_notified = df_notified.sort_values(by='Timestamp').set_index('Timestamp')
-    df_actual = df_actual.sort_values(by='Timestamp').set_index('Timestamp')
+    df_notified = df_notified[['Timestamp', 'Notified Production (MW)']].sort_values(by='Timestamp').set_index('Timestamp')
+    df_actual = df_actual[['Timestamp', 'Actual Production (MW)']].sort_values(by='Timestamp').set_index('Timestamp')
     
     # Step 2: Concatenate the notified and actual data based on Timestamp
     df_combined = pd.concat([df_notified, df_actual], axis=1)
@@ -1245,9 +1201,6 @@ def combine_solar_production_data(df_notified, df_actual, df_forecast):
     # Step 3: Reset index to make Timestamp a column again
     df_combined.reset_index(inplace=True)
     
-    # Step 4: Rename the columns for better readability
-    df_combined.columns = ['Timestamp', 'Notified Production (MW)', 'Actual Production (MW)']
-
     # Step 5: Add the volue forecast to the combined dataframe by aligning timestamps
     df_forecast = df_forecast.sort_values(by='Timestamp').set_index('Timestamp')
 
@@ -1265,13 +1218,7 @@ def combine_solar_production_data(df_notified, df_actual, df_forecast):
 
 def fetch_process_hydro_water_reservoir_actual_production():
     # Setting up the start and end dates (today for intraday)
-    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
-    end_cet = pd.Timestamp((today + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
-
-    # Format the start and end dates to match the API requirements (yyyymmddhhmm)
-    period_start = start_cet.strftime('%Y%m%d%H%M')
-    period_end = end_cet.strftime('%Y%m%d%H%M')
+    today, period_start, period_end = _today_cet_period()
 
     url = "https://web-api.tp.entsoe.eu/api"
     
@@ -1356,22 +1303,9 @@ def fetch_process_hydro_water_reservoir_actual_production():
         df_actual_production.drop(columns=['Timestamp_UTC'], inplace=True)
         df_actual_production.rename(columns={'Timestamp_CET': 'Timestamp'}, inplace=True)
 
-        # Sort DataFrame by Timestamp to ensure it's ordered
-        df_actual_production.sort_values(by='Timestamp', inplace=True)
-
-        # Ensure all timestamps for the day are covered (assuming 15-min intervals)
-        start_of_day = pd.Timestamp(today, tz='Europe/Berlin')
-        end_of_day = pd.Timestamp(today + timedelta(days=1), tz='Europe/Berlin') - timedelta(minutes=15)
-        full_index_cet = pd.date_range(start=start_of_day, end=end_of_day, freq='15T', tz='Europe/Berlin')
-
-        # Set index and reindex to ensure completeness, handling missing intervals
-        df_actual_production = df_actual_production.set_index('Timestamp').reindex(full_index_cet, fill_value=np.nan).rename_axis('Timestamp').reset_index()
-
-        # **Shift All Timestamps One Interval Ahead**: This should align it with notified values
-        df_actual_production['Timestamp'] = df_actual_production['Timestamp'] + timedelta(minutes=15)
-
-        # Replace NaNs with zeros after reindexing to maintain a complete timeline
-        df_actual_production['Actual Production (MW)'].fillna(0, inplace=True)
+        df_actual_production = _complete_today_cet_series(
+            df_actual_production, 'Actual Production (MW)', today
+        )
 
         # Return the final DataFrame
         return df_actual_production
@@ -1382,13 +1316,7 @@ def fetch_process_hydro_water_reservoir_actual_production():
 
 def fetch_process_hydro_river_actual_production():
     # Setting up the start and end dates (today for intraday)
-    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
-    end_cet = pd.Timestamp((today + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
-
-    # Format the start and end dates to match the API requirements (yyyymmddhhmm)
-    period_start = start_cet.strftime('%Y%m%d%H%M')
-    period_end = end_cet.strftime('%Y%m%d%H%M')
+    today, period_start, period_end = _today_cet_period()
 
     url = "https://web-api.tp.entsoe.eu/api"
     
@@ -1473,22 +1401,9 @@ def fetch_process_hydro_river_actual_production():
         df_actual_production.drop(columns=['Timestamp_UTC'], inplace=True)
         df_actual_production.rename(columns={'Timestamp_CET': 'Timestamp'}, inplace=True)
 
-        # Sort DataFrame by Timestamp to ensure it's ordered
-        df_actual_production.sort_values(by='Timestamp', inplace=True)
-
-        # Ensure all timestamps for the day are covered (assuming 15-min intervals)
-        start_of_day = pd.Timestamp(today, tz='Europe/Berlin')
-        end_of_day = pd.Timestamp(today + timedelta(days=1), tz='Europe/Berlin') - timedelta(minutes=15)
-        full_index_cet = pd.date_range(start=start_of_day, end=end_of_day, freq='15T', tz='Europe/Berlin')
-
-        # Set index and reindex to ensure completeness, handling missing intervals
-        df_actual_production = df_actual_production.set_index('Timestamp').reindex(full_index_cet, fill_value=np.nan).rename_axis('Timestamp').reset_index()
-
-        # **Shift All Timestamps One Interval Ahead**: This should align it with notified values
-        df_actual_production['Timestamp'] = df_actual_production['Timestamp'] + timedelta(minutes=15)
-
-        # Replace NaNs with zeros after reindexing to maintain a complete timeline
-        df_actual_production['Actual Production (MW)'].fillna(0, inplace=True)
+        df_actual_production = _complete_today_cet_series(
+            df_actual_production, 'Actual Production (MW)', today
+        )
 
         # Return the final DataFrame
         return df_actual_production
@@ -1512,8 +1427,8 @@ def fetch_volue_hydro_data():
 
 def align_and_combine_hydro_data(df_notified, df_actual, df_volue_forecast):
     # Ensure notified and actual dataframes are sorted and set the index to Timestamp
-    df_notified = df_notified.sort_values(by='Timestamp').set_index('Timestamp')
-    df_actual = df_actual.sort_values(by='Timestamp').set_index('Timestamp')
+    df_notified = df_notified[['Timestamp', 'Actual Production (MW)']].sort_values(by='Timestamp').set_index('Timestamp')
+    df_actual = df_actual[['Timestamp', 'Actual Production (MW)']].sort_values(by='Timestamp').set_index('Timestamp')
 
     # Load volue forecast data and rename the columns appropriately
     df_volue_forecast = df_volue_forecast.rename(columns={df_volue_forecast.columns[0]: 'Volue Forecast (MW)'})
@@ -1666,8 +1581,8 @@ def fetch_actual_consumption():
 
 def combine_consumption_data(df_forecast, df_actual):
     # Step 1: Sort and align the wind notified and actual production DataFrames
-    df_forecast = df_forecast.sort_values(by='Timestamp').set_index('Timestamp')
-    df_actual = df_actual.sort_values(by='Timestamp').set_index('Timestamp')
+    df_forecast = df_forecast[['Timestamp', 'Forecasted Consumption (MW)']].sort_values(by='Timestamp').set_index('Timestamp')
+    df_actual = df_actual[['Timestamp', 'Actual Consumption (MW)']].sort_values(by='Timestamp').set_index('Timestamp')
     
     # Step 2: Concatenate the notified and actual data based on Timestamp
     df_combined = pd.concat([df_forecast, df_actual], axis=1)
@@ -1676,7 +1591,7 @@ def combine_consumption_data(df_forecast, df_actual):
     df_combined.reset_index(inplace=True)
     
     # Step 4: Rename the columns for better readability
-    df_combined.columns = ['Timestamp', 'Consumption Forecast (MW)', 'Actual Consumption (MW)']
+    df_combined.rename(columns={'Forecasted Consumption (MW)': 'Consumption Forecast (MW)'}, inplace=True)
 
     # Step 6: Fill any missing values if required (e.g., with 0 or 'NaN')
     # df_combined.fillna(method='ffill', inplace=True)  # Forward fill any missing values if necessary
@@ -3765,13 +3680,7 @@ def create_combined_imbalance_dataframe(df_prices, df_volumes):
 #==========================================================================Wind Production==============================================================================
 def fetch_process_wind_notified():
     # Setting up the start and end dates (today for intraday)
-    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
-    end_cet = pd.Timestamp((today + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
-
-    # Format the start and end dates to match the API requirements (yyyymmddhhmm)
-    period_start = start_cet.strftime('%Y%m%d%H%M')
-    period_end = end_cet.strftime('%Y%m%d%H%M')
+    today, period_start, period_end = _today_cet_period()
 
     url = "https://web-api.tp.entsoe.eu/api"
     
@@ -3855,22 +3764,9 @@ def fetch_process_wind_notified():
         df_notified_production.drop(columns=['Timestamp_UTC'], inplace=True)
         df_notified_production.rename(columns={'Timestamp_CET': 'Timestamp'}, inplace=True)
 
-        # Sort DataFrame by Timestamp to ensure it's ordered
-        df_notified_production.sort_values(by='Timestamp', inplace=True)
-
-        # Ensure all timestamps for the day are covered (assuming 15-min intervals)
-        start_of_day = pd.Timestamp(today, tz='Europe/Berlin')
-        end_of_day = pd.Timestamp(today + timedelta(days=1), tz='Europe/Berlin') - timedelta(minutes=15)
-        full_index_cet = pd.date_range(start=start_of_day, end=end_of_day, freq='15T', tz='Europe/Berlin')
-
-        # Set index and reindex to ensure completeness, handling missing intervals
-        df_notified_production = df_notified_production.set_index('Timestamp').reindex(full_index_cet, fill_value=np.nan).rename_axis('Timestamp').reset_index()
-
-        # **Shift All Timestamps One Interval Ahead**: Start from 00:15 for intraday alignment
-        df_notified_production['Timestamp'] = df_notified_production['Timestamp'] + timedelta(minutes=15)
-
-        # Replace NaNs with zeros after reindexing to maintain a complete timeline
-        df_notified_production['Notified Production (MW)'].fillna(0, inplace=True)
+        df_notified_production = _complete_today_cet_series(
+            df_notified_production, 'Notified Production (MW)', today
+        )
 
         # Writing the Notified Production to Excel
         df_notified_production_excel = df_notified_production.copy()
@@ -3888,13 +3784,7 @@ def fetch_process_wind_notified():
 
 def fetch_process_wind_actual_production():
     # Setting up the start and end dates (today for intraday)
-    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
-    end_cet = pd.Timestamp((today + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
-
-    # Format the start and end dates to match the API requirements (yyyymmddhhmm)
-    period_start = start_cet.strftime('%Y%m%d%H%M')
-    period_end = end_cet.strftime('%Y%m%d%H%M')
+    today, period_start, period_end = _today_cet_period()
 
     url = "https://web-api.tp.entsoe.eu/api"
     
@@ -3979,22 +3869,9 @@ def fetch_process_wind_actual_production():
         df_actual_production.drop(columns=['Timestamp_UTC'], inplace=True)
         df_actual_production.rename(columns={'Timestamp_CET': 'Timestamp'}, inplace=True)
 
-        # Sort DataFrame by Timestamp to ensure it's ordered
-        df_actual_production.sort_values(by='Timestamp', inplace=True)
-
-        # Ensure all timestamps for the day are covered (assuming 15-min intervals)
-        start_of_day = pd.Timestamp(today, tz='Europe/Berlin')
-        end_of_day = pd.Timestamp(today + timedelta(days=1), tz='Europe/Berlin') - timedelta(minutes=15)
-        full_index_cet = pd.date_range(start=start_of_day, end=end_of_day, freq='15T', tz='Europe/Berlin')
-
-        # Set index and reindex to ensure completeness, handling missing intervals
-        df_actual_production = df_actual_production.set_index('Timestamp').reindex(full_index_cet, fill_value=np.nan).rename_axis('Timestamp').reset_index()
-
-        # **Shift All Timestamps One Interval Ahead**: This should align it with notified values
-        df_actual_production['Timestamp'] = df_actual_production['Timestamp'] + timedelta(minutes=15)
-
-        # Replace NaNs with zeros after reindexing to maintain a complete timeline
-        df_actual_production['Actual Production (MW)'].fillna(0, inplace=True)
+        df_actual_production = _complete_today_cet_series(
+            df_actual_production, 'Actual Production (MW)', today
+        )
 
         # Writing the Notified Production to Excel
         df_actual_production_excel = df_actual_production.copy()
@@ -4012,8 +3889,8 @@ def fetch_process_wind_actual_production():
 
 def combine_wind_production_data(df_notified, df_actual, df_forecast):
     # Step 1: Sort and align the wind notified and actual production DataFrames
-    df_notified = df_notified.sort_values(by='Timestamp').set_index('Timestamp')
-    df_actual = df_actual.sort_values(by='Timestamp').set_index('Timestamp')
+    df_notified = df_notified[['Timestamp', 'Notified Production (MW)']].sort_values(by='Timestamp').set_index('Timestamp')
+    df_actual = df_actual[['Timestamp', 'Actual Production (MW)']].sort_values(by='Timestamp').set_index('Timestamp')
     
     # Step 2: Concatenate the notified and actual data based on Timestamp
     df_combined = pd.concat([df_notified, df_actual], axis=1)
@@ -4021,9 +3898,6 @@ def combine_wind_production_data(df_notified, df_actual, df_forecast):
     # Step 3: Reset index to make Timestamp a column again
     df_combined.reset_index(inplace=True)
     
-    # Step 4: Rename the columns for better readability
-    df_combined.columns = ['Timestamp', 'Notified Production (MW)', 'Actual Production (MW)']
-
     # Step 5: Add the volue forecast to the combined dataframe by aligning timestamps
     df_forecast = df_forecast.sort_values(by='Timestamp').set_index('Timestamp')
 
@@ -4222,13 +4096,7 @@ def add_solcast_forecast_to_wind_dataframe(df_combined, df_solcast_forecast):
 #==========================================================================Solar Production==============================================================================
 def fetch_process_solar_notified():
     # Setting up the start and end dates (today for intraday)
-    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
-    end_cet = pd.Timestamp((today + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
-
-    # Format the start and end dates to match the API requirements (yyyymmddhhmm)
-    period_start = start_cet.strftime('%Y%m%d%H%M')
-    period_end = end_cet.strftime('%Y%m%d%H%M')
+    today, period_start, period_end = _today_cet_period()
 
     url = "https://web-api.tp.entsoe.eu/api"
     
@@ -4312,22 +4180,9 @@ def fetch_process_solar_notified():
         df_notified_production.drop(columns=['Timestamp_UTC'], inplace=True)
         df_notified_production.rename(columns={'Timestamp_CET': 'Timestamp'}, inplace=True)
 
-        # Sort DataFrame by Timestamp to ensure it's ordered
-        df_notified_production.sort_values(by='Timestamp', inplace=True)
-
-        # Ensure all timestamps for the day are covered (assuming 15-min intervals)
-        start_of_day = pd.Timestamp(today, tz='Europe/Berlin')
-        end_of_day = pd.Timestamp(today + timedelta(days=1), tz='Europe/Berlin') - timedelta(minutes=15)
-        full_index_cet = pd.date_range(start=start_of_day, end=end_of_day, freq='15T', tz='Europe/Berlin')
-
-        # Set index and reindex to ensure completeness, handling missing intervals
-        df_notified_production = df_notified_production.set_index('Timestamp').reindex(full_index_cet, fill_value=np.nan).rename_axis('Timestamp').reset_index()
-
-        # **Shift All Timestamps One Interval Ahead**: Start from 00:15 for intraday alignment
-        df_notified_production['Timestamp'] = df_notified_production['Timestamp'] + timedelta(minutes=15)
-
-        # Replace NaNs with zeros after reindexing to maintain a complete timeline
-        df_notified_production['Notified Production (MW)'].fillna(0, inplace=True)
+        df_notified_production = _complete_today_cet_series(
+            df_notified_production, 'Notified Production (MW)', today
+        )
 
          # Writing the Notified Production to Excel
         df_notified_production_excel = df_notified_production.copy()
@@ -4345,13 +4200,7 @@ def fetch_process_solar_notified():
 
 def fetch_process_solar_actual_production():
     # Setting up the start and end dates (today for intraday)
-    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
-    end_cet = pd.Timestamp((today + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
-
-    # Format the start and end dates to match the API requirements (yyyymmddhhmm)
-    period_start = start_cet.strftime('%Y%m%d%H%M')
-    period_end = end_cet.strftime('%Y%m%d%H%M')
+    today, period_start, period_end = _today_cet_period()
 
     url = "https://web-api.tp.entsoe.eu/api"
     
@@ -4436,22 +4285,9 @@ def fetch_process_solar_actual_production():
         df_actual_production.drop(columns=['Timestamp_UTC'], inplace=True)
         df_actual_production.rename(columns={'Timestamp_CET': 'Timestamp'}, inplace=True)
 
-        # Sort DataFrame by Timestamp to ensure it's ordered
-        df_actual_production.sort_values(by='Timestamp', inplace=True)
-
-        # Ensure all timestamps for the day are covered (assuming 15-min intervals)
-        start_of_day = pd.Timestamp(today, tz='Europe/Berlin')
-        end_of_day = pd.Timestamp(today + timedelta(days=1), tz='Europe/Berlin') - timedelta(minutes=15)
-        full_index_cet = pd.date_range(start=start_of_day, end=end_of_day, freq='15T', tz='Europe/Berlin')
-
-        # Set index and reindex to ensure completeness, handling missing intervals
-        df_actual_production = df_actual_production.set_index('Timestamp').reindex(full_index_cet, fill_value=np.nan).rename_axis('Timestamp').reset_index()
-
-        # **Shift All Timestamps One Interval Ahead**: This should align it with notified values
-        df_actual_production['Timestamp'] = df_actual_production['Timestamp'] + timedelta(minutes=15)
-
-        # Replace NaNs with zeros after reindexing to maintain a complete timeline
-        df_actual_production['Actual Production (MW)'].fillna(0, inplace=True)
+        df_actual_production = _complete_today_cet_series(
+            df_actual_production, 'Actual Production (MW)', today
+        )
 
         # Writing the Notified Production to Excel
         df_actual_production_excel = df_actual_production.copy()
@@ -4481,8 +4317,8 @@ def fetch_volue_solar_data():
 
 def combine_solar_production_data(df_notified, df_actual, df_forecast):
     # Step 1: Sort and align the wind notified and actual production DataFrames
-    df_notified = df_notified.sort_values(by='Timestamp').set_index('Timestamp')
-    df_actual = df_actual.sort_values(by='Timestamp').set_index('Timestamp')
+    df_notified = df_notified[['Timestamp', 'Notified Production (MW)']].sort_values(by='Timestamp').set_index('Timestamp')
+    df_actual = df_actual[['Timestamp', 'Actual Production (MW)']].sort_values(by='Timestamp').set_index('Timestamp')
     
     # Step 2: Concatenate the notified and actual data based on Timestamp
     df_combined = pd.concat([df_notified, df_actual], axis=1)
@@ -4490,9 +4326,6 @@ def combine_solar_production_data(df_notified, df_actual, df_forecast):
     # Step 3: Reset index to make Timestamp a column again
     df_combined.reset_index(inplace=True)
     
-    # Step 4: Rename the columns for better readability
-    df_combined.columns = ['Timestamp', 'Notified Production (MW)', 'Actual Production (MW)']
-
     # Step 5: Add the volue forecast to the combined dataframe by aligning timestamps
     df_forecast = df_forecast.sort_values(by='Timestamp').set_index('Timestamp')
 
@@ -4510,13 +4343,7 @@ def combine_solar_production_data(df_notified, df_actual, df_forecast):
 
 def fetch_process_hydro_water_reservoir_actual_production():
     # Setting up the start and end dates (today for intraday)
-    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
-    end_cet = pd.Timestamp((today + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
-
-    # Format the start and end dates to match the API requirements (yyyymmddhhmm)
-    period_start = start_cet.strftime('%Y%m%d%H%M')
-    period_end = end_cet.strftime('%Y%m%d%H%M')
+    today, period_start, period_end = _today_cet_period()
 
     url = "https://web-api.tp.entsoe.eu/api"
     
@@ -4601,22 +4428,9 @@ def fetch_process_hydro_water_reservoir_actual_production():
         df_actual_production.drop(columns=['Timestamp_UTC'], inplace=True)
         df_actual_production.rename(columns={'Timestamp_CET': 'Timestamp'}, inplace=True)
 
-        # Sort DataFrame by Timestamp to ensure it's ordered
-        df_actual_production.sort_values(by='Timestamp', inplace=True)
-
-        # Ensure all timestamps for the day are covered (assuming 15-min intervals)
-        start_of_day = pd.Timestamp(today, tz='Europe/Berlin')
-        end_of_day = pd.Timestamp(today + timedelta(days=1), tz='Europe/Berlin') - timedelta(minutes=15)
-        full_index_cet = pd.date_range(start=start_of_day, end=end_of_day, freq='15T', tz='Europe/Berlin')
-
-        # Set index and reindex to ensure completeness, handling missing intervals
-        df_actual_production = df_actual_production.set_index('Timestamp').reindex(full_index_cet, fill_value=np.nan).rename_axis('Timestamp').reset_index()
-
-        # **Shift All Timestamps One Interval Ahead**: This should align it with notified values
-        df_actual_production['Timestamp'] = df_actual_production['Timestamp'] + timedelta(minutes=15)
-
-        # Replace NaNs with zeros after reindexing to maintain a complete timeline
-        df_actual_production['Actual Production (MW)'].fillna(0, inplace=True)
+        df_actual_production = _complete_today_cet_series(
+            df_actual_production, 'Actual Production (MW)', today
+        )
 
         # Return the final DataFrame
         return df_actual_production
@@ -4627,13 +4441,7 @@ def fetch_process_hydro_water_reservoir_actual_production():
 
 def fetch_process_hydro_river_actual_production():
     # Setting up the start and end dates (today for intraday)
-    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
-    end_cet = pd.Timestamp((today + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
-
-    # Format the start and end dates to match the API requirements (yyyymmddhhmm)
-    period_start = start_cet.strftime('%Y%m%d%H%M')
-    period_end = end_cet.strftime('%Y%m%d%H%M')
+    today, period_start, period_end = _today_cet_period()
 
     url = "https://web-api.tp.entsoe.eu/api"
     
@@ -4718,22 +4526,9 @@ def fetch_process_hydro_river_actual_production():
         df_actual_production.drop(columns=['Timestamp_UTC'], inplace=True)
         df_actual_production.rename(columns={'Timestamp_CET': 'Timestamp'}, inplace=True)
 
-        # Sort DataFrame by Timestamp to ensure it's ordered
-        df_actual_production.sort_values(by='Timestamp', inplace=True)
-
-        # Ensure all timestamps for the day are covered (assuming 15-min intervals)
-        start_of_day = pd.Timestamp(today, tz='Europe/Berlin')
-        end_of_day = pd.Timestamp(today + timedelta(days=1), tz='Europe/Berlin') - timedelta(minutes=15)
-        full_index_cet = pd.date_range(start=start_of_day, end=end_of_day, freq='15T', tz='Europe/Berlin')
-
-        # Set index and reindex to ensure completeness, handling missing intervals
-        df_actual_production = df_actual_production.set_index('Timestamp').reindex(full_index_cet, fill_value=np.nan).rename_axis('Timestamp').reset_index()
-
-        # **Shift All Timestamps One Interval Ahead**: This should align it with notified values
-        df_actual_production['Timestamp'] = df_actual_production['Timestamp'] + timedelta(minutes=15)
-
-        # Replace NaNs with zeros after reindexing to maintain a complete timeline
-        df_actual_production['Actual Production (MW)'].fillna(0, inplace=True)
+        df_actual_production = _complete_today_cet_series(
+            df_actual_production, 'Actual Production (MW)', today
+        )
 
         # Return the final DataFrame
         return df_actual_production
@@ -4757,8 +4552,8 @@ def fetch_volue_hydro_data():
 
 def align_and_combine_hydro_data(df_notified, df_actual, df_volue_forecast):
     # Ensure notified and actual dataframes are sorted and set the index to Timestamp
-    df_notified = df_notified.sort_values(by='Timestamp').set_index('Timestamp')
-    df_actual = df_actual.sort_values(by='Timestamp').set_index('Timestamp')
+    df_notified = df_notified[['Timestamp', 'Actual Production (MW)']].sort_values(by='Timestamp').set_index('Timestamp')
+    df_actual = df_actual[['Timestamp', 'Actual Production (MW)']].sort_values(by='Timestamp').set_index('Timestamp')
 
     # Load volue forecast data and rename the columns appropriately
     df_volue_forecast = df_volue_forecast.rename(columns={df_volue_forecast.columns[0]: 'Volue Forecast (MW)'})
@@ -4820,12 +4615,7 @@ def align_and_combine_hydro_data(df_notified, df_actual, df_volue_forecast):
 
 #==========================================================================Consumption==============================================================================
 def fetch_consumption_forecast():
-    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-1)
-    end_cet = pd.Timestamp((today + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
-
-    period_start = start_cet.strftime('%Y%m%d%H%M')
-    period_end = end_cet.strftime('%Y%m%d%H%M')
+    today, period_start, period_end = _today_cet_period()
 
     url = "https://web-api.tp.entsoe.eu/api"
 
@@ -4951,12 +4741,7 @@ def fetch_consumption_forecast():
         return pd.DataFrame()
 
 def fetch_actual_consumption():
-    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    start_cet = pd.Timestamp(today.strftime('%Y%m%d') + '0000', tz='Europe/Budapest') + timedelta(hours=-2)
-    end_cet = pd.Timestamp((today + timedelta(days=1)).strftime('%Y%m%d') + '0000', tz='Europe/Budapest')
-
-    period_start = start_cet.strftime('%Y%m%d%H%M')
-    period_end = end_cet.strftime('%Y%m%d%H%M')
+    today, period_start, period_end = _today_cet_period()
 
     url = "https://web-api.tp.entsoe.eu/api"
 
@@ -5040,8 +4825,8 @@ def fetch_actual_consumption():
 
 def combine_consumption_data(df_forecast, df_actual):
     # Step 1: Sort and align the wind notified and actual production DataFrames
-    df_forecast = df_forecast.sort_values(by='Timestamp').set_index('Timestamp')
-    df_actual = df_actual.sort_values(by='Timestamp').set_index('Timestamp')
+    df_forecast = df_forecast[['Timestamp', 'Forecasted Consumption (MW)']].sort_values(by='Timestamp').set_index('Timestamp')
+    df_actual = df_actual[['Timestamp', 'Actual Consumption (MW)']].sort_values(by='Timestamp').set_index('Timestamp')
     
     # Step 2: Concatenate the notified and actual data based on Timestamp
     df_combined = pd.concat([df_forecast, df_actual], axis=1)
@@ -5050,7 +4835,7 @@ def combine_consumption_data(df_forecast, df_actual):
     df_combined.reset_index(inplace=True)
     
     # Step 4: Rename the columns for better readability
-    df_combined.columns = ['Timestamp', 'Consumption Forecast (MW)', 'Actual Consumption (MW)']
+    df_combined.rename(columns={'Forecasted Consumption (MW)': 'Consumption Forecast (MW)'}, inplace=True)
 
     # Step 6: Fill any missing values if required (e.g., with 0 or 'NaN')
     # df_combined.fillna(method='ffill', inplace=True)  # Forward fill any missing values if necessary

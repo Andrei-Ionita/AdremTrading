@@ -5,12 +5,36 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+def get_database_url():
+    """Read the PostgreSQL URL from local env or Streamlit secrets."""
+    database_url = (
+        os.getenv("pulseai-db-url")
+        or os.getenv("pulseai_db_url")
+        or os.getenv("DATABASE_URL")
+    )
+
+    if not database_url:
+        try:
+            database_url = (
+                st.secrets.get("pulseai-db-url")
+                or st.secrets.get("pulseai_db_url")
+                or st.secrets.get("DATABASE_URL")
+            )
+        except Exception:
+            database_url = None
+
+    return database_url
+
 def get_connection():
     """Function to establish a connection to the Heroku PostgreSQL database."""
-    DATABASE_URL = os.getenv("pulseai_db_url")  
+    database_url = get_database_url()
+    if not database_url:
+        st.error("Database URL is not configured. Set pulseai-db-url, pulseai_db_url, or DATABASE_URL.")
+        return None
+
     try:
         # Enforce SSL mode for Heroku PostgreSQL
-        conn = psycopg2.connect(DATABASE_URL, sslmode='require')
+        conn = psycopg2.connect(database_url, sslmode='require')
         return conn
     except Exception as e:
         st.error(f"Error connecting to the database: {e}")
