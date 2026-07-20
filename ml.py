@@ -5851,7 +5851,7 @@ def predicting_exporting_Ferma_15min(interval_from, interval_to, limitation_perc
 
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate"]]
 
-	xgb_loaded = joblib.load("./Ferma/rs_xgb_ferma_prod_15min_1225.pkl")
+	xgb_loaded = joblib.load("./Ferma/rs_xgb_ferma_prod_15min_0626.pkl")
 
 	df["Month"] = df.Data.dt.month
 	IRR_COL = "Radiatie"      # <- adjust to your irradiance column name (e.g., "GHI")
