@@ -5655,7 +5655,7 @@ def predicting_exporting_Anto_15min(interval_from, interval_to, limitation_perce
 
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate"]]
 
-	xgb_loaded = joblib.load("./Anto/rs_xgb_anto_prod_15min_0226.pkl")
+	xgb_loaded = joblib.load("./Anto/rs_xgb_anto_prod_15min_0626.pkl")
 
 	df["Month"] = df.Data.dt.month
 	IRR_COL = "Radiatie"      # <- adjust to your irradiance column name (e.g., "GHI")
