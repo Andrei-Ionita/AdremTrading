@@ -314,3 +314,6 @@ def render_indisponibility_db_Motif():
 
 def render_indisponibility_db_Ferma():
     return render_indisponibility_db("indisponibility_ferma", "Ferma")
+
+def render_indisponibility_db_HNG():
+    return render_indisponibility_db("indisponibility_hng", "HNG")
