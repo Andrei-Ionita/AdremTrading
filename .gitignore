@@ -1,2 +1,5 @@
 .env
 ./streamlit/secrets.toml
+.playwright_profiles/
+power_reading_debug/
+__pycache__/
