@@ -44,7 +44,8 @@ python -m power_reading.worker
 
 The worker reads `DATABASE_URL`, matching the existing application. Optional
 settings are `POWER_READING_INTERVAL_SECONDS`, `POWER_READING_MAX_WORKERS`, and a
-comma-separated `POWER_READING_ASSETS` list.
+comma-separated `POWER_READING_ASSETS` list. `POWER_READING_ASSET_TIMEOUT_SECONDS`
+defaults to 120 and terminates a stuck portal browser without blocking other assets.
 
 Create a second Railway service from this repository and set its Start Command to:
 

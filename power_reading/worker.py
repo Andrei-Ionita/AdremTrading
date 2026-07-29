@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import multiprocessing
 import os
 import signal
 import threading
@@ -25,13 +26,42 @@ class CollectionResult:
     errors: dict[str, str]
 
 
+@dataclass
+class _AssetProcess:
+    process: multiprocessing.Process
+    connection: object
+    started_at: float
+
+
 def collect_once(
     assets: Iterable[str],
     *,
     max_workers: int = 4,
+    asset_timeout_seconds: int = 120,
     reader: Callable[..., PowerReading] = read_asset,
 ) -> CollectionResult:
     asset_list = list(dict.fromkeys(assets))
+    if not asset_list:
+        return CollectionResult((), {})
+
+    # Dependency-injected readers are used by unit tests and local callers.
+    # Production portal reads use killable processes so a stuck browser cannot
+    # permanently block every later collection cycle.
+    if reader is not read_asset:
+        return _collect_with_threads(asset_list, max_workers=max_workers, reader=reader)
+    return _collect_with_processes(
+        asset_list,
+        max_workers=max_workers,
+        asset_timeout_seconds=asset_timeout_seconds,
+    )
+
+
+def _collect_with_threads(
+    asset_list: list[str],
+    *,
+    max_workers: int,
+    reader: Callable[..., PowerReading],
+) -> CollectionResult:
     readings: list[PowerReading] = []
     errors: dict[str, str] = {}
 
@@ -52,9 +82,122 @@ def collect_once(
     return CollectionResult(tuple(readings), errors)
 
 
-def run_cycle(assets: list[str], max_workers: int) -> CollectionResult:
+def _collect_with_processes(
+    asset_list: list[str],
+    *,
+    max_workers: int,
+    asset_timeout_seconds: int,
+) -> CollectionResult:
+    context = multiprocessing.get_context("spawn")
+    worker_limit = max(1, min(max_workers, len(asset_list)))
+    timeout = max(1, asset_timeout_seconds)
+    pending = list(asset_list)
+    active: dict[str, _AssetProcess] = {}
+    readings: list[PowerReading] = []
+    errors: dict[str, str] = {}
+
+    while pending or active:
+        while pending and len(active) < worker_limit and not STOP_EVENT.is_set():
+            asset = pending.pop(0)
+            receive_connection, send_connection = context.Pipe(duplex=False)
+            process = context.Process(
+                target=_read_asset_child,
+                args=(asset, send_connection),
+                name=f"power-reader-{asset}",
+                daemon=True,
+            )
+            process.start()
+            send_connection.close()
+            active[asset] = _AssetProcess(process, receive_connection, time.monotonic())
+
+        for asset, task in list(active.items()):
+            result = _receive_child_result(task)
+            if result is not None:
+                _stop_process(task.process)
+                task.connection.close()
+                del active[asset]
+                status, payload = result
+                if status == "ok":
+                    reading = payload
+                    if reading.pv_mw is None and reading.load_mw is None and reading.grid_mw is None:
+                        errors[asset] = "No numeric power values were detected."
+                    else:
+                        readings.append(reading)
+                else:
+                    errors[asset] = str(payload)
+                continue
+
+            if not task.process.is_alive():
+                exit_code = task.process.exitcode
+                task.process.join(timeout=1)
+                result = _receive_child_result(task)
+                task.connection.close()
+                del active[asset]
+                if result is not None:
+                    status, payload = result
+                    if status == "ok":
+                        reading = payload
+                        if reading.pv_mw is None and reading.load_mw is None and reading.grid_mw is None:
+                            errors[asset] = "No numeric power values were detected."
+                        else:
+                            readings.append(reading)
+                    else:
+                        errors[asset] = str(payload)
+                else:
+                    errors[asset] = f"Reader process exited without a result (exit code {exit_code})."
+                continue
+
+            if STOP_EVENT.is_set() or time.monotonic() - task.started_at >= timeout:
+                _stop_process(task.process)
+                task.connection.close()
+                del active[asset]
+                reason = "Worker is stopping." if STOP_EVENT.is_set() else f"Asset read exceeded {timeout} seconds."
+                errors[asset] = reason
+
+        if active and not STOP_EVENT.is_set():
+            STOP_EVENT.wait(0.1)
+        elif STOP_EVENT.is_set():
+            pending.clear()
+
+    readings.sort(key=lambda item: asset_list.index(item.asset))
+    return CollectionResult(tuple(readings), errors)
+
+
+def _read_asset_child(asset: str, connection) -> None:
+    try:
+        connection.send(("ok", read_asset(asset, headless=True)))
+    except BaseException as exc:  # The parent records portal failures uniformly.
+        connection.send(("error", f"{type(exc).__name__}: {exc}"))
+    finally:
+        connection.close()
+
+
+def _receive_child_result(task: _AssetProcess):
+    try:
+        if task.connection.poll():
+            return task.connection.recv()
+    except (EOFError, OSError):
+        return None
+    return None
+
+
+def _stop_process(process: multiprocessing.Process) -> None:
+    process.join(timeout=1)
+    if process.is_alive():
+        process.terminate()
+        process.join(timeout=5)
+    if process.is_alive():
+        process.kill()
+        process.join(timeout=2)
+
+
+def run_cycle(assets: list[str], max_workers: int, asset_timeout_seconds: int) -> CollectionResult:
     started = time.monotonic()
-    result = collect_once(assets, max_workers=max_workers)
+    result = collect_once(
+        assets,
+        max_workers=max_workers,
+        asset_timeout_seconds=asset_timeout_seconds,
+    )
     stored = store_readings(result.readings)
     store_errors(result.errors)
     LOGGER.info(
@@ -81,21 +224,23 @@ def main() -> None:
     assets = _configured_assets()
     interval_seconds = _positive_int("POWER_READING_INTERVAL_SECONDS", 180)
     max_workers = _positive_int("POWER_READING_MAX_WORKERS", 4)
+    asset_timeout_seconds = _positive_int("POWER_READING_ASSET_TIMEOUT_SECONDS", 120)
     run_once = _bool_env("POWER_READING_RUN_ONCE", False)
 
     _install_signal_handlers()
     ensure_schema()
     LOGGER.info(
-        "Power reader started assets=%s interval_seconds=%s max_workers=%s",
+        "Power reader started assets=%s interval_seconds=%s max_workers=%s asset_timeout_seconds=%s",
         ",".join(assets),
         interval_seconds,
         max_workers,
+        asset_timeout_seconds,
     )
 
     while not STOP_EVENT.is_set():
         cycle_started = time.monotonic()
         try:
-            run_cycle(assets, max_workers)
+            run_cycle(assets, max_workers, asset_timeout_seconds)
         except Exception:
             LOGGER.exception("Power collection cycle failed before completion")
         if run_once:
