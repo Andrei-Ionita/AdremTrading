@@ -17,6 +17,12 @@ import pytz
 from dotenv import load_dotenv
 import json
 
+from horeco_intraday import (
+	HORECO_ID_RESULTS_PATH,
+	HorecoIntradayError,
+	run_horeco_intraday_forecast,
+)
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -6938,6 +6944,28 @@ def render_production_forecast():
 			# access_token = upload_file_with_retries(file_path)
 			# check_file_sync(file_path, access_token)
 		# Forecasting using the Real-Time production data	
+		st.subheader("Intraday Forecast", divider="blue")
+		if st.button("Run Horeco Intraday Forecast", key="forecast_horeco_intraday"):
+			try:
+				fetching_Horeco_data_15min()
+				df_horeco_id = run_horeco_intraday_forecast()
+			except HorecoIntradayError as exc:
+				st.error(str(exc))
+			except Exception as exc:
+				st.error(f"Horeco intraday forecast failed: {exc}")
+			else:
+				if df_horeco_id.empty:
+					st.info("No remaining Horeco intraday intervals for this delivery day.")
+				else:
+					st.dataframe(df_horeco_id)
+					with open(HORECO_ID_RESULTS_PATH, "rb") as f:
+						excel_data = f.read()
+					st.download_button(
+						"Download Horeco Intraday Forecast",
+						data=excel_data,
+						file_name="Production_Forecast_Horeco_ID_15min.xlsx",
+						mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+					)
 
 	elif PVPP == "3D Steel":
 		# Updating the indisponibility, if any
