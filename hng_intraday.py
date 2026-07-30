@@ -204,8 +204,7 @@ def get_latest_hng_forecast_origin(
             "No HNG production measurement is available for the current delivery day."
         )
 
-    last_interval_energy_mwh = power_mw * FORECAST_INTERVAL_HOURS
-    return forecast_origin, last_interval_energy_mwh
+    return forecast_origin, power_mw
 
 
 def build_hng_intraday_features(
@@ -325,10 +324,11 @@ def run_hng_intraday_forecast(
     result_path: str | Path = HNG_ID_RESULTS_PATH,
 ) -> pd.DataFrame:
     bundle = load_hng_intraday_bundle(model_path)
-    forecast_origin, last_production = get_latest_hng_forecast_origin(
+    forecast_origin, last_power_mw = get_latest_hng_forecast_origin(
         now=now,
         reading_getter=reading_getter,
     )
+    last_interval_energy_mwh = last_power_mw * FORECAST_INTERVAL_HOURS
 
     weather_file = Path(weather_path)
     if not weather_file.is_file():
@@ -341,8 +341,13 @@ def run_hng_intraday_forecast(
     result = predict_hng_intraday(
         weather_data,
         forecast_origin,
-        last_production,
+        last_interval_energy_mwh,
         bundle=bundle,
+    )
+    result.insert(
+        result.columns.get_loc("Last_Productie"),
+        "Last_Power_MW",
+        last_power_mw,
     )
     output_file = Path(result_path)
     output_file.parent.mkdir(parents=True, exist_ok=True)

@@ -110,6 +110,7 @@ class BundleTests(unittest.TestCase):
             )
             self.assertEqual(len(result), 55)
             self.assertTrue((result["Last_Productie"] == 0.8125).all())
+            self.assertTrue((result["Last_Power_MW"] == 3.25).all())
             self.assertTrue(result_path.is_file())
             exported = pd.read_excel(result_path)
             self.assertEqual(list(exported.columns), list(result.columns))
@@ -189,7 +190,7 @@ class OriginTests(unittest.TestCase):
 
         origin, production = get_latest_hng_forecast_origin(now=ORIGIN, reading_getter=getter)
         self.assertEqual(origin, ORIGIN)
-        self.assertEqual(production, 0.8125)
+        self.assertEqual(production, 3.25)
         self.assertEqual(calls[0][0], "hng")
         self.assertEqual(calls[0][1].tzinfo, timezone.utc)
 

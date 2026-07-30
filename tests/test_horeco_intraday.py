@@ -89,7 +89,7 @@ class OriginTests(unittest.TestCase):
             now=ORIGIN, reading_getter=getter
         )
         self.assertEqual(origin, ORIGIN)
-        self.assertEqual(production, 0.3125)
+        self.assertEqual(production, 1.25)
         self.assertEqual(calls[0][0], "horeco")
 
     def test_previous_day_reading_is_rejected(self):
@@ -169,6 +169,7 @@ class ForecastTests(unittest.TestCase):
             )
             self.assertEqual(len(result), 55)
             self.assertTrue((result["Last_Productie"] == 0.3125).all())
+            self.assertTrue((result["Last_Power_MW"] == 1.25).all())
             self.assertTrue(result_path.is_file())
             exported = pd.read_excel(result_path)
             self.assertEqual(list(exported.columns), list(result.columns))

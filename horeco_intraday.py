@@ -132,8 +132,7 @@ def get_latest_horeco_forecast_origin(
             "No Horeco production measurement is available for the current delivery day."
         )
 
-    last_interval_energy_mwh = power_mw * FORECAST_INTERVAL_HOURS
-    return forecast_origin, last_interval_energy_mwh
+    return forecast_origin, power_mw
 
 
 def build_horeco_baseline_features(
@@ -240,9 +239,10 @@ def run_horeco_intraday_forecast(
     result_path: str | Path = HORECO_ID_RESULTS_PATH,
 ) -> pd.DataFrame:
     baseline_model = load_horeco_baseline_model(model_path)
-    forecast_origin, last_production = get_latest_horeco_forecast_origin(
+    forecast_origin, last_power_mw = get_latest_horeco_forecast_origin(
         now=now, reading_getter=reading_getter
     )
+    last_interval_energy_mwh = last_power_mw * FORECAST_INTERVAL_HOURS
 
     weather_file = Path(weather_path)
     if not weather_file.is_file():
@@ -255,8 +255,13 @@ def run_horeco_intraday_forecast(
     result = predict_horeco_intraday(
         weather_data,
         forecast_origin,
-        last_production,
+        last_interval_energy_mwh,
         baseline_model=baseline_model,
+    )
+    result.insert(
+        result.columns.get_loc("Last_Productie"),
+        "Last_Power_MW",
+        last_power_mw,
     )
     output_file = Path(result_path)
     output_file.parent.mkdir(parents=True, exist_ok=True)
