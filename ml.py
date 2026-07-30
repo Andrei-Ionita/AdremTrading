@@ -6962,7 +6962,10 @@ def render_production_forecast():
 				if df_horeco_id.empty:
 					st.info("No remaining Horeco intraday intervals for this delivery day.")
 				else:
-					st.dataframe(df_horeco_id)
+					horeco_display = df_horeco_id.drop(
+						columns=["Last_Power_MW"], errors="ignore"
+					).rename(columns={"Last_Productie": "Last_Productie_MWh"})
+					st.dataframe(horeco_display, hide_index=True, use_container_width=True)
 					with open(HORECO_ID_RESULTS_PATH, "rb") as f:
 						excel_data = f.read()
 					st.download_button(
@@ -7598,7 +7601,10 @@ def render_production_forecast():
 					if df_hng_id.empty:
 						st.info("No remaining HNG intraday intervals for this delivery day.")
 					else:
-						st.dataframe(df_hng_id)
+						hng_display = df_hng_id.drop(
+							columns=["Last_Power_MW"], errors="ignore"
+						).rename(columns={"Last_Productie": "Last_Productie_MWh"})
+						st.dataframe(hng_display, hide_index=True, use_container_width=True)
 						with open(HNG_ID_RESULTS_PATH, "rb") as f:
 							excel_data = f.read()
 						b64 = base64.b64encode(excel_data).decode()
