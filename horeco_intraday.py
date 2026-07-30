@@ -14,7 +14,8 @@ HORECO_ID_MODEL_PATH = APP_ROOT / "Horeco" / "rs_xgb_horeco_prod_15min_0426.pkl"
 HORECO_ID_WEATHER_PATH = APP_ROOT / "Horeco" / "Solcast" / "Buzau_15min.csv"
 HORECO_ID_RESULTS_PATH = APP_ROOT / "Horeco" / "Results_Production_Horeco_ID_15min.xlsx"
 HORECO_TIMEZONE = "Europe/Bucharest"
-HORECO_MAX_OUTPUT_MW = 2.275
+FORECAST_INTERVAL_HOURS = 0.25
+HORECO_MAX_INTERVAL_ENERGY_MWH = 2.275 * FORECAST_INTERVAL_HOURS
 CORRECTION_DECAY_MINUTES = 180.0
 LOW_BASELINE_DECAY_MINUTES = 60.0
 
@@ -50,7 +51,7 @@ class HorecoIntradayModelError(HorecoIntradayError):
 class HorecoBaselineModel:
     model: object
     feature_columns: tuple[str, ...] = HORECO_BASELINE_FEATURES
-    plant_max_output: float = HORECO_MAX_OUTPUT_MW
+    plant_max_output: float = HORECO_MAX_INTERVAL_ENERGY_MWH
 
 
 def load_horeco_baseline_model(
@@ -106,8 +107,8 @@ def get_latest_horeco_forecast_origin(
             f"No Horeco production measurement is available at or before {forecast_origin}."
         )
 
-    production = _finite_number(getattr(reading, "pv_mw", None), "Horeco production")
-    if production < 0:
+    power_mw = _finite_number(getattr(reading, "pv_mw", None), "Horeco power")
+    if power_mw < 0:
         raise HorecoIntradayInputError("Horeco production cannot be negative.")
 
     observed_raw = getattr(reading, "timestamp_utc", None)
@@ -131,7 +132,8 @@ def get_latest_horeco_forecast_origin(
             "No Horeco production measurement is available for the current delivery day."
         )
 
-    return forecast_origin, production
+    last_interval_energy_mwh = power_mw * FORECAST_INTERVAL_HOURS
+    return forecast_origin, last_interval_energy_mwh
 
 
 def build_horeco_baseline_features(

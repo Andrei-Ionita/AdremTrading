@@ -17,6 +17,11 @@ import pytz
 from dotenv import load_dotenv
 import json
 
+from hng_intraday import (
+	HNGIntradayError,
+	HNG_ID_RESULTS_PATH,
+	run_hng_intraday_forecast,
+)
 from horeco_intraday import (
 	HORECO_ID_RESULTS_PATH,
 	HorecoIntradayError,
@@ -7554,6 +7559,55 @@ def render_production_forecast():
 			# access_token = upload_file_with_retries(file_path)
 			# check_file_sync(file_path, access_token)
 		# Forecasting using the Real-Time production data
+		st.subheader("HNG Forecast Models", divider="blue")
+		dam_tab, intraday_tab = st.tabs(["DAM", "Intraday"])
+
+		with dam_tab:
+			if st.button("Run HNG DAM Forecast", key="forecast_hng_dam"):
+				try:
+					fetching_HNG_data_15min()
+					predicting_exporting_HNG_15min(
+						interval_to, interval_from, limitation_percentage
+					)
+					file_path = './HNG/Results_Production_HNG_xgb_15min.xlsx'
+					df_hng_dam = pd.read_excel(file_path)
+				except Exception as exc:
+					st.error(f"HNG DAM forecast failed: {exc}")
+				else:
+					st.dataframe(df_hng_dam)
+					with open(file_path, "rb") as f:
+						excel_data = f.read()
+					b64 = base64.b64encode(excel_data).decode()
+					button_html = f"""
+						<a download="Production_Forecast_HNG_DAM_15min.xlsx" href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download>
+						<button kind="secondary" data-testid="baseButton-secondary" class="st-emotion-cache-12tniow ef3psqc12">Download HNG DAM Forecast</button>
+						</a>
+						"""
+					st.markdown(button_html, unsafe_allow_html=True)
+
+		with intraday_tab:
+			if st.button("Run HNG Intraday Forecast", key="forecast_hng_intraday"):
+				try:
+					fetching_HNG_data_15min()
+					df_hng_id = run_hng_intraday_forecast()
+				except HNGIntradayError as exc:
+					st.error(str(exc))
+				except Exception as exc:
+					st.error(f"HNG intraday forecast failed: {exc}")
+				else:
+					if df_hng_id.empty:
+						st.info("No remaining HNG intraday intervals for this delivery day.")
+					else:
+						st.dataframe(df_hng_id)
+						with open(HNG_ID_RESULTS_PATH, "rb") as f:
+							excel_data = f.read()
+						b64 = base64.b64encode(excel_data).decode()
+						button_html = f"""
+							<a download="Production_Forecast_HNG_ID_15min.xlsx" href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download>
+							<button kind="secondary" data-testid="baseButton-secondary" class="st-emotion-cache-12tniow ef3psqc12">Download HNG Intraday Forecast</button>
+							</a>
+							"""
+						st.markdown(button_html, unsafe_allow_html=True)
 		
 	# elif PVPP == "Solina":
 	# 	# Updating the indisponibility, if any

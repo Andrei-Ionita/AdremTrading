@@ -89,7 +89,7 @@ class OriginTests(unittest.TestCase):
             now=ORIGIN, reading_getter=getter
         )
         self.assertEqual(origin, ORIGIN)
-        self.assertEqual(production, 1.25)
+        self.assertEqual(production, 0.3125)
         self.assertEqual(calls[0][0], "horeco")
 
     def test_previous_day_reading_is_rejected(self):
@@ -120,19 +120,19 @@ class ForecastTests(unittest.TestCase):
 
     def test_latest_actual_anchors_and_then_decays_toward_baseline(self):
         result = predict_horeco_intraday(
-            weather_for_origin(), ORIGIN, 2.0, baseline_model=fake_model(1.0)
+            weather_for_origin(), ORIGIN, 0.5, baseline_model=fake_model(0.25)
         )
-        self.assertGreater(result["Prediction_ID"].iloc[0], 1.8)
+        self.assertGreater(result["Prediction_ID"].iloc[0], 0.45)
         self.assertGreater(result["Prediction_ID"].iloc[0], result["Prediction_ID"].iloc[-1])
-        self.assertTrue((result["Baseline_prediction"] == 1.0).all())
-        self.assertTrue((result["Last_Productie"] == 2.0).all())
+        self.assertTrue((result["Baseline_prediction"] == 0.25).all())
+        self.assertTrue((result["Last_Productie"] == 0.5).all())
         self.assertEqual(result["Forecast_horizon_minutes"].iloc[0], 15)
 
     def test_dark_intervals_are_zero(self):
         weather = weather_for_origin()
         weather.loc[1, "ghi"] = 0
         result = predict_horeco_intraday(
-            weather, ORIGIN, 2.0, baseline_model=fake_model(1.0)
+            weather, ORIGIN, 0.5, baseline_model=fake_model(0.25)
         )
         self.assertEqual(result["Prediction_ID"].iloc[0], 0)
 
@@ -168,6 +168,7 @@ class ForecastTests(unittest.TestCase):
                 result_path=result_path,
             )
             self.assertEqual(len(result), 55)
+            self.assertTrue((result["Last_Productie"] == 0.3125).all())
             self.assertTrue(result_path.is_file())
             exported = pd.read_excel(result_path)
             self.assertEqual(list(exported.columns), list(result.columns))
