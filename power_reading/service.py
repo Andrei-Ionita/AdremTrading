@@ -45,7 +45,7 @@ _ASSETS = {
     "incuba": AssetSpec("incuba", "INCUBA", DEFAULT_FUSIONSOLAR_URL, "Incuba Reproduction"),
     "motif": AssetSpec("motif", "MOTIF", DEFAULT_FUSIONSOLAR_URL, "Cai de vis"),
     "ferma_frumusica": AssetSpec(
-        "ferma_frumusica", "FERMA_FRUMUSICA", DEFAULT_FUSIONSOLAR_URL, "CEF FERMA FRUMUSICA"
+        "ferma_frumusica", "FERMA_FRUMUSICA", "https://adc-monitoring.ro/", "CEF Ferma Frumusica"
     ),
     "snk": AssetSpec("snk", "SNK", "https://10.99.219.47/ehmi/hmiapp.html", "SNK"),
     "astro": AssetSpec("astro", "ASTRO", "https://46.97.187.27/~ViewOfThings/index.html", "Astro"),
@@ -98,7 +98,7 @@ def _build_scraper(spec: AssetSpec, *, headless: bool):
     plant_name = _env(f"{spec.env_prefix}_PLANT_NAME") or spec.default_plant_name
     profile_dir = _profile_dir(spec.asset_type)
 
-    if spec.asset_type == "anto":
+    if spec.asset_type in {"anto", "ferma_frumusica"}:
         from .scrapers.adc_monitoring_scraper import ADCMonitoringScraper
 
         return ADCMonitoringScraper(
@@ -207,12 +207,14 @@ def _credentials(spec: AssetSpec) -> tuple[str | None, str | None]:
             username or _env("INCUBA_USERNAME") or _env("FUSIONSOLAR_USERNAME"),
             password or _env("INCUBA_PASSWORD") or _env("FUSIONSOLAR_PASSWORD"),
         )
+    if spec.asset_type == "ferma_frumusica":
+        return username or _env("ANTO_USERNAME"), password or _env("ANTO_PASSWORD")
     return username, password
 
 
 def _url(spec: AssetSpec) -> str:
     url = _env(f"{spec.env_prefix}_URL")
-    if spec.asset_type in {"elnet", "incuba", "motif", "ferma_frumusica", "horeco"}:
+    if spec.asset_type in {"elnet", "incuba", "motif", "horeco"}:
         url = url or _env("FUSIONSOLAR_PORTAL_URL") or _env("FUSIONSOLAR_URL")
     return url or spec.default_url
 

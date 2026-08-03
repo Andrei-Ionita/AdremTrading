@@ -1,6 +1,8 @@
 ﻿from __future__ import annotations
 
 import re
+import time
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -55,18 +57,21 @@ class ADCMonitoringScraper:
                 self._maybe_login(page)
                 self._wait_for_dashboard(page)
 
-                text = page.locator("body").first.inner_text(timeout=10_000)
-                pv_kw = _extract_metric_kw(text, "PV POWER")
-                grid_kw = _extract_metric_kw(text, "GRID EXCHANGE")
-                raw_excerpt = _compact_excerpt(text)
-                source = "adc-monitoring-text" if pv_kw is not None or grid_kw is not None else "adc-monitoring-unmatched"
+                plant_text = self._wait_for_plant_card(page)
+                pv_kw = _extract_metric_kw(plant_text, "POWER OUTPUT")
+                source = "adc-monitoring-card-power-output"
+                if pv_kw is None:
+                    pv_kw = _extract_metric_kw(plant_text, "15M AVG")
+                    source = "adc-monitoring-card-15m-avg"
+                if pv_kw is None:
+                    source = "adc-monitoring-card-unmatched"
                 return PowerSnapshot(
                     pv_kw=pv_kw,
                     load_kw=None,
-                    grid_kw=grid_kw,
+                    grid_kw=None,
                     timestamp_utc=datetime.now(tz=timezone.utc).isoformat(),
                     source=source,
-                    raw_excerpt=raw_excerpt,
+                    raw_excerpt=_compact_excerpt(plant_text),
                 )
             finally:
                 context.close()
@@ -144,6 +149,20 @@ class ADCMonitoringScraper:
         except PlaywrightTimeoutError:
             pass
 
+    def _wait_for_plant_card(self, page) -> str:
+        deadline = time.monotonic() + (self.browser_timeout_ms / 1000.0)
+        last_text = ""
+        while time.monotonic() < deadline:
+            last_text = page.locator("body").first.inner_text(timeout=10_000)
+            plant_text = _extract_plant_section(last_text, self.plant_name)
+            if plant_text and (
+                _extract_metric_kw(plant_text, "POWER OUTPUT") is not None
+                or _extract_metric_kw(plant_text, "15M AVG") is not None
+            ):
+                return plant_text
+            page.wait_for_timeout(1000)
+        return _extract_plant_section(last_text, self.plant_name) or ""
+
 
 def _looks_like_login_page(page) -> bool:
     try:
@@ -171,6 +190,24 @@ def _extract_metric_kw(text: str, label: str) -> Optional[float]:
             continue
         return _to_kw(value, match.group(2).lower())
     return None
+
+
+def _extract_plant_section(text: str, plant_name: str, max_lines: int = 12) -> str:
+    lines = [line.strip() for line in str(text or "").splitlines() if line.strip()]
+    wanted = _normalized_text(plant_name)
+    if not wanted:
+        return ""
+    for index, line in enumerate(lines):
+        candidate = _normalized_text(line)
+        if candidate == wanted or wanted in candidate:
+            return "\n".join(lines[index : index + max_lines])
+    return ""
+
+
+def _normalized_text(value: str) -> str:
+    decomposed = unicodedata.normalize("NFKD", str(value or ""))
+    ascii_like = "".join(char for char in decomposed if not unicodedata.combining(char))
+    return re.sub(r"\s+", " ", ascii_like).strip().casefold()
 
 
 def _parse_number(raw: str) -> Optional[float]:
