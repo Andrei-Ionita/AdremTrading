@@ -127,6 +127,25 @@ class ElnetFeatureTests(unittest.TestCase):
         self.assertEqual(features["Temperatura"].iloc[0], expected["air_temp"])
         self.assertEqual(features["Radiatie"].iloc[0], expected["ghi"])
 
+    def test_delayed_origin_starts_at_next_future_target(self):
+        target_start = ORIGIN + pd.Timedelta(minutes=42)
+        targets, _ = build_elnet_intraday_features(
+            weather_for_origin(),
+            ORIGIN,
+            target_start=target_start,
+        )
+        self.assertEqual(targets[0], ORIGIN + pd.Timedelta(minutes=45))
+
+        result = predict_elnet_intraday(
+            weather_for_origin(),
+            ORIGIN,
+            1.4,
+            bundle=fake_bundle(),
+            target_start=target_start,
+        )
+        self.assertEqual(result["Forecast_horizon_minutes"].iloc[0], 45)
+        self.assertEqual(result["Correction_weight"].iloc[0], 0.7071)
+
     def test_missing_or_invalid_weather_fails_clearly(self):
         with self.assertRaisesRegex(ElnetIntradayInputError, "missing 1 required intervals"):
             build_elnet_intraday_features(weather_for_origin().iloc[:-1], ORIGIN)
@@ -167,6 +186,50 @@ class ElnetProductionTests(unittest.TestCase):
         self.assertEqual(calls[0][0], "elnet")
         self.assertEqual(calls[0][1].tzinfo, timezone.utc)
         self.assertEqual(calls[0][2].tzinfo, timezone.utc)
+
+    def test_origin_rolls_back_one_quarter_to_latest_supported_boundary(self):
+        latest = PowerReading(
+            "elnet",
+            pd.Timestamp("2026-06-01 10:07", tz="Europe/Bucharest")
+            .tz_convert("UTC")
+            .isoformat(),
+            3.25,
+            None,
+            None,
+            "test",
+        )
+        calls = []
+
+        def getter(asset, *, start, end):
+            calls.append((asset, start, end))
+            return production_readings()
+
+        origin, energy = get_latest_elnet_forecast_origin(
+            now=ORIGIN + pd.Timedelta(minutes=29),
+            readings_getter=getter,
+            latest_reading_getter=lambda *args, **kwargs: latest,
+        )
+        self.assertEqual(origin, ORIGIN)
+        self.assertEqual(energy, 0.8125)
+        self.assertEqual(calls[0][2], ORIGIN.tz_convert("UTC").to_pydatetime())
+
+    def test_origin_rejects_measurements_more_than_one_quarter_behind(self):
+        stale = PowerReading(
+            "elnet",
+            pd.Timestamp("2026-06-01 09:44", tz="Europe/Bucharest")
+            .tz_convert("UTC")
+            .isoformat(),
+            3.25,
+            None,
+            None,
+            "test",
+        )
+        with self.assertRaisesRegex(ElnetIntradayInputError, "too old"):
+            get_latest_elnet_forecast_origin(
+                now=ORIGIN + pd.Timedelta(minutes=29),
+                readings_getter=lambda *args, **kwargs: production_readings(),
+                latest_reading_getter=lambda *args, **kwargs: stale,
+            )
 
     def test_missing_production_fails_clearly(self):
         with self.assertRaisesRegex(ElnetIntradayInputError, "No Elnet power samples"):

@@ -162,6 +162,25 @@ class HorecoProductionTests(unittest.TestCase):
         self.assertEqual(calls[0][1].tzinfo, timezone.utc)
         self.assertEqual(calls[0][2].tzinfo, timezone.utc)
 
+    def test_origin_rolls_back_one_quarter_to_latest_supported_boundary(self):
+        latest = PowerReading(
+            "horeco",
+            pd.Timestamp("2026-07-29 10:07", tz="Europe/Bucharest")
+            .tz_convert("UTC")
+            .isoformat(),
+            1.25,
+            None,
+            None,
+            "test",
+        )
+        origin, energy = get_latest_horeco_forecast_origin(
+            now=ORIGIN + pd.Timedelta(minutes=29),
+            readings_getter=lambda *args, **kwargs: production_readings(),
+            latest_reading_getter=lambda *args, **kwargs: latest,
+        )
+        self.assertEqual(origin, ORIGIN)
+        self.assertEqual(energy, 0.3125)
+
     def test_missing_production_fails_clearly(self):
         with self.assertRaisesRegex(HorecoIntradayInputError, "No Horeco power samples"):
             get_latest_horeco_forecast_origin(

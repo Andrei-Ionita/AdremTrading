@@ -31,9 +31,17 @@ from data_fetching.entsoe_newapi_data import fetch_process_wind_notified, fetch_
 from data_fetching.entsoe_newapi_data import fetch_consumption_forecast, fetch_actual_consumption, render_test_entsoe_newapi_functions
 from data_fetching.entsoe_newapi_data import fetch_process_hydro_water_reservoir_actual_production, fetch_process_hydro_river_actual_production, fetch_volue_hydro_data, align_and_combine_hydro_data
 from data_fetching.entsoe_newapi_data import fetch_igcc_netting_flows
-from elnet_intraday import ELNET_INTRADAY_RESULTS_PATH, run_elnet_intraday_forecast
-from hng_intraday import HNG_INTRADAY_RESULTS_PATH, run_hng_intraday_forecast
-from horeco_intraday import HORECO_INTRADAY_RESULTS_PATH, run_horeco_intraday_forecast
+from elnet_intraday import (
+	ELNET_INTRADAY_RESULTS_PATH,
+	ElnetIntradayError,
+	run_elnet_intraday_forecast,
+)
+from hng_intraday import HNG_INTRADAY_RESULTS_PATH, HNGIntradayError, run_hng_intraday_forecast
+from horeco_intraday import (
+	HORECO_INTRADAY_RESULTS_PATH,
+	HorecoIntradayError,
+	run_horeco_intraday_forecast,
+)
 #=====================================================================Data Engineering============================================================================================================
 api_key_entsoe = os.getenv("api_key_entsoe")
 client = EntsoePandasClient(api_key=api_key_entsoe)
@@ -441,7 +449,11 @@ def create_excel_file_with_all_forecasts():
 	df_all.to_excel("./Forecast.xlsx", index=False)
 	return df_all
 
-def create_excel_file_with_all_forecasts_15min():
+def create_excel_file_with_all_forecasts_15min(
+	use_elnet_intraday=True,
+	use_horeco_intraday=True,
+	use_hng_intraday=True,
+):
 	df_Astro = pd.read_excel("./Astro/Results_Production_Astro_xgb_15min.xlsx")
 	df_Imperial = pd.read_excel("./Imperial/Results_Production_Imperial_xgb_15min.xlsx")
 	df_Kahraman = pd.read_excel("./Kahraman/Results_Production_Kahraman_xgb_15min.xlsx")
@@ -474,7 +486,7 @@ def create_excel_file_with_all_forecasts_15min():
 	df_all["Prediction_SolEn_Ulmeni"] = df_SolarEnergy["Prediction"]
 	df_all["Prediction_PCSunEn"] = df_SunEnergy["Prediction"]
 	df_all["Prediction_Elnet"] = df_Elnet["Prediction"]
-	if ELNET_INTRADAY_RESULTS_PATH.is_file():
+	if use_elnet_intraday and ELNET_INTRADAY_RESULTS_PATH.is_file():
 		df_Elnet_intraday = pd.read_excel(ELNET_INTRADAY_RESULTS_PATH)
 		if not df_Elnet_intraday.empty:
 			elnet_intraday_by_timestamp = (
@@ -485,7 +497,7 @@ def create_excel_file_with_all_forecasts_15min():
 			corrected_elnet = pd.to_datetime(df_all["Data"]).map(elnet_intraday_by_timestamp)
 			df_all["Prediction_Elnet"] = corrected_elnet.combine_first(df_all["Prediction_Elnet"])
 	df_all["Prediction_Horeco"] = df_Horeco["Prediction"]
-	if HORECO_INTRADAY_RESULTS_PATH.is_file():
+	if use_horeco_intraday and HORECO_INTRADAY_RESULTS_PATH.is_file():
 		df_Horeco_intraday = pd.read_excel(HORECO_INTRADAY_RESULTS_PATH)
 		if not df_Horeco_intraday.empty:
 			horeco_intraday_by_timestamp = (
@@ -509,7 +521,7 @@ def create_excel_file_with_all_forecasts_15min():
 	df_all["Prediction_Motif"] = df_Motif["Prediction"]
 	df_all["Prediction_Ferma"] = df_Ferma["Prediction"]
 	df_all["Prediction_HNG"] = df_HNG["Prediction"]
-	if HNG_INTRADAY_RESULTS_PATH.is_file():
+	if use_hng_intraday and HNG_INTRADAY_RESULTS_PATH.is_file():
 		df_HNG_intraday = pd.read_excel(HNG_INTRADAY_RESULTS_PATH)
 		if not df_HNG_intraday.empty:
 			hng_intraday_by_timestamp = (
@@ -536,6 +548,9 @@ def render_balancing_market_intraday_page():
 	with col1:
 		# Forecasting the entire Intraday Portfolio at once
 		if st.button("Forecast Portfolio"):
+			elnet_intraday_available = False
+			horeco_intraday_available = False
+			hng_intraday_available = False
 			# Forecasting Astro
 			# Updating the indisponibility, if any
 			result_Astro = render_indisponibility_db_Astro()
@@ -687,7 +702,13 @@ def render_balancing_market_intraday_page():
 			# access_token = upload_file_with_retries(file_path)
 			# check_file_sync(file_path, access_token)
 			predicting_exporting_Elnet_15min(interval_to, interval_from, limitation_percentage)
-			st.dataframe(run_elnet_intraday_forecast())
+			try:
+				df_elnet_intraday = run_elnet_intraday_forecast()
+			except ElnetIntradayError as exc:
+				st.warning(f"Elnet correction skipped; DAM retained: {exc}")
+			else:
+				elnet_intraday_available = True
+				st.dataframe(df_elnet_intraday)
 			file_path = './Elnet/Results_Production_Elnet_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
 			# access_token = upload_file_with_retries(file_path)
@@ -714,7 +735,13 @@ def render_balancing_market_intraday_page():
 			# access_token = upload_file_with_retries(file_path)
 			# check_file_sync(file_path, access_token)
 			predicting_exporting_Horeco_15min(interval_to, interval_from, limitation_percentage)
-			st.dataframe(run_horeco_intraday_forecast())
+			try:
+				df_horeco_intraday = run_horeco_intraday_forecast()
+			except HorecoIntradayError as exc:
+				st.warning(f"Horeco correction skipped; DAM retained: {exc}")
+			else:
+				horeco_intraday_available = True
+				st.dataframe(df_horeco_intraday)
 			file_path = './Horeco/Results_Production_Horeco_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
 			# access_token = upload_file_with_retries(file_path)
@@ -1007,7 +1034,13 @@ def render_balancing_market_intraday_page():
 				limitation_percentage = 0
 			fetching_HNG_data_15min()
 			predicting_exporting_HNG_15min(interval_to, interval_from, limitation_percentage)
-			st.dataframe(run_hng_intraday_forecast())
+			try:
+				df_hng_intraday = run_hng_intraday_forecast()
+			except HNGIntradayError as exc:
+				st.warning(f"HNG correction skipped; DAM retained: {exc}")
+			else:
+				hng_intraday_available = True
+				st.dataframe(df_hng_intraday)
 			file_path = './HNG/Results_Production_HNG_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
 			# access_token = upload_file_with_retries(file_path)
@@ -1015,7 +1048,11 @@ def render_balancing_market_intraday_page():
 
 			# Keep the portfolio workbooks synchronized with the forecasts from this run.
 			create_excel_file_with_all_forecasts()
-			create_excel_file_with_all_forecasts_15min()
+			create_excel_file_with_all_forecasts_15min(
+				use_elnet_intraday=elnet_intraday_available,
+				use_horeco_intraday=horeco_intraday_available,
+				use_hng_intraday=hng_intraday_available,
+			)
 
 	with col2:
 		if st.button("Create Excel File with all the forecasts"):

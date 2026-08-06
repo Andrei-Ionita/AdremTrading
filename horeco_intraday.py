@@ -166,17 +166,24 @@ def get_latest_horeco_forecast_origin(
     *,
     now: pd.Timestamp | None = None,
     readings_getter: Callable | None = None,
+    latest_reading_getter: Callable | None = None,
 ) -> tuple[pd.Timestamp, float]:
     current_time = _local_timestamp(
         now if now is not None else pd.Timestamp.now(tz=HORECO_TIMEZONE)
     )
-    forecast_origin = current_time.floor("15min")
-    interval_start = forecast_origin - pd.Timedelta(minutes=15)
 
     if readings_getter is None:
-        from power_reading.database import get_interval_readings
+        from power_reading.database import get_interval_readings, get_latest_reading
 
         readings_getter = get_interval_readings
+        latest_reading_getter = latest_reading_getter or get_latest_reading
+
+    forecast_origin = _latest_supported_origin(
+        current_time,
+        latest_reading_getter,
+        "horeco",
+    )
+    interval_start = forecast_origin - pd.Timedelta(minutes=15)
 
     try:
         readings = readings_getter(
@@ -197,14 +204,18 @@ def build_horeco_baseline_features(
     weather_data: pd.DataFrame,
     forecast_origin: pd.Timestamp,
     feature_columns: tuple[str, ...] = HORECO_BASELINE_FEATURES,
+    target_start: pd.Timestamp | None = None,
 ) -> tuple[pd.DatetimeIndex, pd.DataFrame]:
     origin = _local_timestamp(forecast_origin)
     if origin != origin.floor("15min"):
         raise HorecoIntradayInputError("Forecast_origin must be on a 15-minute boundary.")
 
     day_end = origin.normalize() + pd.Timedelta(hours=23, minutes=45)
+    first_target = origin + pd.Timedelta(minutes=15)
+    if target_start is not None:
+        first_target = max(first_target, _local_timestamp(target_start).ceil("15min"))
     targets = pd.date_range(
-        start=origin + pd.Timedelta(minutes=15),
+        start=first_target,
         end=day_end,
         freq="15min",
         tz=HORECO_TIMEZONE,
@@ -238,12 +249,14 @@ def predict_horeco_intraday(
     last_interval_energy_mwh: float,
     *,
     baseline_model: HorecoBaselineModel | None = None,
+    target_start: pd.Timestamp | None = None,
 ) -> pd.DataFrame:
     active_model = baseline_model or load_horeco_baseline_model()
     targets, features = build_horeco_baseline_features(
         weather_data,
         forecast_origin,
         active_model.feature_columns,
+        target_start,
     )
     if features.empty:
         return _empty_result()
@@ -307,14 +320,19 @@ def run_horeco_intraday_forecast(
     *,
     now: pd.Timestamp | None = None,
     readings_getter: Callable | None = None,
+    latest_reading_getter: Callable | None = None,
     model_path: str | Path = HORECO_DAM_MODEL_PATH,
     weather_path: str | Path = HORECO_WEATHER_PATH,
     result_path: str | Path = HORECO_INTRADAY_RESULTS_PATH,
 ) -> pd.DataFrame:
     baseline_model = load_horeco_baseline_model(model_path)
+    run_time = _local_timestamp(
+        now if now is not None else pd.Timestamp.now(tz=HORECO_TIMEZONE)
+    )
     forecast_origin, last_interval_energy_mwh = get_latest_horeco_forecast_origin(
-        now=now,
+        now=run_time,
         readings_getter=readings_getter,
+        latest_reading_getter=latest_reading_getter,
     )
     weather_file = Path(weather_path)
     if not weather_file.is_file():
@@ -329,6 +347,7 @@ def run_horeco_intraday_forecast(
         forecast_origin,
         last_interval_energy_mwh,
         baseline_model=baseline_model,
+        target_start=run_time,
     )
     output_file = Path(result_path)
     output_file.parent.mkdir(parents=True, exist_ok=True)
@@ -387,6 +406,38 @@ def _local_timestamp(value) -> pd.Timestamp:
     if timestamp.tzinfo is None:
         return timestamp.tz_localize(HORECO_TIMEZONE)
     return timestamp.tz_convert(HORECO_TIMEZONE)
+
+
+def _latest_supported_origin(
+    current_time: pd.Timestamp,
+    latest_reading_getter: Callable | None,
+    asset: str,
+) -> pd.Timestamp:
+    wall_origin = current_time.floor("15min")
+    if latest_reading_getter is None:
+        return wall_origin
+
+    before_utc = (current_time + pd.Timedelta(microseconds=1)).tz_convert(
+        "UTC"
+    ).to_pydatetime()
+    try:
+        latest = latest_reading_getter(asset, before=before_utc)
+    except Exception as exc:
+        raise HorecoIntradayInputError(
+            f"Could not retrieve the latest Horeco production timestamp: {exc}"
+        ) from exc
+    if latest is None:
+        raise HorecoIntradayInputError("No Horeco production measurement is available.")
+
+    observed_at = pd.Timestamp(getattr(latest, "timestamp_utc", None))
+    if observed_at.tzinfo is None:
+        raise HorecoIntradayInputError(
+            "The latest Horeco production timestamp has no timezone."
+        )
+    supported_origin = min(wall_origin, observed_at.tz_convert(HORECO_TIMEZONE).floor("15min"))
+    if wall_origin - supported_origin > pd.Timedelta(minutes=15):
+        raise HorecoIntradayInputError("The latest Horeco production measurement is too old.")
+    return supported_origin
 
 
 def _finite_number(value, label: str) -> float:

@@ -261,6 +261,25 @@ class OriginTests(unittest.TestCase):
         self.assertEqual(calls[0][1].tzinfo, timezone.utc)
         self.assertEqual(calls[0][2].tzinfo, timezone.utc)
 
+    def test_origin_rolls_back_one_quarter_to_latest_supported_boundary(self):
+        latest = PowerReading(
+            "hng",
+            pd.Timestamp("2026-06-01 10:07", tz="Europe/Bucharest")
+            .tz_convert("UTC")
+            .isoformat(),
+            3.25,
+            None,
+            None,
+            "test",
+        )
+        origin, production = get_latest_hng_forecast_origin(
+            now=ORIGIN + pd.Timedelta(minutes=29),
+            readings_getter=lambda *args, **kwargs: production_readings(),
+            latest_reading_getter=lambda *args, **kwargs: latest,
+        )
+        self.assertEqual(origin, ORIGIN)
+        self.assertEqual(production, 0.8125)
+
     def test_missing_or_invalid_live_production_fails_clearly(self):
         with self.assertRaisesRegex(HNGIntradayInputError, "No HNG power samples"):
             get_latest_hng_forecast_origin(
