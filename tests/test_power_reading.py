@@ -5,7 +5,12 @@ import unittest
 from datetime import datetime, timezone
 from unittest.mock import patch
 
-from power_reading.database import get_database_url, get_latest_reading, store_readings
+from power_reading.database import (
+    get_database_url,
+    get_interval_readings,
+    get_latest_reading,
+    store_readings,
+)
 from power_reading.service import PowerReading
 from power_reading.worker import collect_once
 
@@ -26,6 +31,9 @@ class FakeCursor:
 
     def fetchone(self):
         return self.rows[0] if self.rows else None
+
+    def fetchall(self):
+        return self.rows
 
 
 class FakeConnection:
@@ -65,6 +73,19 @@ class DatabaseTests(unittest.TestCase):
         result = get_latest_reading("incuba", connection=connection)
         self.assertEqual(result.pv_mw, 0.42)
         self.assertEqual(result.timestamp_utc, observed.isoformat())
+
+    def test_interval_readings_include_boundary_sample_and_interval_samples(self):
+        start = datetime(2026, 7, 26, 9, 45, tzinfo=timezone.utc)
+        end = datetime(2026, 7, 26, 10, 0, tzinfo=timezone.utc)
+        rows = [
+            ("hng", start, 0.4, None, None, "test", ""),
+            ("hng", end, 0.5, None, None, "test", ""),
+        ]
+        connection = FakeConnection(rows)
+        result = get_interval_readings("hng", start=start, end=end, connection=connection)
+        self.assertEqual([item.pv_mw for item in result], [0.4, 0.5])
+        _, params = connection.cursor_instance.executions[0]
+        self.assertEqual(params, ("hng", start, "hng", start, end))
 
 
 class WorkerTests(unittest.TestCase):

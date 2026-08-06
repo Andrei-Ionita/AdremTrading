@@ -10,14 +10,22 @@ import pandas as pd
 
 
 APP_ROOT = Path(__file__).resolve().parent
-HORECO_ID_MODEL_PATH = APP_ROOT / "Horeco" / "rs_xgb_horeco_prod_15min_0426.pkl"
-HORECO_ID_WEATHER_PATH = APP_ROOT / "Horeco" / "Solcast" / "Buzau_15min.csv"
-HORECO_ID_RESULTS_PATH = APP_ROOT / "Horeco" / "Results_Production_Horeco_ID_15min.xlsx"
+HORECO_DAM_MODEL_PATH = APP_ROOT / "Horeco" / "rs_xgb_horeco_prod_15min_0426.pkl"
+HORECO_WEATHER_PATH = APP_ROOT / "Horeco" / "Solcast" / "Buzau_15min.csv"
+HORECO_INTRADAY_RESULTS_PATH = (
+    APP_ROOT / "Horeco" / "Results_Production_Horeco_DAM_Corrected_Intraday_15min.xlsx"
+)
+# Compatibility aliases for the existing UI imports.
+HORECO_ID_MODEL_PATH = HORECO_DAM_MODEL_PATH
+HORECO_ID_WEATHER_PATH = HORECO_WEATHER_PATH
+HORECO_ID_RESULTS_PATH = HORECO_INTRADAY_RESULTS_PATH
 HORECO_TIMEZONE = "Europe/Bucharest"
 FORECAST_INTERVAL_HOURS = 0.25
 HORECO_MAX_INTERVAL_ENERGY_MWH = 2.275 * FORECAST_INTERVAL_HOURS
-CORRECTION_DECAY_MINUTES = 180.0
-LOW_BASELINE_DECAY_MINUTES = 60.0
+MAX_BOUNDARY_AGE = pd.Timedelta(minutes=5)
+MAX_SAMPLE_GAP = pd.Timedelta(minutes=7, seconds=30)
+CORRECTION_INITIAL_WEIGHT = 1.0
+CORRECTION_HALF_LIFE_MINUTES = 60.0
 
 HORECO_BASELINE_FEATURES = (
     "Interval",
@@ -36,15 +44,15 @@ WEATHER_COLUMNS = {
 
 
 class HorecoIntradayError(RuntimeError):
-    """Base error for a user-facing Horeco intraday forecast failure."""
+    """Base error for a safe, user-facing Horeco intraday forecast failure."""
 
 
 class HorecoIntradayInputError(HorecoIntradayError):
-    """Raised when live production or target weather is invalid."""
+    """Raised when Horeco production or target weather is missing or invalid."""
 
 
 class HorecoIntradayModelError(HorecoIntradayError):
-    """Raised when the stored Horeco baseline model is incompatible."""
+    """Raised when the stored Horeco DAM model is incompatible."""
 
 
 @dataclass(frozen=True)
@@ -55,109 +63,171 @@ class HorecoBaselineModel:
 
 
 def load_horeco_baseline_model(
-    model_path: str | Path = HORECO_ID_MODEL_PATH,
+    model_path: str | Path = HORECO_DAM_MODEL_PATH,
 ) -> HorecoBaselineModel:
     path = Path(model_path)
     if not path.is_file():
-        raise HorecoIntradayModelError(f"Horeco baseline model was not found: {path}")
+        raise HorecoIntradayModelError(f"Horeco DAM model was not found: {path}")
 
     try:
         model = joblib.load(path)
     except Exception as exc:
-        raise HorecoIntradayModelError(f"Could not load the Horeco baseline model: {exc}") from exc
+        raise HorecoIntradayModelError(f"Could not load the Horeco DAM model: {exc}") from exc
 
     if not callable(getattr(model, "predict", None)):
-        raise HorecoIntradayModelError("The Horeco baseline model is not usable.")
+        raise HorecoIntradayModelError("The Horeco DAM model file does not contain a usable model.")
+    feature_names = getattr(model, "feature_names_in_", None)
+    if feature_names is not None and tuple(feature_names) != HORECO_BASELINE_FEATURES:
+        raise HorecoIntradayModelError(
+            "The Horeco DAM model feature names do not match the production feature order."
+        )
     feature_count = int(getattr(model, "n_features_in_", len(HORECO_BASELINE_FEATURES)))
     if feature_count != len(HORECO_BASELINE_FEATURES):
         raise HorecoIntradayModelError(
-            "The Horeco baseline model does not match the expected six input features."
+            "The Horeco DAM model does not match the expected six input features."
         )
 
     return HorecoBaselineModel(model=model)
 
 
+def calculate_horeco_interval_energy(
+    readings,
+    interval_start: pd.Timestamp,
+    interval_end: pd.Timestamp,
+) -> float:
+    start = _local_timestamp(interval_start)
+    end = _local_timestamp(interval_end)
+    if start >= end:
+        raise HorecoIntradayInputError("The Horeco production interval is invalid.")
+
+    samples = []
+    for reading in readings:
+        observed_raw = getattr(reading, "timestamp_utc", None)
+        try:
+            observed_at = pd.Timestamp(observed_raw)
+        except Exception as exc:
+            raise HorecoIntradayInputError("A Horeco production timestamp is invalid.") from exc
+        if observed_at.tzinfo is None:
+            raise HorecoIntradayInputError("A Horeco production timestamp has no timezone.")
+        observed_at = observed_at.tz_convert(HORECO_TIMEZONE)
+        power_mw = _finite_number(getattr(reading, "pv_mw", None), "Horeco power")
+        if power_mw < 0:
+            raise HorecoIntradayInputError("Horeco production cannot be negative.")
+        samples.append((observed_at, power_mw))
+
+    if not samples:
+        raise HorecoIntradayInputError(
+            f"No Horeco power samples are available for the completed interval {start} to {end}."
+        )
+
+    samples.sort(key=lambda sample: sample[0])
+    timestamps = pd.DatetimeIndex(sample[0] for sample in samples)
+    if timestamps.duplicated().any():
+        raise HorecoIntradayInputError("Horeco production contains duplicate sample timestamps.")
+    if timestamps[-1] > end:
+        raise HorecoIntradayInputError(
+            "Horeco interval energy cannot use samples after the interval end."
+        )
+
+    start_candidates = [sample for sample in samples if sample[0] <= start]
+    if not start_candidates:
+        raise HorecoIntradayInputError(
+            "Horeco interval energy requires a power sample at or before the interval start."
+        )
+    start_sample = start_candidates[-1]
+    end_sample = samples[-1]
+    if start - start_sample[0] > MAX_BOUNDARY_AGE:
+        raise HorecoIntradayInputError("The Horeco sample at the interval start is too old.")
+    if end - end_sample[0] > MAX_BOUNDARY_AGE:
+        raise HorecoIntradayInputError("The Horeco sample at the interval end is too old.")
+
+    relevant = [sample for sample in samples if start_sample[0] <= sample[0] <= end]
+    if len(relevant) > 1:
+        gaps = pd.Series([sample[0] for sample in relevant]).diff().dropna()
+        if (gaps > MAX_SAMPLE_GAP).any():
+            raise HorecoIntradayInputError(
+                "Horeco power samples contain a gap larger than 7.5 minutes."
+            )
+
+    points = [(start, start_sample[1])]
+    points.extend(sample for sample in samples if start < sample[0] < end)
+    points.append((end, end_sample[1]))
+
+    energy_mwh = 0.0
+    for (left_time, left_power), (right_time, right_power) in zip(points, points[1:]):
+        duration_hours = (right_time - left_time).total_seconds() / 3600
+        energy_mwh += (left_power + right_power) / 2 * duration_hours
+    if not np.isfinite(energy_mwh) or energy_mwh < 0:
+        raise HorecoIntradayInputError("Calculated Horeco interval energy is invalid.")
+    return float(energy_mwh)
+
+
 def get_latest_horeco_forecast_origin(
     *,
     now: pd.Timestamp | None = None,
-    reading_getter: Callable | None = None,
+    readings_getter: Callable | None = None,
 ) -> tuple[pd.Timestamp, float]:
     current_time = _local_timestamp(
         now if now is not None else pd.Timestamp.now(tz=HORECO_TIMEZONE)
     )
     forecast_origin = current_time.floor("15min")
+    interval_start = forecast_origin - pd.Timedelta(minutes=15)
 
-    if reading_getter is None:
-        from power_reading.database import get_latest_reading
+    if readings_getter is None:
+        from power_reading.database import get_interval_readings
 
-        reading_getter = get_latest_reading
+        readings_getter = get_interval_readings
 
-    before_utc = (forecast_origin + pd.Timedelta(microseconds=1)).tz_convert(
-        "UTC"
-    ).to_pydatetime()
     try:
-        reading = reading_getter("horeco", before=before_utc)
+        readings = readings_getter(
+            "horeco",
+            start=interval_start.tz_convert("UTC").to_pydatetime(),
+            end=forecast_origin.tz_convert("UTC").to_pydatetime(),
+        )
     except Exception as exc:
         raise HorecoIntradayInputError(
-            f"Could not retrieve the latest Horeco production: {exc}"
+            f"Could not retrieve Horeco interval production: {exc}"
         ) from exc
 
-    if reading is None:
-        raise HorecoIntradayInputError(
-            f"No Horeco production measurement is available at or before {forecast_origin}."
-        )
-
-    power_mw = _finite_number(getattr(reading, "pv_mw", None), "Horeco power")
-    if power_mw < 0:
-        raise HorecoIntradayInputError("Horeco production cannot be negative.")
-
-    observed_raw = getattr(reading, "timestamp_utc", None)
-    try:
-        observed_at = pd.Timestamp(observed_raw)
-    except Exception as exc:
-        raise HorecoIntradayInputError(
-            "The latest Horeco production timestamp is invalid."
-        ) from exc
-    if observed_at.tzinfo is None:
-        raise HorecoIntradayInputError(
-            "The latest Horeco production timestamp has no timezone."
-        )
-    observed_at = observed_at.tz_convert(HORECO_TIMEZONE)
-    if observed_at > forecast_origin:
-        raise HorecoIntradayInputError(
-            "The selected Horeco production measurement occurs after Forecast_origin."
-        )
-    if observed_at.date() != forecast_origin.date():
-        raise HorecoIntradayInputError(
-            "No Horeco production measurement is available for the current delivery day."
-        )
-
-    return forecast_origin, power_mw
+    energy_mwh = calculate_horeco_interval_energy(readings, interval_start, forecast_origin)
+    return forecast_origin, energy_mwh
 
 
 def build_horeco_baseline_features(
     weather_data: pd.DataFrame,
     forecast_origin: pd.Timestamp,
+    feature_columns: tuple[str, ...] = HORECO_BASELINE_FEATURES,
 ) -> tuple[pd.DatetimeIndex, pd.DataFrame]:
     origin = _local_timestamp(forecast_origin)
     if origin != origin.floor("15min"):
         raise HorecoIntradayInputError("Forecast_origin must be on a 15-minute boundary.")
 
     day_end = origin.normalize() + pd.Timedelta(hours=23, minutes=45)
-    targets = pd.date_range(start=origin, end=day_end, freq="15min", tz=HORECO_TIMEZONE)
-    weather = _target_weather(weather_data, targets)
+    targets = pd.date_range(
+        start=origin + pd.Timedelta(minutes=15),
+        end=day_end,
+        freq="15min",
+        tz=HORECO_TIMEZONE,
+    )
+    if len(targets) == 0:
+        return targets, pd.DataFrame(columns=list(feature_columns), index=targets)
 
+    weather = _target_weather(weather_data, targets)
     features = pd.DataFrame(index=targets)
     features["Interval"] = targets.hour * 4 + targets.minute // 15 + 1
     for column in WEATHER_COLUMNS.values():
         features[column] = weather[column].to_numpy()
     features["Month"] = targets.month
     features["is_dark"] = (features["Radiatie"] <= 0).astype(int)
-    features = features.loc[:, list(HORECO_BASELINE_FEATURES)]
 
+    if tuple(feature_columns) != HORECO_BASELINE_FEATURES:
+        raise HorecoIntradayModelError(
+            "The requested Horeco DAM feature order does not match the production schema."
+        )
+    features = features.loc[:, list(feature_columns)]
     if not np.isfinite(features.to_numpy(dtype=float)).all():
         raise HorecoIntradayInputError(
-            "Horeco intraday model inputs contain NaN or infinite values."
+            "Horeco DAM model inputs contain NaN or infinite values."
         )
     return targets, features
 
@@ -165,66 +235,69 @@ def build_horeco_baseline_features(
 def predict_horeco_intraday(
     weather_data: pd.DataFrame,
     forecast_origin: pd.Timestamp,
-    last_production: float,
+    last_interval_energy_mwh: float,
     *,
     baseline_model: HorecoBaselineModel | None = None,
 ) -> pd.DataFrame:
-    origin = _local_timestamp(forecast_origin)
-    production = _finite_number(last_production, "Last_Productie")
-    if production < 0:
-        raise HorecoIntradayInputError("Last_Productie cannot be negative.")
-    if origin.time() == pd.Timestamp("23:45").time():
+    active_model = baseline_model or load_horeco_baseline_model()
+    targets, features = build_horeco_baseline_features(
+        weather_data,
+        forecast_origin,
+        active_model.feature_columns,
+    )
+    if features.empty:
         return _empty_result()
 
-    active_model = baseline_model or load_horeco_baseline_model()
-    targets, features = build_horeco_baseline_features(weather_data, origin)
     try:
-        raw_baseline = np.asarray(
-            active_model.model.predict(features.to_numpy()), dtype=float
-        ).reshape(-1)
+        raw_baseline = np.asarray(active_model.model.predict(features), dtype=float).reshape(-1)
     except Exception as exc:
-        raise HorecoIntradayModelError(f"Horeco baseline inference failed: {exc}") from exc
+        raise HorecoIntradayModelError(f"Horeco DAM model inference failed: {exc}") from exc
     if len(raw_baseline) != len(features):
-        raise HorecoIntradayModelError("The Horeco baseline model returned an unexpected row count.")
+        raise HorecoIntradayModelError("The Horeco DAM model returned an unexpected row count.")
     if not np.isfinite(raw_baseline).all():
         raise HorecoIntradayModelError(
-            "Horeco baseline predictions contain NaN or infinite values."
+            "Horeco DAM predictions contain NaN or infinite values."
         )
 
     baseline = np.clip(raw_baseline, 0, active_model.plant_max_output)
-    baseline[features["is_dark"].to_numpy(dtype=int) == 1] = 0
-    origin_baseline = float(baseline[0])
-    future_targets = targets[1:]
-    future_features = features.iloc[1:]
-    future_baseline = baseline[1:]
-    horizons = np.asarray(
-        (future_targets - origin) / pd.Timedelta(minutes=1), dtype=float
+    dark_targets = features["is_dark"].to_numpy(dtype=int) == 1
+    baseline[dark_targets] = 0
+
+    origin = _local_timestamp(forecast_origin)
+    actual_energy = _finite_number(last_interval_energy_mwh, "Last_Productie")
+    if actual_energy < 0:
+        raise HorecoIntradayInputError("Last_Productie cannot be negative.")
+
+    reference_prediction = float(baseline[0])
+    residual = actual_energy - reference_prediction
+    horizons = ((targets - origin) / pd.Timedelta(minutes=1)).astype(int)
+    correction_weights = CORRECTION_INITIAL_WEIGHT * np.exp(
+        -np.log(2)
+        * (horizons.to_numpy(dtype=float) - 15.0)
+        / CORRECTION_HALF_LIFE_MINUTES
     )
-    decay = np.exp(-horizons / CORRECTION_DECAY_MINUTES)
-
-    if origin_baseline >= 0.05:
-        observed_ratio = np.clip(production / origin_baseline, 0.0, 3.0)
-        correction_factor = 1.0 + (observed_ratio - 1.0) * decay
-        predictions = future_baseline * correction_factor
-    else:
-        low_baseline_decay = np.exp(-horizons / LOW_BASELINE_DECAY_MINUTES)
-        predictions = future_baseline + production * low_baseline_decay
-
-    predictions = np.clip(predictions, 0, active_model.plant_max_output)
-    predictions[future_features["is_dark"].to_numpy(dtype=int) == 1] = 0
-    predictions = np.round(predictions, 3)
-    future_baseline = np.round(future_baseline, 3)
+    corrections = correction_weights * residual
+    predictions = np.clip(
+        baseline + corrections,
+        0,
+        active_model.plant_max_output,
+    )
+    predictions[dark_targets] = 0
+    corrections[dark_targets] = -baseline[dark_targets]
 
     return pd.DataFrame(
         {
-            "Data": future_targets.tz_localize(None),
-            "Interval": future_features["Interval"].to_numpy(dtype=int),
-            "Prediction_ID": predictions,
-            "Baseline_prediction": future_baseline,
-            "Actual_correction": np.round(predictions - future_baseline, 3),
+            "Data": targets.tz_localize(None),
+            "Interval": features["Interval"].to_numpy(dtype=int),
+            "Prediction_DAM": np.round(baseline, 3),
+            "Correction": np.round(corrections, 3),
+            "Prediction_ID": np.round(predictions, 3),
             "Forecast_origin": origin.tz_localize(None),
-            "Last_Productie": production,
-            "Forecast_horizon_minutes": horizons.astype(int),
+            "Last_Productie": actual_energy,
+            "Reference_DAM_Prediction": round(reference_prediction, 3),
+            "Actual_minus_DAM": round(residual, 3),
+            "Correction_weight": np.round(correction_weights, 4),
+            "Forecast_horizon_minutes": horizons,
             "Market": "Intraday",
         }
     )
@@ -233,17 +306,16 @@ def predict_horeco_intraday(
 def run_horeco_intraday_forecast(
     *,
     now: pd.Timestamp | None = None,
-    reading_getter: Callable | None = None,
-    model_path: str | Path = HORECO_ID_MODEL_PATH,
-    weather_path: str | Path = HORECO_ID_WEATHER_PATH,
-    result_path: str | Path = HORECO_ID_RESULTS_PATH,
+    readings_getter: Callable | None = None,
+    model_path: str | Path = HORECO_DAM_MODEL_PATH,
+    weather_path: str | Path = HORECO_WEATHER_PATH,
+    result_path: str | Path = HORECO_INTRADAY_RESULTS_PATH,
 ) -> pd.DataFrame:
     baseline_model = load_horeco_baseline_model(model_path)
-    forecast_origin, last_power_mw = get_latest_horeco_forecast_origin(
-        now=now, reading_getter=reading_getter
+    forecast_origin, last_interval_energy_mwh = get_latest_horeco_forecast_origin(
+        now=now,
+        readings_getter=readings_getter,
     )
-    last_interval_energy_mwh = last_power_mw * FORECAST_INTERVAL_HOURS
-
     weather_file = Path(weather_path)
     if not weather_file.is_file():
         raise HorecoIntradayInputError(f"Horeco target-weather file was not found: {weather_file}")
@@ -257,11 +329,6 @@ def run_horeco_intraday_forecast(
         forecast_origin,
         last_interval_energy_mwh,
         baseline_model=baseline_model,
-    )
-    result.insert(
-        result.columns.get_loc("Last_Productie"),
-        "Last_Power_MW",
-        last_power_mw,
     )
     output_file = Path(result_path)
     output_file.parent.mkdir(parents=True, exist_ok=True)
@@ -337,11 +404,14 @@ def _empty_result() -> pd.DataFrame:
         columns=[
             "Data",
             "Interval",
+            "Prediction_DAM",
+            "Correction",
             "Prediction_ID",
-            "Baseline_prediction",
-            "Actual_correction",
             "Forecast_origin",
             "Last_Productie",
+            "Reference_DAM_Prediction",
+            "Actual_minus_DAM",
+            "Correction_weight",
             "Forecast_horizon_minutes",
             "Market",
         ]

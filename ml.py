@@ -16,14 +16,18 @@ from openpyxl import load_workbook
 import pytz
 from dotenv import load_dotenv
 import json
+from io import BytesIO
 
+from elnet_intraday import (
+	ElnetIntradayError,
+	run_elnet_intraday_forecast,
+)
 from hng_intraday import (
 	HNGIntradayError,
-	HNG_ID_RESULTS_PATH,
 	run_hng_intraday_forecast,
 )
 from horeco_intraday import (
-	HORECO_ID_RESULTS_PATH,
+	HORECO_INTRADAY_RESULTS_PATH,
 	HorecoIntradayError,
 	run_horeco_intraday_forecast,
 )
@@ -6889,6 +6893,33 @@ def render_production_forecast():
 			# access_token = upload_file_with_retries(file_path)
 			# check_file_sync(file_path, access_token)
 		# Forecasting using the Real-Time production data	
+		st.subheader("Elnet DAM-Corrected Intraday Forecast", divider="blue")
+		if st.button("Run Elnet Intraday Forecast", key="forecast_elnet_intraday"):
+			try:
+				fetching_Elnet_data_15min()
+				df_elnet_intraday = run_elnet_intraday_forecast()
+			except ElnetIntradayError as exc:
+				st.error(str(exc))
+			except Exception as exc:
+				st.error(f"Elnet intraday forecast failed: {exc}")
+			else:
+				if df_elnet_intraday.empty:
+					st.info("No remaining Elnet intervals are available for today.")
+				else:
+					st.dataframe(df_elnet_intraday)
+					st.success("Elnet intraday forecast ready")
+					excel_buffer = BytesIO()
+					df_elnet_intraday.to_excel(
+						excel_buffer,
+						index=False,
+						sheet_name="Intraday_Predictions",
+					)
+					st.download_button(
+						"Download Elnet Intraday Forecast",
+						data=excel_buffer.getvalue(),
+						file_name="Production_Forecast_Elnet_Intraday_15min.xlsx",
+						mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+					)
 
 	elif PVPP == "Horeco":
 		# Updating the indisponibility, if any
@@ -6949,7 +6980,7 @@ def render_production_forecast():
 			# access_token = upload_file_with_retries(file_path)
 			# check_file_sync(file_path, access_token)
 		# Forecasting using the Real-Time production data	
-		st.subheader("Intraday Forecast", divider="blue")
+		st.subheader("Horeco DAM-Corrected Intraday Forecast", divider="blue")
 		if st.button("Run Horeco Intraday Forecast", key="forecast_horeco_intraday"):
 			try:
 				fetching_Horeco_data_15min()
@@ -6962,16 +6993,16 @@ def render_production_forecast():
 				if df_horeco_id.empty:
 					st.info("No remaining Horeco intraday intervals for this delivery day.")
 				else:
-					horeco_display = df_horeco_id.drop(
-						columns=["Last_Power_MW"], errors="ignore"
-					).rename(columns={"Last_Productie": "Last_Productie_MWh"})
+					horeco_display = df_horeco_id.rename(
+						columns={"Last_Productie": "Last_Productie_MWh"}
+					)
 					st.dataframe(horeco_display, hide_index=True, use_container_width=True)
-					with open(HORECO_ID_RESULTS_PATH, "rb") as f:
+					with open(HORECO_INTRADAY_RESULTS_PATH, "rb") as f:
 						excel_data = f.read()
 					st.download_button(
 						"Download Horeco Intraday Forecast",
 						data=excel_data,
-						file_name="Production_Forecast_Horeco_ID_15min.xlsx",
+						file_name="Production_Forecast_Horeco_DAM_Corrected_Intraday_15min.xlsx",
 						mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 					)
 
@@ -7589,7 +7620,7 @@ def render_production_forecast():
 					st.markdown(button_html, unsafe_allow_html=True)
 
 		with intraday_tab:
-			if st.button("Run HNG Intraday Forecast", key="forecast_hng_intraday"):
+			if st.button("Run HNG DAM-Corrected Intraday Forecast", key="forecast_hng_intraday"):
 				try:
 					fetching_HNG_data_15min()
 					df_hng_id = run_hng_intraday_forecast()
@@ -7605,15 +7636,18 @@ def render_production_forecast():
 							columns=["Last_Power_MW"], errors="ignore"
 						).rename(columns={"Last_Productie": "Last_Productie_MWh"})
 						st.dataframe(hng_display, hide_index=True, use_container_width=True)
-						with open(HNG_ID_RESULTS_PATH, "rb") as f:
-							excel_data = f.read()
-						b64 = base64.b64encode(excel_data).decode()
-						button_html = f"""
-							<a download="Production_Forecast_HNG_ID_15min.xlsx" href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download>
-							<button kind="secondary" data-testid="baseButton-secondary" class="st-emotion-cache-12tniow ef3psqc12">Download HNG Intraday Forecast</button>
-							</a>
-							"""
-						st.markdown(button_html, unsafe_allow_html=True)
+						excel_buffer = BytesIO()
+						df_hng_id.to_excel(
+							excel_buffer,
+							index=False,
+							sheet_name="Intraday_Predictions",
+						)
+						st.download_button(
+							"Download HNG DAM-Corrected Intraday Forecast",
+							data=excel_buffer.getvalue(),
+							file_name="Production_Forecast_HNG_DAM_Corrected_Intraday_15min.xlsx",
+							mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+						)
 		
 	# elif PVPP == "Solina":
 	# 	# Updating the indisponibility, if any

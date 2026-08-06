@@ -31,6 +31,9 @@ from data_fetching.entsoe_newapi_data import fetch_process_wind_notified, fetch_
 from data_fetching.entsoe_newapi_data import fetch_consumption_forecast, fetch_actual_consumption, render_test_entsoe_newapi_functions
 from data_fetching.entsoe_newapi_data import fetch_process_hydro_water_reservoir_actual_production, fetch_process_hydro_river_actual_production, fetch_volue_hydro_data, align_and_combine_hydro_data
 from data_fetching.entsoe_newapi_data import fetch_igcc_netting_flows
+from elnet_intraday import ELNET_INTRADAY_RESULTS_PATH, run_elnet_intraday_forecast
+from hng_intraday import HNG_INTRADAY_RESULTS_PATH, run_hng_intraday_forecast
+from horeco_intraday import HORECO_INTRADAY_RESULTS_PATH, run_horeco_intraday_forecast
 #=====================================================================Data Engineering============================================================================================================
 api_key_entsoe = os.getenv("api_key_entsoe")
 client = EntsoePandasClient(api_key=api_key_entsoe)
@@ -471,7 +474,27 @@ def create_excel_file_with_all_forecasts_15min():
 	df_all["Prediction_SolEn_Ulmeni"] = df_SolarEnergy["Prediction"]
 	df_all["Prediction_PCSunEn"] = df_SunEnergy["Prediction"]
 	df_all["Prediction_Elnet"] = df_Elnet["Prediction"]
+	if ELNET_INTRADAY_RESULTS_PATH.is_file():
+		df_Elnet_intraday = pd.read_excel(ELNET_INTRADAY_RESULTS_PATH)
+		if not df_Elnet_intraday.empty:
+			elnet_intraday_by_timestamp = (
+				df_Elnet_intraday.assign(Data=pd.to_datetime(df_Elnet_intraday["Data"]))
+				.drop_duplicates(subset="Data", keep="last")
+				.set_index("Data")["Prediction_ID"]
+			)
+			corrected_elnet = pd.to_datetime(df_all["Data"]).map(elnet_intraday_by_timestamp)
+			df_all["Prediction_Elnet"] = corrected_elnet.combine_first(df_all["Prediction_Elnet"])
 	df_all["Prediction_Horeco"] = df_Horeco["Prediction"]
+	if HORECO_INTRADAY_RESULTS_PATH.is_file():
+		df_Horeco_intraday = pd.read_excel(HORECO_INTRADAY_RESULTS_PATH)
+		if not df_Horeco_intraday.empty:
+			horeco_intraday_by_timestamp = (
+				df_Horeco_intraday.assign(Data=pd.to_datetime(df_Horeco_intraday["Data"]))
+				.drop_duplicates(subset="Data", keep="last")
+				.set_index("Data")["Prediction_ID"]
+			)
+			corrected_horeco = pd.to_datetime(df_all["Data"]).map(horeco_intraday_by_timestamp)
+			df_all["Prediction_Horeco"] = corrected_horeco.combine_first(df_all["Prediction_Horeco"])
 	# df_all["Prediction_3D_Steel"] = df_3D_Steel["Prediction"]
 	df_all["Prediction_Dragosel"] = df_Dragosel["Prediction"]
 	df_all["Prediction_GESS"] = df_GESS["Prediction"]
@@ -486,6 +509,16 @@ def create_excel_file_with_all_forecasts_15min():
 	df_all["Prediction_Motif"] = df_Motif["Prediction"]
 	df_all["Prediction_Ferma"] = df_Ferma["Prediction"]
 	df_all["Prediction_HNG"] = df_HNG["Prediction"]
+	if HNG_INTRADAY_RESULTS_PATH.is_file():
+		df_HNG_intraday = pd.read_excel(HNG_INTRADAY_RESULTS_PATH)
+		if not df_HNG_intraday.empty:
+			hng_intraday_by_timestamp = (
+				df_HNG_intraday.assign(Data=pd.to_datetime(df_HNG_intraday["Data"]))
+				.drop_duplicates(subset="Data", keep="last")
+				.set_index("Data")["Prediction_ID"]
+			)
+			corrected_hng = pd.to_datetime(df_all["Data"]).map(hng_intraday_by_timestamp)
+			df_all["Prediction_HNG"] = corrected_hng.combine_first(df_all["Prediction_HNG"])
 	df_all["Lookup"] = df_Astro["Lookup"]
 
 	df_all.to_excel("./Forecast_15min.xlsx", index=False)
@@ -653,7 +686,8 @@ def render_balancing_market_intraday_page():
 			# uploading_onedrive_file(file_path, access_token)
 			# access_token = upload_file_with_retries(file_path)
 			# check_file_sync(file_path, access_token)
-			st.dataframe(predicting_exporting_Elnet_15min(interval_to, interval_from, limitation_percentage))
+			predicting_exporting_Elnet_15min(interval_to, interval_from, limitation_percentage)
+			st.dataframe(run_elnet_intraday_forecast())
 			file_path = './Elnet/Results_Production_Elnet_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
 			# access_token = upload_file_with_retries(file_path)
@@ -679,7 +713,8 @@ def render_balancing_market_intraday_page():
 			# uploading_onedrive_file(file_path, access_token)
 			# access_token = upload_file_with_retries(file_path)
 			# check_file_sync(file_path, access_token)
-			st.dataframe(predicting_exporting_Horeco_15min(interval_to, interval_from, limitation_percentage))
+			predicting_exporting_Horeco_15min(interval_to, interval_from, limitation_percentage)
+			st.dataframe(run_horeco_intraday_forecast())
 			file_path = './Horeco/Results_Production_Horeco_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
 			# access_token = upload_file_with_retries(file_path)
@@ -971,7 +1006,8 @@ def render_balancing_market_intraday_page():
 				interval_to = 24
 				limitation_percentage = 0
 			fetching_HNG_data_15min()
-			st.dataframe(predicting_exporting_HNG_15min(interval_to, interval_from, limitation_percentage))
+			predicting_exporting_HNG_15min(interval_to, interval_from, limitation_percentage)
+			st.dataframe(run_hng_intraday_forecast())
 			file_path = './HNG/Results_Production_HNG_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
 			# access_token = upload_file_with_retries(file_path)

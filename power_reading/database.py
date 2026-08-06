@@ -128,6 +128,42 @@ def get_latest_reading(asset: str, *, before: datetime | None = None, connection
     return _row_to_reading(row)
 
 
+def get_interval_readings(
+    asset: str,
+    *,
+    start: datetime,
+    end: datetime,
+    connection=None,
+) -> list[PowerReading]:
+    if start >= end:
+        raise ValueError("start must be earlier than end")
+
+    with _connection_scope(connection) as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                (
+                    SELECT asset, observed_at, pv_mw, load_mw, grid_mw, source, raw_excerpt
+                    FROM power_readings
+                    WHERE asset = %s AND observed_at <= %s
+                    ORDER BY observed_at DESC
+                    LIMIT 1
+                )
+                UNION ALL
+                (
+                    SELECT asset, observed_at, pv_mw, load_mw, grid_mw, source, raw_excerpt
+                    FROM power_readings
+                    WHERE asset = %s AND observed_at > %s AND observed_at <= %s
+                    ORDER BY observed_at ASC
+                )
+                ORDER BY observed_at ASC
+                """,
+                (asset, start, asset, start, end),
+            )
+            rows = cursor.fetchall()
+    return [_row_to_reading(row) for row in rows]
+
+
 def get_recent_readings(asset: str, *, limit: int = 96, connection=None) -> list[PowerReading]:
     safe_limit = max(1, min(int(limit), 10_000))
     with _connection_scope(connection) as conn:
