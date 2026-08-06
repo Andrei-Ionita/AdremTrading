@@ -1013,6 +1013,10 @@ def render_balancing_market_intraday_page():
 			# access_token = upload_file_with_retries(file_path)
 			# check_file_sync(file_path, access_token)
 
+			# Keep the portfolio workbooks synchronized with the forecasts from this run.
+			create_excel_file_with_all_forecasts()
+			create_excel_file_with_all_forecasts_15min()
+
 	with col2:
 		if st.button("Create Excel File with all the forecasts"):
 			# Creating a single Excel file with all the forecasts
