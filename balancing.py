@@ -42,6 +42,21 @@ from horeco_intraday import (
 	HorecoIntradayError,
 	run_horeco_intraday_forecast,
 )
+from incuba_intraday import (
+	ADREM_TO_INCUBA_SCALE,
+	INCUBA_INTRADAY_RESULTS_PATH,
+	IncubaIntradayError,
+	run_incuba_intraday_forecast,
+)
+from portfolio_intraday import (
+	ANTO_INTRADAY_CONFIG,
+	ASTRO_INTRADAY_CONFIG,
+	FERMA_INTRADAY_CONFIG,
+	IMPERIAL_INTRADAY_CONFIG,
+	MOTIF_INTRADAY_CONFIG,
+	PortfolioIntradayError,
+	run_portfolio_intraday_forecast,
+)
 #=====================================================================Data Engineering============================================================================================================
 api_key_entsoe = os.getenv("api_key_entsoe")
 client = EntsoePandasClient(api_key=api_key_entsoe)
@@ -450,9 +465,15 @@ def create_excel_file_with_all_forecasts():
 	return df_all
 
 def create_excel_file_with_all_forecasts_15min(
+	use_astro_intraday=True,
+	use_imperial_intraday=True,
 	use_elnet_intraday=True,
 	use_horeco_intraday=True,
 	use_hng_intraday=True,
+	use_incuba_intraday=True,
+	use_anto_intraday=True,
+	use_motif_intraday=True,
+	use_ferma_intraday=True,
 ):
 	df_Astro = pd.read_excel("./Astro/Results_Production_Astro_xgb_15min.xlsx")
 	df_Imperial = pd.read_excel("./Imperial/Results_Production_Imperial_xgb_15min.xlsx")
@@ -531,7 +552,42 @@ def create_excel_file_with_all_forecasts_15min(
 			)
 			corrected_hng = pd.to_datetime(df_all["Data"]).map(hng_intraday_by_timestamp)
 			df_all["Prediction_HNG"] = corrected_hng.combine_first(df_all["Prediction_HNG"])
+	portfolio_intraday_overlays = (
+		(use_astro_intraday, "Prediction_Astro", ASTRO_INTRADAY_CONFIG),
+		(use_imperial_intraday, "Prediction_Imperial", IMPERIAL_INTRADAY_CONFIG),
+		(use_anto_intraday, "Prediction_Anto", ANTO_INTRADAY_CONFIG),
+		(use_motif_intraday, "Prediction_Motif", MOTIF_INTRADAY_CONFIG),
+		(use_ferma_intraday, "Prediction_Ferma", FERMA_INTRADAY_CONFIG),
+	)
+	for enabled, prediction_column, config in portfolio_intraday_overlays:
+		if enabled and config.intraday_results_path.is_file():
+			df_intraday = pd.read_excel(config.intraday_results_path)
+			if not df_intraday.empty:
+				intraday_by_timestamp = (
+					df_intraday.assign(Data=pd.to_datetime(df_intraday["Data"]))
+					.drop_duplicates(subset="Data", keep="last")
+					.set_index("Data")["Prediction_ID"]
+				)
+				corrected = pd.to_datetime(df_all["Data"]).map(intraday_by_timestamp)
+				df_all[prediction_column] = corrected.combine_first(
+					df_all[prediction_column]
+				)
+	df_all["Prediction_Incuba"] = df_Adrem["Prediction"] * ADREM_TO_INCUBA_SCALE
+	if use_incuba_intraday and INCUBA_INTRADAY_RESULTS_PATH.is_file():
+		df_Incuba_intraday = pd.read_excel(INCUBA_INTRADAY_RESULTS_PATH)
+		if not df_Incuba_intraday.empty:
+			incuba_intraday_by_timestamp = (
+				df_Incuba_intraday.assign(Data=pd.to_datetime(df_Incuba_intraday["Data"]))
+				.drop_duplicates(subset="Data", keep="last")
+				.set_index("Data")["Prediction_ID"]
+			)
+			corrected_incuba = pd.to_datetime(df_all["Data"]).map(incuba_intraday_by_timestamp)
+			df_all["Prediction_Incuba"] = corrected_incuba.combine_first(
+				df_all["Prediction_Incuba"]
+			)
 	df_all["Lookup"] = df_Astro["Lookup"]
+	incuba_column = df_all.pop("Prediction_Incuba")
+	df_all.insert(df_all.columns.get_loc("Lookup"), "Prediction_Incuba", incuba_column)
 
 	df_all.to_excel("./Forecast_15min.xlsx", index=False)
 	return df_all
@@ -548,9 +604,15 @@ def render_balancing_market_intraday_page():
 	with col1:
 		# Forecasting the entire Intraday Portfolio at once
 		if st.button("Forecast Portfolio"):
+			astro_intraday_available = False
+			imperial_intraday_available = False
 			elnet_intraday_available = False
 			horeco_intraday_available = False
 			hng_intraday_available = False
+			incuba_intraday_available = False
+			anto_intraday_available = False
+			motif_intraday_available = False
+			ferma_intraday_available = False
 			# Forecasting Astro
 			# Updating the indisponibility, if any
 			result_Astro = render_indisponibility_db_Astro()
@@ -572,6 +634,13 @@ def render_balancing_market_intraday_page():
 			# access_token = upload_file_with_retries(file_path)
 			# check_file_sync(file_path, access_token)
 			st.dataframe(predicting_exporting_Astro_15min(interval_from, interval_to, limitation_percentage))
+			try:
+				df_astro_intraday = run_portfolio_intraday_forecast(ASTRO_INTRADAY_CONFIG)
+			except PortfolioIntradayError as exc:
+				st.warning(f"Astro correction skipped; DAM retained: {exc}")
+			else:
+				astro_intraday_available = True
+				st.dataframe(df_astro_intraday)
 			file_path = './Astro/Results_Production_Astro_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
 			# access_token = upload_file_with_retries(file_path)
@@ -598,6 +667,15 @@ def render_balancing_market_intraday_page():
 			# access_token = upload_file_with_retries(file_path)
 			# check_file_sync(file_path, access_token)
 			st.dataframe(predicting_exporting_Imperial_15min(interval_to, interval_from, limitation_percentage))
+			try:
+				df_imperial_intraday = run_portfolio_intraday_forecast(
+					IMPERIAL_INTRADAY_CONFIG
+				)
+			except PortfolioIntradayError as exc:
+				st.warning(f"Imperial correction skipped; DAM retained: {exc}")
+			else:
+				imperial_intraday_available = True
+				st.dataframe(df_imperial_intraday)
 			file_path = './Imperial/Results_Production_Imperial_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
 			# access_token = upload_file_with_retries(file_path)
@@ -954,6 +1032,13 @@ def render_balancing_market_intraday_page():
 				limitation_percentage = 0
 			fetching_Adrem_data_15min()
 			st.dataframe(predicting_exporting_Adrem_15min(interval_to, interval_from, limitation_percentage))
+			try:
+				df_incuba_intraday = run_incuba_intraday_forecast()
+			except IncubaIntradayError as exc:
+				st.warning(f"Incuba correction skipped; Adrem-derived baseline retained: {exc}")
+			else:
+				incuba_intraday_available = True
+				st.dataframe(df_incuba_intraday)
 			file_path = './Adrem/Results_Production_Adrem_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
 			# access_token = upload_file_with_retries(file_path)
@@ -974,6 +1059,13 @@ def render_balancing_market_intraday_page():
 				limitation_percentage = 0
 			fetching_Anto_data_15min()
 			st.dataframe(predicting_exporting_Anto_15min(interval_to, interval_from, limitation_percentage))
+			try:
+				df_anto_intraday = run_portfolio_intraday_forecast(ANTO_INTRADAY_CONFIG)
+			except PortfolioIntradayError as exc:
+				st.warning(f"Anto correction skipped; DAM retained: {exc}")
+			else:
+				anto_intraday_available = True
+				st.dataframe(df_anto_intraday)
 			file_path = './Anto/Results_Production_Anto_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
 			# access_token = upload_file_with_retries(file_path)
@@ -994,6 +1086,13 @@ def render_balancing_market_intraday_page():
 				limitation_percentage = 0
 			fetching_Motif_data_15min()
 			st.dataframe(predicting_exporting_Motif_15min(interval_to, interval_from, limitation_percentage))
+			try:
+				df_motif_intraday = run_portfolio_intraday_forecast(MOTIF_INTRADAY_CONFIG)
+			except PortfolioIntradayError as exc:
+				st.warning(f"Motif correction skipped; DAM retained: {exc}")
+			else:
+				motif_intraday_available = True
+				st.dataframe(df_motif_intraday)
 			file_path = './Motif/Results_Production_Motif_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
 			# access_token = upload_file_with_retries(file_path)
@@ -1014,6 +1113,13 @@ def render_balancing_market_intraday_page():
 				limitation_percentage = 0
 			fetching_Ferma_data_15min()
 			st.dataframe(predicting_exporting_Ferma_15min(interval_to, interval_from, limitation_percentage))
+			try:
+				df_ferma_intraday = run_portfolio_intraday_forecast(FERMA_INTRADAY_CONFIG)
+			except PortfolioIntradayError as exc:
+				st.warning(f"Ferma Frumusica correction skipped; DAM retained: {exc}")
+			else:
+				ferma_intraday_available = True
+				st.dataframe(df_ferma_intraday)
 			file_path = './Ferma/Results_Production_Ferma_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
 			# access_token = upload_file_with_retries(file_path)
@@ -1049,9 +1155,15 @@ def render_balancing_market_intraday_page():
 			# Keep the portfolio workbooks synchronized with the forecasts from this run.
 			create_excel_file_with_all_forecasts()
 			create_excel_file_with_all_forecasts_15min(
+				use_astro_intraday=astro_intraday_available,
+				use_imperial_intraday=imperial_intraday_available,
 				use_elnet_intraday=elnet_intraday_available,
 				use_horeco_intraday=horeco_intraday_available,
 				use_hng_intraday=hng_intraday_available,
+				use_incuba_intraday=incuba_intraday_available,
+				use_anto_intraday=anto_intraday_available,
+				use_motif_intraday=motif_intraday_available,
+				use_ferma_intraday=ferma_intraday_available,
 			)
 
 	with col2:
