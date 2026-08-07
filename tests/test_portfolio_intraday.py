@@ -124,12 +124,14 @@ class PortfolioPredictionTests(unittest.TestCase):
             ORIGIN,
             1.4,
         )
-        self.assertEqual(CORRECTION_HALF_LIFE_MINUTES, 60.0)
+        self.assertEqual(CORRECTION_HALF_LIFE_MINUTES, 120.0)
         self.assertEqual(result["Prediction_ID"].iloc[0], 1.4)
         self.assertEqual(result["Correction_weight"].iloc[0], 1.0)
         self.assertEqual(result["Forecast_horizon_minutes"].iloc[4], 75)
-        self.assertEqual(result["Correction_weight"].iloc[4], 0.5)
-        self.assertEqual(result["Prediction_ID"].iloc[4], 1.2)
+        self.assertEqual(result["Correction_weight"].iloc[4], 0.7071)
+        self.assertEqual(result["Prediction_ID"].iloc[4], 1.283)
+        self.assertEqual(result["Forecast_horizon_minutes"].iloc[8], 135)
+        self.assertEqual(result["Correction_weight"].iloc[8], 0.5)
         self.assertEqual(result["Last_Productie"].nunique(), 1)
 
     def test_delayed_origin_skips_elapsed_targets(self):

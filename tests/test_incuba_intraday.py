@@ -97,11 +97,13 @@ class IncubaPredictionTests(unittest.TestCase):
         result = predict_incuba_intraday(
             adrem_forecast_for_origin(), weather_for_origin(), ORIGIN, 0.2
         )
-        self.assertEqual(CORRECTION_HALF_LIFE_MINUTES, 60.0)
+        self.assertEqual(CORRECTION_HALF_LIFE_MINUTES, 120.0)
         self.assertEqual(result["Prediction_ID"].iloc[0], 0.2)
         self.assertEqual(result["Correction_weight"].iloc[0], 1.0)
         self.assertEqual(result["Forecast_horizon_minutes"].iloc[4], 75)
-        self.assertEqual(result["Correction_weight"].iloc[4], 0.5)
+        self.assertEqual(result["Correction_weight"].iloc[4], 0.7071)
+        self.assertEqual(result["Forecast_horizon_minutes"].iloc[8], 135)
+        self.assertEqual(result["Correction_weight"].iloc[8], 0.5)
         self.assertEqual(result["Last_Productie"].nunique(), 1)
 
     def test_delayed_origin_starts_at_next_future_target(self):

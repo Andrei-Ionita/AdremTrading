@@ -13,7 +13,7 @@ LOCAL_TIMEZONE = "Europe/Bucharest"
 MAX_BOUNDARY_AGE = pd.Timedelta(minutes=5)
 MAX_SAMPLE_GAP = pd.Timedelta(minutes=7, seconds=30)
 CORRECTION_INITIAL_WEIGHT = 1.0
-CORRECTION_HALF_LIFE_MINUTES = 60.0
+CORRECTION_HALF_LIFE_MINUTES = 120.0
 
 
 @dataclass(frozen=True)

@@ -19,7 +19,7 @@ INCUBA_MAX_INTERVAL_ENERGY_MWH = 0.998 * 0.25
 MAX_BOUNDARY_AGE = pd.Timedelta(minutes=5)
 MAX_SAMPLE_GAP = pd.Timedelta(minutes=7, seconds=30)
 CORRECTION_INITIAL_WEIGHT = 1.0
-CORRECTION_HALF_LIFE_MINUTES = 60.0
+CORRECTION_HALF_LIFE_MINUTES = 120.0
 
 
 class IncubaIntradayError(RuntimeError):

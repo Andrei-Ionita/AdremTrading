@@ -189,18 +189,20 @@ class HorecoProductionTests(unittest.TestCase):
 
 
 class HorecoCorrectionTests(unittest.TestCase):
-    def test_actual_residual_starts_full_and_has_sixty_minute_half_life(self):
+    def test_actual_residual_starts_full_and_has_two_hour_half_life(self):
         result = predict_horeco_intraday(
             weather_for_origin(), ORIGIN, 0.4, baseline_model=fake_model()
         )
-        self.assertEqual(CORRECTION_HALF_LIFE_MINUTES, 60.0)
+        self.assertEqual(CORRECTION_HALF_LIFE_MINUTES, 120.0)
         self.assertEqual(result["Reference_DAM_Prediction"].iloc[0], 0.25)
         self.assertEqual(result["Actual_minus_DAM"].iloc[0], 0.15)
         self.assertEqual(result["Correction_weight"].iloc[0], 1.0)
         self.assertEqual(result["Prediction_ID"].iloc[0], 0.4)
         self.assertEqual(result["Forecast_horizon_minutes"].iloc[4], 75)
-        self.assertEqual(result["Correction_weight"].iloc[4], 0.5)
-        self.assertEqual(result["Prediction_ID"].iloc[4], 0.325)
+        self.assertEqual(result["Correction_weight"].iloc[4], 0.7071)
+        self.assertEqual(result["Prediction_ID"].iloc[4], 0.356)
+        self.assertEqual(result["Forecast_horizon_minutes"].iloc[8], 135)
+        self.assertEqual(result["Correction_weight"].iloc[8], 0.5)
 
     def test_dark_targets_are_zero(self):
         weather = weather_for_origin()
