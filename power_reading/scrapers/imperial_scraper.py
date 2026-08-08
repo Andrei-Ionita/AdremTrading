@@ -72,10 +72,18 @@ class ImperialScraper:
                     _plant_aliases(secondary_plant),
                     required=True,
                 )
-                total_mw = None
-                if p1_mw is not None or p2_mw is not None:
-                    total_mw = (p1_mw or 0.0) + (p2_mw or 0.0)
                 used_visible_fallback = str(csv1).startswith("visible-power:") or str(csv2).startswith("visible-power:")
+                if p1_mw is None or p2_mw is None:
+                    raise RuntimeError("Imperial requires valid power readings for both component plants.")
+                if not used_visible_fallback:
+                    aligned = _extract_latest_common_power_mw(csv1, csv2)
+                    if aligned is None:
+                        raise RuntimeError(
+                            "Imperial CSV feeds have no common valid timestamp; refusing a mixed-quarter total."
+                        )
+                    p1_mw, p2_mw, common_ts = aligned
+                    p1_ts = p2_ts = common_ts
+                total_mw = p1_mw + p2_mw
                 source_prefix = "imperial-visible-fallback" if used_visible_fallback else "imperial-csv"
                 source = (
                     f"{source_prefix}@{primary_plant}:{p1_ts or 'n/a'}|{secondary_plant}:{p2_ts or 'n/a'}"
@@ -787,10 +795,36 @@ def _plant_aliases(name: str) -> list[str]:
 
 
 def _extract_latest_power_mw(csv_text: str) -> tuple[Optional[float], Optional[str]]:
+    series = _extract_power_series_mw(csv_text)
+    if not series:
+        return None, None
+
+    latest_ts = max(series)
+    power_mw, latest_ts_raw = series[latest_ts]
+    return power_mw, latest_ts_raw
+
+
+def _extract_latest_common_power_mw(
+    primary_csv: str,
+    secondary_csv: str,
+) -> Optional[tuple[float, float, str]]:
+    primary = _extract_power_series_mw(primary_csv)
+    secondary = _extract_power_series_mw(secondary_csv)
+    common_timestamps = primary.keys() & secondary.keys()
+    if not common_timestamps:
+        return None
+
+    latest_common = max(common_timestamps)
+    primary_mw, primary_ts_raw = primary[latest_common]
+    secondary_mw, _ = secondary[latest_common]
+    return primary_mw, secondary_mw, primary_ts_raw
+
+
+def _extract_power_series_mw(csv_text: str) -> dict[datetime, tuple[float, str]]:
     reader = csv.reader(csv_text.splitlines())
     rows = [row for row in reader if row]
     if not rows:
-        return None, None
+        return {}
 
     header_idx = None
     for i, row in enumerate(rows):
@@ -798,10 +832,10 @@ def _extract_latest_power_mw(csv_text: str) -> tuple[Optional[float], Optional[s
             header_idx = i
             break
     if header_idx is None:
-        return None, None
+        return {}
 
     data_rows = rows[header_idx + 1 :]
-    parsed: list[tuple[datetime, float, str]] = []
+    parsed: dict[datetime, tuple[float, str]] = {}
     for row in data_rows:
         if len(row) < 2:
             continue
@@ -814,17 +848,9 @@ def _extract_latest_power_mw(csv_text: str) -> tuple[Optional[float], Optional[s
         energy_kwh = _parse_number(energy_raw)
         if ts is None or energy_kwh is None:
             continue
-        parsed.append((ts, energy_kwh, ts_raw))
-
-    if not parsed:
-        return None, None
-
-    parsed.sort(key=lambda item: item[0])
-    latest_ts, latest_power_w, latest_ts_raw = parsed[-1]
-    # In this tenant export, values align with chart tooltip "Generated Power: ... W".
-    # Convert directly to MW.
-    power_mw = latest_power_w / 1_000_000.0
-    return power_mw, latest_ts_raw
+        # In this tenant export, values align with chart tooltip "Generated Power: ... W".
+        parsed[ts] = (energy_kwh / 1_000_000.0, ts_raw)
+    return parsed
 
 
 def _infer_interval_hours(timestamps: list[datetime]) -> float:
