@@ -13,6 +13,7 @@ from portfolio_intraday import (
     FERMA_INTRADAY_CONFIG,
     IMPERIAL_INTRADAY_CONFIG,
     MOTIF_INTRADAY_CONFIG,
+    NECALUXAN_INTRADAY_CONFIG,
     PortfolioIntradayConfig,
     PortfolioIntradayInputError,
     calculate_interval_energy,
@@ -90,16 +91,25 @@ class PortfolioConfigurationTests(unittest.TestCase):
             ANTO_INTRADAY_CONFIG,
             MOTIF_INTRADAY_CONFIG,
             FERMA_INTRADAY_CONFIG,
+            NECALUXAN_INTRADAY_CONFIG,
         )
         self.assertEqual(
             {config.asset_key for config in configs},
-            {"astro", "imperial", "anto", "motif", "ferma_frumusica"},
+            {
+                "astro",
+                "imperial",
+                "anto",
+                "motif",
+                "ferma_frumusica",
+                "necaluxan",
+            },
         )
         self.assertNotIn("snk", {config.asset_key for config in configs})
         self.assertNotIn("pcsun", {config.asset_key for config in configs})
         for config in configs:
             self.assertTrue(config.dam_results_path.is_file())
             self.assertTrue(config.weather_path.is_file())
+            self.assertEqual(config.min_actual_to_forecast_ratio, 0.5)
 
 
 class PortfolioPredictionTests(unittest.TestCase):
@@ -145,6 +155,42 @@ class PortfolioPredictionTests(unittest.TestCase):
         )
         self.assertEqual(result["Data"].iloc[0], pd.Timestamp("2026-06-01 10:30"))
         self.assertEqual(result["Forecast_horizon_minutes"].iloc[0], 30)
+
+    def test_severe_downward_deviation_keeps_dam_forecast(self):
+        guarded = replace(CONFIG, min_actual_to_forecast_ratio=0.5)
+        result = predict_portfolio_intraday(
+            guarded,
+            dam_forecast(prediction=1.0),
+            weather_for_origin(),
+            ORIGIN,
+            0.49,
+        )
+        self.assertTrue((result["Prediction_ID"] == 1.0).all())
+        self.assertTrue((result["Correction"] == 0).all())
+        self.assertTrue((result["Correction_weight"] == 0).all())
+
+    def test_exactly_half_of_forecast_still_uses_decay_correction(self):
+        result = predict_portfolio_intraday(
+            CONFIG,
+            dam_forecast(prediction=1.0),
+            weather_for_origin(),
+            ORIGIN,
+            0.5,
+        )
+        self.assertEqual(result["Prediction_ID"].iloc[0], 0.5)
+        self.assertEqual(result["Correction_weight"].iloc[0], 1.0)
+
+    def test_ordinary_downward_deviation_still_uses_decay_correction(self):
+        guarded = replace(CONFIG, min_actual_to_forecast_ratio=0.5)
+        result = predict_portfolio_intraday(
+            guarded,
+            dam_forecast(prediction=1.0),
+            weather_for_origin(),
+            ORIGIN,
+            0.6,
+        )
+        self.assertEqual(result["Prediction_ID"].iloc[0], 0.6)
+        self.assertEqual(result["Correction_weight"].iloc[0], 1.0)
 
     def test_dark_targets_are_zero_and_optional_cap_is_enforced(self):
         weather = weather_for_origin()

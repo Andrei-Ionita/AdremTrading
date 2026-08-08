@@ -9,6 +9,7 @@ from incuba_intraday import (
     ADREM_TO_INCUBA_SCALE,
     CORRECTION_HALF_LIFE_MINUTES,
     INCUBA_MAX_INTERVAL_ENERGY_MWH,
+    MIN_ACTUAL_TO_FORECAST_RATIO,
     IncubaIntradayInputError,
     calculate_incuba_interval_energy,
     get_latest_incuba_forecast_origin,
@@ -71,6 +72,14 @@ def production_readings(values=(0.4, 0.4, 0.4, 0.4)):
 
 
 class IncubaPredictionTests(unittest.TestCase):
+    def test_severe_downward_deviation_keeps_derived_dam_forecast(self):
+        result = predict_incuba_intraday(
+            adrem_forecast_for_origin(), weather_for_origin(), ORIGIN, 0.049
+        )
+        self.assertEqual(MIN_ACTUAL_TO_FORECAST_RATIO, 0.5)
+        self.assertTrue((result["Prediction_ID"] == result["Prediction_DAM"]).all())
+        self.assertTrue((result["Correction_weight"] == 0).all())
+
     def test_baseline_uses_exact_adrem_capacity_ratio(self):
         self.assertEqual(ADREM_TO_INCUBA_SCALE, 0.998 / 1.4)
         result = predict_incuba_intraday(

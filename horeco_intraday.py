@@ -26,6 +26,7 @@ MAX_BOUNDARY_AGE = pd.Timedelta(minutes=5)
 MAX_SAMPLE_GAP = pd.Timedelta(minutes=7, seconds=30)
 CORRECTION_INITIAL_WEIGHT = 1.0
 CORRECTION_HALF_LIFE_MINUTES = 120.0
+MIN_ACTUAL_TO_FORECAST_RATIO = 0.5
 
 HORECO_BASELINE_FEATURES = (
     "Interval",
@@ -289,7 +290,14 @@ def predict_horeco_intraday(
         * (horizons.to_numpy(dtype=float) - 15.0)
         / CORRECTION_HALF_LIFE_MINUTES
     )
-    corrections = correction_weights * residual
+    if (
+        reference_prediction > 0
+        and actual_energy < MIN_ACTUAL_TO_FORECAST_RATIO * reference_prediction
+    ):
+        correction_weights = np.zeros(len(targets), dtype=float)
+        corrections = np.zeros(len(targets), dtype=float)
+    else:
+        corrections = correction_weights * residual
     predictions = np.clip(
         baseline + corrections,
         0,

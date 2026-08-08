@@ -12,6 +12,7 @@ from elnet_intraday import (
     CORRECTION_HALF_LIFE_MINUTES,
     ELNET_DAM_FEATURES,
     ELNET_DAM_MODEL_PATH,
+    MIN_ACTUAL_TO_FORECAST_RATIO,
     ElnetIntradayBundle,
     ElnetIntradayInputError,
     build_elnet_intraday_features,
@@ -239,6 +240,14 @@ class ElnetProductionTests(unittest.TestCase):
 
 
 class ElnetCorrectionTests(unittest.TestCase):
+    def test_severe_downward_deviation_keeps_dam_forecast(self):
+        result = predict_elnet_intraday(
+            weather_for_origin(), ORIGIN, 0.49, bundle=fake_bundle()
+        )
+        self.assertEqual(MIN_ACTUAL_TO_FORECAST_RATIO, 0.5)
+        self.assertTrue((result["Prediction_ID"] == result["Prediction_DAM"]).all())
+        self.assertTrue((result["Correction_weight"] == 0).all())
+
     def test_actual_residual_starts_full_and_has_two_hour_half_life(self):
         result = predict_elnet_intraday(
             weather_for_origin(), ORIGIN, 1.4, bundle=fake_bundle()

@@ -54,6 +54,7 @@ from portfolio_intraday import (
 	FERMA_INTRADAY_CONFIG,
 	IMPERIAL_INTRADAY_CONFIG,
 	MOTIF_INTRADAY_CONFIG,
+	NECALUXAN_INTRADAY_CONFIG,
 	PortfolioIntradayError,
 	run_portfolio_intraday_forecast,
 )
@@ -474,6 +475,7 @@ def create_excel_file_with_all_forecasts_15min(
 	use_anto_intraday=True,
 	use_motif_intraday=True,
 	use_ferma_intraday=True,
+	use_necaluxan_intraday=True,
 ):
 	df_Astro = pd.read_excel("./Astro/Results_Production_Astro_xgb_15min.xlsx")
 	df_Imperial = pd.read_excel("./Imperial/Results_Production_Imperial_xgb_15min.xlsx")
@@ -558,6 +560,7 @@ def create_excel_file_with_all_forecasts_15min(
 		(use_anto_intraday, "Prediction_Anto", ANTO_INTRADAY_CONFIG),
 		(use_motif_intraday, "Prediction_Motif", MOTIF_INTRADAY_CONFIG),
 		(use_ferma_intraday, "Prediction_Ferma", FERMA_INTRADAY_CONFIG),
+		(use_necaluxan_intraday, "Prediction_Necaluxan", NECALUXAN_INTRADAY_CONFIG),
 	)
 	for enabled, prediction_column, config in portfolio_intraday_overlays:
 		if enabled and config.intraday_results_path.is_file():
@@ -591,6 +594,33 @@ def create_excel_file_with_all_forecasts_15min(
 
 	df_all.to_excel("./Forecast_15min.xlsx", index=False)
 	return df_all
+
+
+def refresh_intraday_corrections(refreshers=None):
+	if refreshers is None:
+		refreshers = (
+			("astro", "Astro", lambda: run_portfolio_intraday_forecast(ASTRO_INTRADAY_CONFIG), PortfolioIntradayError),
+			("imperial", "Imperial", lambda: run_portfolio_intraday_forecast(IMPERIAL_INTRADAY_CONFIG), PortfolioIntradayError),
+			("elnet", "Elnet", run_elnet_intraday_forecast, ElnetIntradayError),
+			("horeco", "Horeco", run_horeco_intraday_forecast, HorecoIntradayError),
+			("hng", "HNG", run_hng_intraday_forecast, HNGIntradayError),
+			("incuba", "Incuba", run_incuba_intraday_forecast, IncubaIntradayError),
+			("anto", "Anto", lambda: run_portfolio_intraday_forecast(ANTO_INTRADAY_CONFIG), PortfolioIntradayError),
+			("motif", "Motif", lambda: run_portfolio_intraday_forecast(MOTIF_INTRADAY_CONFIG), PortfolioIntradayError),
+			("ferma", "Ferma Frumusica", lambda: run_portfolio_intraday_forecast(FERMA_INTRADAY_CONFIG), PortfolioIntradayError),
+			("necaluxan", "Necaluxan", lambda: run_portfolio_intraday_forecast(NECALUXAN_INTRADAY_CONFIG), PortfolioIntradayError),
+		)
+	available = {key: False for key, _, _, _ in refreshers}
+	results = {}
+	errors = {}
+	for key, display_name, runner, expected_error in refreshers:
+		try:
+			results[key] = runner()
+		except expected_error as exc:
+			errors[display_name] = str(exc)
+		else:
+			available[key] = True
+	return available, results, errors
 #=====================================================================BALANGING MARKET INTRADAY===================================================================================================
 
 def render_balancing_market_intraday_page():
@@ -613,6 +643,7 @@ def render_balancing_market_intraday_page():
 			anto_intraday_available = False
 			motif_intraday_available = False
 			ferma_intraday_available = False
+			necaluxan_intraday_available = False
 			# Forecasting Astro
 			# Updating the indisponibility, if any
 			result_Astro = render_indisponibility_db_Astro()
@@ -1012,6 +1043,15 @@ def render_balancing_market_intraday_page():
 				limitation_percentage = 0
 			fetching_Necaluxan_data_15min()
 			st.dataframe(predicting_exporting_Necaluxan_15min(interval_to, interval_from, limitation_percentage))
+			try:
+				df_necaluxan_intraday = run_portfolio_intraday_forecast(
+					NECALUXAN_INTRADAY_CONFIG
+				)
+			except PortfolioIntradayError as exc:
+				st.warning(f"Necaluxan correction skipped; DAM retained: {exc}")
+			else:
+				necaluxan_intraday_available = True
+				st.dataframe(df_necaluxan_intraday)
 			file_path = './Necaluxan/Results_Production_Necaluxan_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
 			# access_token = upload_file_with_retries(file_path)
@@ -1152,25 +1192,42 @@ def render_balancing_market_intraday_page():
 			# access_token = upload_file_with_retries(file_path)
 			# check_file_sync(file_path, access_token)
 
-			# Keep the portfolio workbooks synchronized with the forecasts from this run.
+			# Refresh corrections after every DAM file is ready so the export uses the newest readings.
+			intraday_available, _, correction_errors = refresh_intraday_corrections()
+			for display_name, error in correction_errors.items():
+				st.warning(f"{display_name} correction skipped; DAM retained: {error}")
 			create_excel_file_with_all_forecasts()
 			create_excel_file_with_all_forecasts_15min(
-				use_astro_intraday=astro_intraday_available,
-				use_imperial_intraday=imperial_intraday_available,
-				use_elnet_intraday=elnet_intraday_available,
-				use_horeco_intraday=horeco_intraday_available,
-				use_hng_intraday=hng_intraday_available,
-				use_incuba_intraday=incuba_intraday_available,
-				use_anto_intraday=anto_intraday_available,
-				use_motif_intraday=motif_intraday_available,
-				use_ferma_intraday=ferma_intraday_available,
+				use_astro_intraday=intraday_available["astro"],
+				use_imperial_intraday=intraday_available["imperial"],
+				use_elnet_intraday=intraday_available["elnet"],
+				use_horeco_intraday=intraday_available["horeco"],
+				use_hng_intraday=intraday_available["hng"],
+				use_incuba_intraday=intraday_available["incuba"],
+				use_anto_intraday=intraday_available["anto"],
+				use_motif_intraday=intraday_available["motif"],
+				use_ferma_intraday=intraday_available["ferma"],
+				use_necaluxan_intraday=intraday_available["necaluxan"],
 			)
 
 	with col2:
 		if st.button("Create Excel File with all the forecasts"):
-			# Creating a single Excel file with all the forecasts
+			intraday_available, _, correction_errors = refresh_intraday_corrections()
+			for display_name, error in correction_errors.items():
+				st.warning(f"{display_name} correction skipped; DAM retained: {error}")
 			create_excel_file_with_all_forecasts()
-			create_excel_file_with_all_forecasts_15min()
+			create_excel_file_with_all_forecasts_15min(
+				use_astro_intraday=intraday_available["astro"],
+				use_imperial_intraday=intraday_available["imperial"],
+				use_elnet_intraday=intraday_available["elnet"],
+				use_horeco_intraday=intraday_available["horeco"],
+				use_hng_intraday=intraday_available["hng"],
+				use_incuba_intraday=intraday_available["incuba"],
+				use_anto_intraday=intraday_available["anto"],
+				use_motif_intraday=intraday_available["motif"],
+				use_ferma_intraday=intraday_available["ferma"],
+				use_necaluxan_intraday=intraday_available["necaluxan"],
+			)
 			file_path = './Forecast.xlsx'
 			with open(file_path, "rb") as f:
 				excel_data = f.read()

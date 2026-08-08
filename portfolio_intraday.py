@@ -14,6 +14,7 @@ MAX_BOUNDARY_AGE = pd.Timedelta(minutes=5)
 MAX_SAMPLE_GAP = pd.Timedelta(minutes=7, seconds=30)
 CORRECTION_INITIAL_WEIGHT = 1.0
 CORRECTION_HALF_LIFE_MINUTES = 120.0
+MIN_ACTUAL_TO_FORECAST_RATIO = 0.5
 
 
 @dataclass(frozen=True)
@@ -24,6 +25,7 @@ class PortfolioIntradayConfig:
     weather_path: Path
     intraday_results_path: Path
     max_interval_energy_mwh: float | None = None
+    min_actual_to_forecast_ratio: float | None = MIN_ACTUAL_TO_FORECAST_RATIO
 
 
 ASTRO_INTRADAY_CONFIG = PortfolioIntradayConfig(
@@ -69,6 +71,19 @@ FERMA_INTRADAY_CONFIG = PortfolioIntradayConfig(
     weather_path=APP_ROOT / "Ferma" / "Solcast" / "Axintele_15min.csv",
     intraday_results_path=(
         APP_ROOT / "Ferma" / "Results_Production_Ferma_DAM_Corrected_Intraday_15min.xlsx"
+    ),
+)
+NECALUXAN_INTRADAY_CONFIG = PortfolioIntradayConfig(
+    asset_key="necaluxan",
+    display_name="Necaluxan",
+    dam_results_path=(
+        APP_ROOT / "Necaluxan" / "Results_Production_Necaluxan_xgb_15min.xlsx"
+    ),
+    weather_path=APP_ROOT / "Necaluxan" / "Solcast" / "Salcioara_15min.csv",
+    intraday_results_path=(
+        APP_ROOT
+        / "Necaluxan"
+        / "Results_Production_Necaluxan_DAM_Corrected_Intraday_15min.xlsx"
     ),
 )
 
@@ -245,12 +260,12 @@ def predict_portfolio_intraday(
     reference_prediction = float(dam_predictions[0])
     residual = actual_energy - reference_prediction
     forecast_horizons = ((targets - origin) / pd.Timedelta(minutes=1)).astype(int)
-    correction_weights = CORRECTION_INITIAL_WEIGHT * np.exp(
-        -np.log(2)
-        * (forecast_horizons.to_numpy(dtype=float) - 15.0)
-        / CORRECTION_HALF_LIFE_MINUTES
-    )
-    corrections = correction_weights * residual
+    correction_weights = _correction_weights(config, forecast_horizons)
+    if _suppress_downward_correction(config, actual_energy, reference_prediction):
+        correction_weights = np.zeros(len(targets), dtype=float)
+        corrections = np.zeros(len(targets), dtype=float)
+    else:
+        corrections = correction_weights * residual
     predictions = np.maximum(dam_predictions + corrections, 0)
     if config.max_interval_energy_mwh is not None:
         predictions = np.minimum(predictions, config.max_interval_energy_mwh)
@@ -278,6 +293,35 @@ def predict_portfolio_intraday(
             "Forecast_horizon_minutes": forecast_horizons,
             "Market": "Intraday",
         }
+    )
+
+
+def _correction_weights(
+    config: PortfolioIntradayConfig,
+    forecast_horizons: pd.Index,
+) -> np.ndarray:
+    threshold = config.min_actual_to_forecast_ratio
+    if threshold is not None and (not np.isfinite(threshold) or not 0 <= threshold <= 1):
+        raise PortfolioIntradayInputError(
+            f"{config.display_name} minimum actual-to-forecast ratio must be between 0 and 1."
+        )
+    return CORRECTION_INITIAL_WEIGHT * np.exp(
+        -np.log(2)
+        * (forecast_horizons.to_numpy(dtype=float) - 15.0)
+        / CORRECTION_HALF_LIFE_MINUTES
+    )
+
+
+def _suppress_downward_correction(
+    config: PortfolioIntradayConfig,
+    actual_energy: float,
+    reference_prediction: float,
+) -> bool:
+    threshold = config.min_actual_to_forecast_ratio
+    return bool(
+        threshold is not None
+        and reference_prediction > 0
+        and actual_energy < threshold * reference_prediction
     )
 
 

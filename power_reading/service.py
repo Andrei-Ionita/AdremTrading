@@ -53,6 +53,12 @@ _ASSETS = {
     "pcsun": AssetSpec("pcsun", "PCSUN", "https://oltenita2.epgr.ro/~ViewOfThings/index.html", "PCSun"),
     "imperial": AssetSpec("imperial", "IMPERIAL", "https://auroravision.net/ums/v1/loginPage", "PV Jucu"),
     "horeco": AssetSpec("horeco", "HORECO", DEFAULT_FUSIONSOLAR_URL, "CEF HORECO Costesti"),
+    "necaluxan": AssetSpec(
+        "necaluxan",
+        "NECALUXAN",
+        "https://www1.meteocontrol.de/vcom/default/login/index/",
+        "RO-Slatioara 31.6MWp",
+    ),
 }
 
 
@@ -177,6 +183,21 @@ def _build_scraper(spec: AssetSpec, *, headless: bool):
             session_attempts=_int_env("SNK_SESSION_ATTEMPTS", 3),
             debug_artifact_dir=_env("SNK_DEBUG_ARTIFACT_DIR"),
             window_mode=_env("SNK_WINDOW_MODE") or "offscreen",
+        )
+
+    if spec.asset_type == "necaluxan":
+        from .scrapers.necaluxan_scraper import NecaluxanScraper
+
+        return NecaluxanScraper(
+            target_url=url,
+            username=username,
+            password=password,
+            master_username=_env("NECALUXAN_MASTER_USERNAME"),
+            master_password=_env("NECALUXAN_MASTER_PASSWORD"),
+            plant_name=plant_name,
+            user_data_dir=str(profile_dir),
+            headless=headless,
+            browser_timeout_ms=_int_env("NECALUXAN_BROWSER_TIMEOUT_MS", 60_000),
         )
 
     from .scrapers.fusionsolar_scraper import FusionSolarScraper

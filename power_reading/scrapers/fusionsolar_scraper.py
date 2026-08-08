@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -139,7 +140,6 @@ class FusionSolarScraper:
                 text = page.locator("body").first.inner_text()
                 nominal_kw = _extract_inverter_nominal_power_kw(text)
                 device_table_kw = self._extract_active_power_from_device_table(page)
-                force_table_current_power = self._force_table_current_power()
                 pv_kw = _extract_kw(text, "PV")
                 load_kw = _extract_kw(text, "Load")
                 grid_kw = _extract_kw(text, "Grid")
@@ -154,15 +154,14 @@ class FusionSolarScraper:
                     grid_kw = _normalize_ocr_kw_against_nominal(grid_kw, nominal_kw)
                     if pv_kw is not None or load_kw is not None or grid_kw is not None:
                         source = "ocr-flow"
-                        active_kw = _extract_active_power_kw(text)
-                        if active_kw is not None and not force_table_current_power:
-                            active_kw = _sanitize_active_power_kw(active_kw, nominal_kw, device_table_kw)
-                            if active_kw is not None and _should_replace_ocr_pv_kw(pv_kw, active_kw, nominal_kw):
-                                # OCR can occasionally read chart/flow labels as a much
-                                # larger PV value. The explicit Active Power field is
-                                # the safer PV value for single-plant FusionSolar pages.
-                                pv_kw = active_kw
-                                source = "device-table-active-power" if device_table_kw is not None and active_kw == device_table_kw else "active-power-text"
+                        pv_kw, used_active_power = _select_overview_pv_kw(
+                            pv_kw,
+                            text,
+                            nominal_kw,
+                            device_table_kw,
+                        )
+                        if used_active_power:
+                            source = "device-table-active-power" if device_table_kw is not None and pv_kw == device_table_kw else "active-power-text"
                     else:
                         # Some FusionSolar layouts expose only "Active power" on overview.
                         active_kw = _extract_active_power_kw(text)
@@ -762,21 +761,26 @@ class FusionSolarScraper:
             return Number.isFinite(num) ? num : null;
           };
 
-          const rowMatches = (row) => {
+          const exactMatches = rows.filter((row) => {
             const t = norm(row.textContent || '');
-            if (!plantName) return true;
-            if (plantName.includes('horeco')) return t.includes('horeco');
-            return t.includes(plantName);
-          };
+            return !plantName || t.includes(plantName);
+          });
 
-          const matched = rows.filter(rowMatches);
+          const matched = exactMatches.length
+            ? exactMatches
+            : (plantName.includes('horeco')
+                ? rows.filter(row => norm(row.textContent || '').includes('horeco'))
+                : []);
           if (plantName && !matched.length) return null;
           const row = matched.length ? matched[matched.length - 1] : rows[rows.length - 1];
           const cells = Array.from(row.querySelectorAll('td'));
           if (!cells.length) return null;
 
           // Preferred: resolve the "Current Power" column index from table headers.
-          const headers = Array.from(document.querySelectorAll('table thead th, table tr th'));
+          const table = row.closest('table');
+          const headers = table
+            ? Array.from(table.querySelectorAll('thead th, tr th'))
+            : [];
           let currentPowerIdx = -1;
           for (let i = 0; i < headers.length; i++) {
             const htxt = norm(headers[i].textContent || '');
@@ -1013,10 +1017,10 @@ def _extract_kw(text: str, label: str) -> Optional[float]:
 def _extract_active_power_kw(text: str) -> Optional[float]:
     number = r"([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]+)?|[0-9]+(?:[.,][0-9]+)?)"
     localized_patterns = (
-        rf"(?i)\bPutere\s*activ[Äƒa]\b[^\S\r\n]*[:\-]?[^\S\r\n]*{number}[^\S\r\n]*(kW|MW|W)\b",
-        rf"(?i)\bPutere\s*curent[Äƒa]\b[^\S\r\n]*[:\-]?[^\S\r\n]*{number}[^\S\r\n]*(kW|MW|W)\b",
-        rf"(?i){number}[^\S\r\n]*(kW|MW|W)[^\S\r\n]*Putere\s*activ[Äƒa]\b",
-        rf"(?i){number}[^\S\r\n]*(kW|MW|W)[^\S\r\n]*Putere\s*curent[Äƒa]\b",
+        rf"(?i)\bPutere\s*activa\b[^\S\r\n]*[:\-]?[^\S\r\n]*{number}[^\S\r\n]*(kW|MW|W)\b",
+        rf"(?i)\bPutere\s*curenta\b[^\S\r\n]*[:\-]?[^\S\r\n]*{number}[^\S\r\n]*(kW|MW|W)\b",
+        rf"(?i){number}[^\S\r\n]*(kW|MW|W)[^\S\r\n]*Putere\s*activa\b",
+        rf"(?i){number}[^\S\r\n]*(kW|MW|W)[^\S\r\n]*Putere\s*curenta\b",
     )
     english_patterns = (
         rf"(?i)\bActive\s*power\b[^\S\r\n]*[:\-]?[^\S\r\n]*{number}[^\S\r\n]*(kW|MW|W)\b",
@@ -1026,8 +1030,9 @@ def _extract_active_power_kw(text: str) -> Optional[float]:
     )
 
     for block in _iter_local_text_blocks(text):
+        localized_block = _fold_ascii(block)
         for pattern in localized_patterns:
-            m = re.search(pattern, block)
+            m = re.search(pattern, localized_block)
             if not m:
                 continue
             value = _parse_decimal_comma_number(m.group(1))
@@ -1045,13 +1050,21 @@ def _extract_active_power_kw(text: str) -> Optional[float]:
     return None
 
 
+def _fold_ascii(text: str) -> str:
+    return "".join(
+        char
+        for char in unicodedata.normalize("NFKD", str(text))
+        if not unicodedata.combining(char)
+    )
+
+
 def _iter_local_text_blocks(text: str) -> list[str]:
     lines = [ln.strip() for ln in str(text).splitlines() if ln and ln.strip()]
+    compact = re.sub(r"\s+", " ", str(text)).strip()
     if not lines:
-        compact = re.sub(r"\s+", " ", str(text)).strip()
         return [compact] if compact else []
 
-    blocks: list[str] = []
+    blocks: list[str] = [compact] if compact else []
     for i, line in enumerate(lines):
         blocks.append(line)
         if i + 1 < len(lines):
@@ -1097,15 +1110,28 @@ def _parse_decimal_comma_number(raw: str) -> Optional[float]:
 
 
 def _extract_inverter_nominal_power_kw(text: str) -> Optional[float]:
-    patterns = (
-        r"(?is)\bPutere\s*nominal[Äƒa]\s*invertor\b\s*[:\-]?\s*([0-9][0-9.,]*)\s*(kW|MW|W)\b",
-        r"(?is)\bInverter\s*nominal\s*power\b\s*[:\-]?\s*([0-9][0-9.,]*)\s*(kW|MW|W)\b",
+    localized_patterns = (
+        r"(?is)\bPutere\s*nominala\s*invertor\b\s*[:\-]?\s*([0-9][0-9.,]*)\s*(kW|MW|W)\b",
     )
-    for pattern in patterns:
-        m = re.search(pattern, text)
+    localized_text = _fold_ascii(text)
+    for pattern in localized_patterns:
+        m = re.search(pattern, localized_text)
         if not m:
             continue
         value = _parse_decimal_comma_number(m.group(1))
+        if value is None:
+            return None
+        return _to_kw_value(value, m.group(2).lower())
+
+    english_patterns = (
+        r"(?is)\bInverter\s*nominal\s*power\b\s*[:\-]?\s*([0-9][0-9.,]*)\s*(kW|MW|W)\b",
+        r"(?is)\bRated\s*inverter\s*power\b\s*[:\-]?\s*([0-9][0-9.,]*)\s*(kW|MW|W)\b",
+    )
+    for pattern in english_patterns:
+        m = re.search(pattern, text)
+        if not m:
+            continue
+        value = _parse_number(m.group(1))
         if value is None:
             return None
         return _to_kw_value(value, m.group(2).lower())
@@ -1148,6 +1174,23 @@ def _should_replace_ocr_pv_kw(
     if nominal_kw is not None and nominal_kw > 0 and ocr_pv_kw > nominal_kw * 1.05:
         return True
     return _kw_values_materially_differ(ocr_pv_kw, active_kw)
+
+
+def _select_overview_pv_kw(
+    ocr_pv_kw: Optional[float],
+    text: str,
+    nominal_kw: Optional[float],
+    device_table_kw: Optional[float],
+) -> tuple[Optional[float], bool]:
+    active_kw = _extract_active_power_kw(text)
+    active_kw = _sanitize_active_power_kw(active_kw, nominal_kw, device_table_kw)
+    if active_kw is not None and _should_replace_ocr_pv_kw(
+        ocr_pv_kw,
+        active_kw,
+        nominal_kw,
+    ):
+        return active_kw, True
+    return ocr_pv_kw, False
 
 
 def _extract_flow_kw_ocr(page) -> tuple[Optional[float], Optional[float], Optional[float]]:

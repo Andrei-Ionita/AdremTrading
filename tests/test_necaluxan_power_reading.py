@@ -1,0 +1,58 @@
+from __future__ import annotations
+
+import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
+
+from power_reading.scrapers.necaluxan_scraper import extract_actual_power_kw
+from power_reading.service import available_assets, read_asset
+
+
+class NecaluxanPowerParserTests(unittest.TestCase):
+    def test_reads_only_actual_power_panel_value(self):
+        text = """
+        31.59 MWp
+        Grid connection point 10.8 MW
+        Actual power
+        17.64 MW
+        Janitza U...70158139
+        0 W
+        30.13 MW
+        """
+        self.assertEqual(extract_actual_power_kw(text), 17_640.0)
+
+    def test_normalizes_supported_units_to_kw(self):
+        self.assertEqual(extract_actual_power_kw("Actual power\n850 kW"), 850.0)
+        self.assertEqual(extract_actual_power_kw("Actual power\n125000 W"), 125.0)
+        self.assertEqual(extract_actual_power_kw("Actual power\n17,48 MW"), 17_480.0)
+
+    def test_rejects_missing_or_ambiguous_actual_power(self):
+        self.assertIsNone(extract_actual_power_kw("Installed PV power 31.59 MWp"))
+        self.assertIsNone(
+            extract_actual_power_kw("Actual power 1 MW\nActual power 2 MW")
+        )
+
+
+class NecaluxanPowerServiceTests(unittest.TestCase):
+    def test_necaluxan_is_registered(self):
+        self.assertIn("necaluxan", available_assets())
+
+    @patch("power_reading.service._build_scraper")
+    def test_service_normalizes_necaluxan_kw_to_mw(self, build_scraper):
+        build_scraper.return_value.scrape_once.return_value = SimpleNamespace(
+            pv_kw=17_640.0,
+            load_kw=None,
+            grid_kw=None,
+            timestamp_utc="2026-08-07T12:00:00+00:00",
+            source="meteocontrol-bluelog-actual-power",
+            raw_excerpt="Actual power 17.64 MW",
+        )
+
+        reading = read_asset("necaluxan")
+
+        self.assertEqual(reading.pv_mw, 17.64)
+        self.assertEqual(reading.asset, "necaluxan")
+
+
+if __name__ == "__main__":
+    unittest.main()
