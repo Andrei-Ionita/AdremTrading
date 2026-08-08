@@ -50,7 +50,6 @@ from incuba_intraday import (
 )
 from portfolio_intraday import (
 	ANTO_INTRADAY_CONFIG,
-	ASTRO_INTRADAY_CONFIG,
 	FERMA_INTRADAY_CONFIG,
 	IMPERIAL_INTRADAY_CONFIG,
 	MOTIF_INTRADAY_CONFIG,
@@ -466,7 +465,6 @@ def create_excel_file_with_all_forecasts():
 	return df_all
 
 def create_excel_file_with_all_forecasts_15min(
-	use_astro_intraday=True,
 	use_imperial_intraday=True,
 	use_elnet_intraday=True,
 	use_horeco_intraday=True,
@@ -555,7 +553,6 @@ def create_excel_file_with_all_forecasts_15min(
 			corrected_hng = pd.to_datetime(df_all["Data"]).map(hng_intraday_by_timestamp)
 			df_all["Prediction_HNG"] = corrected_hng.combine_first(df_all["Prediction_HNG"])
 	portfolio_intraday_overlays = (
-		(use_astro_intraday, "Prediction_Astro", ASTRO_INTRADAY_CONFIG),
 		(use_imperial_intraday, "Prediction_Imperial", IMPERIAL_INTRADAY_CONFIG),
 		(use_anto_intraday, "Prediction_Anto", ANTO_INTRADAY_CONFIG),
 		(use_motif_intraday, "Prediction_Motif", MOTIF_INTRADAY_CONFIG),
@@ -599,7 +596,6 @@ def create_excel_file_with_all_forecasts_15min(
 def refresh_intraday_corrections(refreshers=None):
 	if refreshers is None:
 		refreshers = (
-			("astro", "Astro", lambda: run_portfolio_intraday_forecast(ASTRO_INTRADAY_CONFIG), PortfolioIntradayError),
 			("imperial", "Imperial", lambda: run_portfolio_intraday_forecast(IMPERIAL_INTRADAY_CONFIG), PortfolioIntradayError),
 			("elnet", "Elnet", run_elnet_intraday_forecast, ElnetIntradayError),
 			("horeco", "Horeco", run_horeco_intraday_forecast, HorecoIntradayError),
@@ -634,7 +630,6 @@ def render_balancing_market_intraday_page():
 	with col1:
 		# Forecasting the entire Intraday Portfolio at once
 		if st.button("Forecast Portfolio"):
-			astro_intraday_available = False
 			imperial_intraday_available = False
 			elnet_intraday_available = False
 			horeco_intraday_available = False
@@ -665,13 +660,6 @@ def render_balancing_market_intraday_page():
 			# access_token = upload_file_with_retries(file_path)
 			# check_file_sync(file_path, access_token)
 			st.dataframe(predicting_exporting_Astro_15min(interval_from, interval_to, limitation_percentage))
-			try:
-				df_astro_intraday = run_portfolio_intraday_forecast(ASTRO_INTRADAY_CONFIG)
-			except PortfolioIntradayError as exc:
-				st.warning(f"Astro correction skipped; DAM retained: {exc}")
-			else:
-				astro_intraday_available = True
-				st.dataframe(df_astro_intraday)
 			file_path = './Astro/Results_Production_Astro_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
 			# access_token = upload_file_with_retries(file_path)
@@ -1198,7 +1186,6 @@ def render_balancing_market_intraday_page():
 				st.warning(f"{display_name} correction skipped; DAM retained: {error}")
 			create_excel_file_with_all_forecasts()
 			create_excel_file_with_all_forecasts_15min(
-				use_astro_intraday=intraday_available["astro"],
 				use_imperial_intraday=intraday_available["imperial"],
 				use_elnet_intraday=intraday_available["elnet"],
 				use_horeco_intraday=intraday_available["horeco"],
@@ -1217,7 +1204,6 @@ def render_balancing_market_intraday_page():
 				st.warning(f"{display_name} correction skipped; DAM retained: {error}")
 			create_excel_file_with_all_forecasts()
 			create_excel_file_with_all_forecasts_15min(
-				use_astro_intraday=intraday_available["astro"],
 				use_imperial_intraday=intraday_available["imperial"],
 				use_elnet_intraday=intraday_available["elnet"],
 				use_horeco_intraday=intraday_available["horeco"],
