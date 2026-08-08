@@ -39,6 +39,7 @@ def collect_once(
     max_workers: int = 4,
     asset_timeout_seconds: int = 120,
     reader: Callable[..., PowerReading] = read_asset,
+    on_reading: Callable[[PowerReading], None] | None = None,
 ) -> CollectionResult:
     asset_list = list(dict.fromkeys(assets))
     if not asset_list:
@@ -48,11 +49,17 @@ def collect_once(
     # Production portal reads use killable processes so a stuck browser cannot
     # permanently block every later collection cycle.
     if reader is not read_asset:
-        return _collect_with_threads(asset_list, max_workers=max_workers, reader=reader)
+        return _collect_with_threads(
+            asset_list,
+            max_workers=max_workers,
+            reader=reader,
+            on_reading=on_reading,
+        )
     return _collect_with_processes(
         asset_list,
         max_workers=max_workers,
         asset_timeout_seconds=asset_timeout_seconds,
+        on_reading=on_reading,
     )
 
 
@@ -61,6 +68,7 @@ def _collect_with_threads(
     *,
     max_workers: int,
     reader: Callable[..., PowerReading],
+    on_reading: Callable[[PowerReading], None] | None,
 ) -> CollectionResult:
     readings: list[PowerReading] = []
     errors: dict[str, str] = {}
@@ -75,6 +83,8 @@ def _collect_with_threads(
                     errors[asset] = "No numeric power values were detected."
                 else:
                     readings.append(reading)
+                    if on_reading is not None:
+                        on_reading(reading)
             except Exception as exc:  # Each portal is isolated from the others.
                 errors[asset] = f"{type(exc).__name__}: {exc}"
 
@@ -87,6 +97,7 @@ def _collect_with_processes(
     *,
     max_workers: int,
     asset_timeout_seconds: int,
+    on_reading: Callable[[PowerReading], None] | None,
 ) -> CollectionResult:
     context = multiprocessing.get_context("spawn")
     worker_limit = max(1, min(max_workers, len(asset_list)))
@@ -123,6 +134,8 @@ def _collect_with_processes(
                         errors[asset] = "No numeric power values were detected."
                     else:
                         readings.append(reading)
+                        if on_reading is not None:
+                            on_reading(reading)
                 else:
                     errors[asset] = str(payload)
                 continue
@@ -141,6 +154,8 @@ def _collect_with_processes(
                             errors[asset] = "No numeric power values were detected."
                         else:
                             readings.append(reading)
+                            if on_reading is not None:
+                                on_reading(reading)
                     else:
                         errors[asset] = str(payload)
                 else:
@@ -193,27 +208,38 @@ def _stop_process(process: multiprocessing.Process) -> None:
 
 def run_cycle(assets: list[str], max_workers: int, asset_timeout_seconds: int) -> CollectionResult:
     started = time.monotonic()
+    stored = 0
+    storage_errors: dict[str, str] = {}
+
+    def persist_reading(reading: PowerReading) -> None:
+        nonlocal stored
+        try:
+            stored += store_readings((reading,))
+        except Exception as exc:
+            storage_errors[reading.asset] = f"Could not store reading: {type(exc).__name__}: {exc}"
+
     result = collect_once(
         assets,
         max_workers=max_workers,
         asset_timeout_seconds=asset_timeout_seconds,
+        on_reading=persist_reading,
     )
-    stored = store_readings(result.readings)
-    store_errors(result.errors)
+    errors = {**result.errors, **storage_errors}
+    store_errors(errors)
     LOGGER.info(
         json.dumps(
             {
                 "event": "power_collection_complete",
                 "timestamp_utc": datetime.now(timezone.utc).isoformat(),
                 "stored": stored,
-                "failed": len(result.errors),
-                "errors": result.errors,
+                "failed": len(errors),
+                "errors": errors,
                 "duration_seconds": round(time.monotonic() - started, 2),
             },
             ensure_ascii=True,
         )
     )
-    return result
+    return CollectionResult(result.readings, errors)
 
 
 def main() -> None:

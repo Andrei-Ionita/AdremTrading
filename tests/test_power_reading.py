@@ -16,7 +16,7 @@ from power_reading.scrapers.fusionsolar_scraper import (
     _extract_inverter_nominal_power_kw,
     _select_overview_pv_kw,
 )
-from power_reading.worker import collect_once
+from power_reading.worker import CollectionResult, collect_once, run_cycle
 
 
 class FakeCursor:
@@ -102,6 +102,40 @@ class WorkerTests(unittest.TestCase):
         result = collect_once(["incuba", "hng"], max_workers=2, reader=fake_reader)
         self.assertEqual([item.asset for item in result.readings], ["incuba"])
         self.assertIn("hng", result.errors)
+
+    def test_collect_once_publishes_each_successful_reading(self):
+        published = []
+
+        result = collect_once(
+            ["incuba", "hng"],
+            max_workers=2,
+            reader=lambda asset, *, headless: reading(asset),
+            on_reading=published.append,
+        )
+
+        self.assertEqual({item.asset for item in published}, {"incuba", "hng"})
+        self.assertEqual({item.asset for item in result.readings}, {"incuba", "hng"})
+
+    def test_run_cycle_stores_readings_as_they_are_published(self):
+        readings = (reading("incuba"), reading("hng"))
+
+        def fake_collect(assets, *, max_workers, asset_timeout_seconds, on_reading):
+            for item in readings:
+                on_reading(item)
+            return CollectionResult(readings, {"astro": "timeout"})
+
+        with (
+            patch("power_reading.worker.collect_once", side_effect=fake_collect),
+            patch("power_reading.worker.store_readings", return_value=1) as store,
+            patch("power_reading.worker.store_errors") as store_errors,
+        ):
+            result = run_cycle(["incuba", "hng", "astro"], 2, 120)
+
+        self.assertEqual(store.call_count, 2)
+        store.assert_any_call((readings[0],))
+        store.assert_any_call((readings[1],))
+        store_errors.assert_called_once_with({"astro": "timeout"})
+        self.assertEqual(result.errors, {"astro": "timeout"})
 
 
 class FusionSolarSelectionTests(unittest.TestCase):
