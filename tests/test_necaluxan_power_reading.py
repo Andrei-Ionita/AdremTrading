@@ -4,7 +4,10 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from power_reading.scrapers.necaluxan_scraper import extract_actual_power_kw
+from power_reading.scrapers.necaluxan_scraper import (
+    _unique_visible_locator,
+    extract_actual_power_kw,
+)
 from power_reading.service import available_assets, read_asset
 
 
@@ -32,6 +35,22 @@ class NecaluxanPowerParserTests(unittest.TestCase):
             extract_actual_power_kw("Actual power 1 MW\nActual power 2 MW")
         )
 
+    def test_cockpit_selector_uses_only_a_unique_visible_link(self):
+        hidden = _FakeItem(False)
+        first_visible = _FakeItem(True)
+        second_visible = _FakeItem(True)
+        unique_visible = _FakeItem(True)
+
+        selected = _unique_visible_locator(
+            (
+                _FakeLocator([hidden]),
+                _FakeLocator([first_visible, second_visible]),
+                _FakeLocator([hidden, unique_visible]),
+            )
+        )
+
+        self.assertIs(selected, unique_visible)
+
 
 class NecaluxanPowerServiceTests(unittest.TestCase):
     def test_necaluxan_is_registered(self):
@@ -52,6 +71,25 @@ class NecaluxanPowerServiceTests(unittest.TestCase):
 
         self.assertEqual(reading.pv_mw, 17.64)
         self.assertEqual(reading.asset, "necaluxan")
+
+
+class _FakeItem:
+    def __init__(self, visible):
+        self.visible = visible
+
+    def is_visible(self):
+        return self.visible
+
+
+class _FakeLocator:
+    def __init__(self, items):
+        self.items = items
+
+    def count(self):
+        return len(self.items)
+
+    def nth(self, index):
+        return self.items[index]
 
 
 if __name__ == "__main__":

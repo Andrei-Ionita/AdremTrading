@@ -165,8 +165,15 @@ class NecaluxanScraper:
                 f"Expected one VCOM system row for {self.plant_name!r}, found {row.count()}."
             )
         row.hover()
-        cockpit = row.locator("a[title='Go to cockpit'][href*='/cockpit/']")
-        if cockpit.count() != 1:
+        cockpit = _unique_visible_locator(
+            (
+                row.locator("a[href*='/cockpit/']"),
+                row.locator("a[title*='cockpit' i]"),
+                page.locator("a[href*='/cockpit/']"),
+                page.locator("a[title*='cockpit' i]"),
+            )
+        )
+        if cockpit is None:
             raise NecaluxanReadOnlyError(
                 f"The read-only cockpit link for {self.plant_name!r} was not uniquely identified."
             )
@@ -284,3 +291,22 @@ def _parse_number(raw: str) -> Optional[float]:
     except ValueError:
         return None
     return value if math.isfinite(value) else None
+
+
+def _unique_visible_locator(candidates):
+    for candidate in candidates:
+        visible = []
+        try:
+            count = candidate.count()
+        except Exception:
+            continue
+        for index in range(count):
+            item = candidate.nth(index)
+            try:
+                if item.is_visible():
+                    visible.append(item)
+            except Exception:
+                continue
+        if len(visible) == 1:
+            return visible[0]
+    return None
