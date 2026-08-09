@@ -22,7 +22,7 @@ class IntradayRefreshTests(unittest.TestCase):
         self.assertEqual(results, {"working": "fresh"})
         self.assertEqual(errors, {"Failed": "missing fresh reading"})
 
-    def test_default_refresh_excludes_astro(self):
+    def test_default_refresh_includes_astro(self):
         with (
             patch("balancing.run_portfolio_intraday_forecast", return_value="portfolio"),
             patch("balancing.run_elnet_intraday_forecast", return_value="elnet"),
@@ -32,10 +32,10 @@ class IntradayRefreshTests(unittest.TestCase):
         ):
             available, _, errors = refresh_intraday_corrections()
 
-        self.assertNotIn("astro", available)
         self.assertEqual(
             set(available),
             {
+                "astro",
                 "imperial",
                 "elnet",
                 "horeco",

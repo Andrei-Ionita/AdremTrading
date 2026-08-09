@@ -28,6 +28,15 @@ class PortfolioIntradayConfig:
     min_actual_to_forecast_ratio: float | None = MIN_ACTUAL_TO_FORECAST_RATIO
 
 
+ASTRO_INTRADAY_CONFIG = PortfolioIntradayConfig(
+    asset_key="astro",
+    display_name="Astro",
+    dam_results_path=APP_ROOT / "Astro" / "Results_Production_Astro_xgb_15min.xlsx",
+    weather_path=APP_ROOT / "Astro" / "Solcast" / "Luna_15min.csv",
+    intraday_results_path=(
+        APP_ROOT / "Astro" / "Results_Production_Astro_DAM_Corrected_Intraday_15min.xlsx"
+    ),
+)
 IMPERIAL_INTRADAY_CONFIG = PortfolioIntradayConfig(
     asset_key="imperial",
     display_name="Imperial",

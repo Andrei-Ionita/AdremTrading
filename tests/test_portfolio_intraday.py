@@ -8,6 +8,7 @@ import pandas as pd
 
 from portfolio_intraday import (
     ANTO_INTRADAY_CONFIG,
+    ASTRO_INTRADAY_CONFIG,
     CORRECTION_HALF_LIFE_MINUTES,
     FERMA_INTRADAY_CONFIG,
     IMPERIAL_INTRADAY_CONFIG,
@@ -85,6 +86,7 @@ def production_readings(asset="test_asset", values=(2.0, 4.0, 6.0, 8.0)):
 class PortfolioConfigurationTests(unittest.TestCase):
     def test_only_approved_remaining_portfolio_assets_are_configured(self):
         configs = (
+            ASTRO_INTRADAY_CONFIG,
             IMPERIAL_INTRADAY_CONFIG,
             ANTO_INTRADAY_CONFIG,
             MOTIF_INTRADAY_CONFIG,
@@ -94,6 +96,7 @@ class PortfolioConfigurationTests(unittest.TestCase):
         self.assertEqual(
             {config.asset_key for config in configs},
             {
+                "astro",
                 "imperial",
                 "anto",
                 "motif",

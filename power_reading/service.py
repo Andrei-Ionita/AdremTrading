@@ -15,6 +15,7 @@ except ImportError:
 load_dotenv()
 
 DEFAULT_FUSIONSOLAR_URL = "https://eu5.fusionsolar.huawei.com/unisso/login.action"
+DEFAULT_AURORA_URL = "https://auroravision.net/ums/v1/loginPage"
 
 
 @dataclass(frozen=True)
@@ -48,10 +49,15 @@ _ASSETS = {
         "ferma_frumusica", "FERMA_FRUMUSICA", "https://adc-monitoring.ro/", "CEF Ferma Frumusica"
     ),
     "snk": AssetSpec("snk", "SNK", "https://10.99.219.47/ehmi/hmiapp.html", "SNK"),
-    "astro": AssetSpec("astro", "ASTRO", "https://46.97.187.27/~ViewOfThings/index.html", "Astro"),
+    "astro": AssetSpec(
+        "astro_aurora",
+        "ASTRO_AURORA",
+        DEFAULT_AURORA_URL,
+        "PV Luna de Jos",
+    ),
     "hng": AssetSpec("hng", "HNG", "https://app.veltol-ems.ro/locations/3068", "HNG"),
     "pcsun": AssetSpec("pcsun", "PCSUN", "https://oltenita2.epgr.ro/~ViewOfThings/index.html", "PCSun"),
-    "imperial": AssetSpec("imperial", "IMPERIAL", "https://auroravision.net/ums/v1/loginPage", "PV Jucu"),
+    "imperial": AssetSpec("imperial", "IMPERIAL", DEFAULT_AURORA_URL, "PV Jucu"),
     "horeco": AssetSpec("horeco", "HORECO", DEFAULT_FUSIONSOLAR_URL, "CEF HORECO Costesti"),
     "necaluxan": AssetSpec(
         "necaluxan",
@@ -116,21 +122,6 @@ def _build_scraper(spec: AssetSpec, *, headless: bool):
             headless=headless,
         )
 
-    if spec.asset_type == "astro":
-        from .scrapers.astro_scraper import AstroScraper
-
-        return AstroScraper(
-            target_url=url,
-            username=username,
-            password=password,
-            user_data_dir=str(profile_dir),
-            headless=headless,
-            post_login_wait_ms=_int_env("ASTRO_POST_LOGIN_WAIT_MS", 2000),
-            scada_panel_name=_env("ASTRO_SCADA_PANEL_NAME"),
-            scada_force=_bool_env("ASTRO_SCADA_FORCE", False),
-            force_fresh_profile=_bool_env("ASTRO_FORCE_FRESH_PROFILE", True),
-        )
-
     if spec.asset_type == "hng":
         from .scrapers.veltol_scraper import VeltolScraper
 
@@ -155,7 +146,7 @@ def _build_scraper(spec: AssetSpec, *, headless: bool):
             timeout_sec=_int_env("PCSUN_TIMEOUT_SEC", 60),
         )
 
-    if spec.asset_type == "imperial":
+    if spec.asset_type in {"imperial", "astro_aurora"}:
         from .scrapers.imperial_scraper import ImperialScraper
 
         return ImperialScraper(
@@ -166,6 +157,8 @@ def _build_scraper(spec: AssetSpec, *, headless: bool):
             user_data_dir=str(profile_dir),
             headless=headless,
             force_relogin_each_run=_bool_env("IMPERIAL_FORCE_RELOGIN", bool(os.getenv("RAILWAY_ENVIRONMENT"))),
+            secondary_plant_name=None,
+            source_prefix="astro-aurora" if spec.asset_type == "astro_aurora" else "imperial",
         )
 
     if spec.asset_type == "snk":
@@ -221,6 +214,8 @@ def _build_scraper(spec: AssetSpec, *, headless: bool):
 def _credentials(spec: AssetSpec) -> tuple[str | None, str | None]:
     username = _env(f"{spec.env_prefix}_USERNAME")
     password = _env(f"{spec.env_prefix}_PASSWORD")
+    if spec.asset_type == "astro_aurora":
+        return username or _env("IMPERIAL_USERNAME"), password or _env("IMPERIAL_PASSWORD")
     if spec.asset_type in {"elnet", "incuba"}:
         return username or _env("FUSIONSOLAR_USERNAME"), password or _env("FUSIONSOLAR_PASSWORD")
     if spec.asset_type == "horeco":
@@ -235,6 +230,8 @@ def _credentials(spec: AssetSpec) -> tuple[str | None, str | None]:
 
 def _url(spec: AssetSpec) -> str:
     url = _env(f"{spec.env_prefix}_URL")
+    if spec.asset_type == "astro_aurora":
+        url = url or _env("IMPERIAL_URL")
     if spec.asset_type in {"elnet", "incuba", "motif", "horeco"}:
         url = url or _env("FUSIONSOLAR_PORTAL_URL") or _env("FUSIONSOLAR_URL")
     return url or spec.default_url
@@ -251,7 +248,7 @@ def _to_mw(value: float | None, asset: str) -> float | None:
     if value is None:
         return None
     numeric = float(value)
-    if asset == "imperial":
+    if asset in {"imperial", "astro"}:
         return numeric
     if asset in {"elnet", "incuba"} and numeric > 10_000:
         return numeric / 1_000_000.0

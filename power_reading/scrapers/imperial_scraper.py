@@ -26,6 +26,7 @@ class ImperialScraper:
         headless: bool = False,
         min_visible_open_seconds: float = 10.0,
         force_relogin_each_run: bool = False,
+        source_prefix: str = "imperial",
     ) -> None:
         self.target_url = target_url
         self.username = username
@@ -37,6 +38,7 @@ class ImperialScraper:
         self.headless = headless
         self.min_visible_open_seconds = min_visible_open_seconds
         self.force_relogin_each_run = force_relogin_each_run
+        self.source_prefix = source_prefix
 
     def scrape_once(self) -> PowerSnapshot:
         self.user_data_dir.mkdir(parents=True, exist_ok=True)
@@ -60,13 +62,28 @@ class ImperialScraper:
                     self._maybe_login(page)
                 self._go_home(page)
                 primary_plant = (self.plant_name or "PV Jucu").strip()
-                secondary_plant = (self.secondary_plant_name or "Imperial 2").strip()
 
                 p1_mw, p1_ts, csv1 = self._read_plant_power(
                     page,
                     _plant_aliases(primary_plant),
                     required=True,
                 )
+                if not self.secondary_plant_name:
+                    used_visible_fallback = str(csv1).startswith("visible-power:")
+                    source_suffix = "visible-fallback" if used_visible_fallback else "csv"
+                    return PowerSnapshot(
+                        pv_kw=p1_mw,
+                        load_kw=None,
+                        grid_kw=None,
+                        timestamp_utc=datetime.now(tz=timezone.utc).isoformat(),
+                        source=(
+                            f"{self.source_prefix}-{source_suffix}@{primary_plant}:"
+                            f"{p1_ts or 'n/a'}"
+                        ),
+                        raw_excerpt=_compact_excerpt(f"{primary_plant} => {csv1}"),
+                    )
+
+                secondary_plant = self.secondary_plant_name.strip()
                 p2_mw, p2_ts, csv2 = self._read_plant_power(
                     page,
                     _plant_aliases(secondary_plant),
@@ -84,9 +101,10 @@ class ImperialScraper:
                     p1_mw, p2_mw, common_ts = aligned
                     p1_ts = p2_ts = common_ts
                 total_mw = p1_mw + p2_mw
-                source_prefix = "imperial-visible-fallback" if used_visible_fallback else "imperial-csv"
+                source_suffix = "visible-fallback" if used_visible_fallback else "csv"
                 source = (
-                    f"{source_prefix}@{primary_plant}:{p1_ts or 'n/a'}|{secondary_plant}:{p2_ts or 'n/a'}"
+                    f"{self.source_prefix}-{source_suffix}@{primary_plant}:"
+                    f"{p1_ts or 'n/a'}|{secondary_plant}:{p2_ts or 'n/a'}"
                     if total_mw is not None
                     else "imperial-unmatched"
                 )
