@@ -619,14 +619,18 @@ def _latest_reported_interval_energy(
             (observed_at.tz_convert("UTC"), energy_mwh)
         )
 
-    # Aurora revises the current bucket until the next bucket appears. Only a
-    # bucket followed by a newer source timestamp is considered finalized.
+    # Aurora revises a bucket while its interval is in progress. Use only a
+    # completed bucket with at least one revision collected after its end.
     source_starts = sorted(by_interval)
     wall_origin_utc = current_time.floor("15min").tz_convert("UTC")
     finalized = [
         start
-        for start in source_starts[:-1]
+        for start in source_starts
         if start + pd.Timedelta(minutes=15) <= wall_origin_utc
+        and any(
+            observed_at >= start + pd.Timedelta(minutes=15)
+            for observed_at, _ in by_interval[start]
+        )
     ]
     if not finalized:
         raise PortfolioIntradayInputError(
