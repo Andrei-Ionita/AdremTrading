@@ -306,6 +306,11 @@ class PortfolioProductionTests(unittest.TestCase):
                 "2026-06-01 07:04:00",
                 1.7,
             ),
+            imperial_energy_reading(
+                "2026-06-01 07:00:00.000Z",
+                "2026-06-01 07:07:00",
+                0.4,
+            ),
         ]
         calls = []
 
