@@ -7,6 +7,7 @@ from unittest.mock import patch
 from power_reading.scrapers.necaluxan_scraper import (
     _unique_visible_locator,
     extract_actual_power_kw,
+    select_stable_power_sample,
 )
 from power_reading.service import available_assets, read_asset
 
@@ -33,6 +34,25 @@ class NecaluxanPowerParserTests(unittest.TestCase):
         self.assertIsNone(extract_actual_power_kw("Installed PV power 31.59 MWp"))
         self.assertIsNone(
             extract_actual_power_kw("Actual power 1 MW\nActual power 2 MW")
+        )
+
+    def test_rejects_transient_dashboard_animation(self):
+        observations = [
+            (410.0, "410 kW"),
+            (3_800.0, "3.80 MW"),
+            (12_660.0, "12.66 MW"),
+        ]
+        self.assertIsNone(select_stable_power_sample(observations))
+
+    def test_accepts_latest_of_three_stable_samples(self):
+        observations = [
+            (17_600.0, "17.60 MW"),
+            (17_640.0, "17.64 MW"),
+            (17_680.0, "17.68 MW"),
+        ]
+        self.assertEqual(
+            select_stable_power_sample(observations),
+            (17_680.0, "17.68 MW"),
         )
 
     def test_cockpit_selector_uses_only_a_unique_visible_link(self):

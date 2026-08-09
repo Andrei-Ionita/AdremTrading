@@ -16,6 +16,10 @@ _ACTUAL_POWER_RE = re.compile(
     r"\bActual\s+power\b\s*(-?[0-9]+(?:[.,][0-9]+)?)\s*(MW|kW|W)\b",
     re.IGNORECASE,
 )
+_INITIAL_POWER_SETTLE_MS = 5_000
+_STABLE_POWER_SAMPLE_COUNT = 3
+_STABLE_POWER_ABSOLUTE_TOLERANCE_KW = 50.0
+_STABLE_POWER_RELATIVE_TOLERANCE = 0.01
 
 
 class NecaluxanReadOnlyError(RuntimeError):
@@ -252,16 +256,23 @@ class NecaluxanScraper:
     def _read_actual_power(self, page) -> tuple[float, str]:
         deadline_ms = min(self.browser_timeout_ms, 30_000)
         page.get_by_text("Actual power", exact=True).wait_for(state="visible", timeout=deadline_ms)
+        page.wait_for_timeout(_INITIAL_POWER_SETTLE_MS)
         deadline = time.monotonic() + (deadline_ms / 1000.0)
+        observations: list[tuple[float, str]] = []
         while time.monotonic() < deadline:
             body_text = page.locator("body").inner_text()
             power_kw = extract_actual_power_kw(body_text)
             if power_kw is not None:
                 match = _ACTUAL_POWER_RE.search(body_text)
-                return power_kw, f"{match.group(1)} {match.group(2)}"
+                observations.append(
+                    (power_kw, f"{match.group(1)} {match.group(2)}")
+                )
+                stable = select_stable_power_sample(observations)
+                if stable is not None:
+                    return stable
             page.wait_for_timeout(1000)
         raise NecaluxanReadOnlyError(
-            "The blue'Log Actual power panel did not contain one valid power value."
+            "The blue'Log Actual power value did not stabilize before the timeout."
         )
 
 
@@ -278,6 +289,23 @@ def extract_actual_power_kw(text: str) -> Optional[float]:
     elif unit == "w":
         value /= 1000.0
     return max(value, 0.0)
+
+
+def select_stable_power_sample(
+    observations: list[tuple[float, str]],
+) -> Optional[tuple[float, str]]:
+    if len(observations) < _STABLE_POWER_SAMPLE_COUNT:
+        return None
+    window = observations[-_STABLE_POWER_SAMPLE_COUNT:]
+    values = [sample[0] for sample in window]
+    midpoint = sorted(values)[len(values) // 2]
+    tolerance_kw = max(
+        _STABLE_POWER_ABSOLUTE_TOLERANCE_KW,
+        abs(midpoint) * _STABLE_POWER_RELATIVE_TOLERANCE,
+    )
+    if max(values) - min(values) > tolerance_kw:
+        return None
+    return window[-1]
 
 
 def _parse_number(raw: str) -> Optional[float]:
