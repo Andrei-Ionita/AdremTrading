@@ -188,48 +188,34 @@ class ElnetProductionTests(unittest.TestCase):
         self.assertEqual(calls[0][1].tzinfo, timezone.utc)
         self.assertEqual(calls[0][2].tzinfo, timezone.utc)
 
-    def test_origin_rolls_back_one_quarter_to_latest_supported_boundary(self):
-        latest = PowerReading(
-            "elnet",
-            pd.Timestamp("2026-06-01 10:07", tz="Europe/Bucharest")
-            .tz_convert("UTC")
-            .isoformat(),
-            3.25,
-            None,
-            None,
-            "test",
-        )
+    def test_origin_uses_latest_completed_quarter_at_inference_time(self):
         calls = []
 
         def getter(asset, *, start, end):
             calls.append((asset, start, end))
-            return production_readings()
+            return production_readings(
+                timestamps=("10:00", "10:05", "10:10", "10:15")
+            )
 
         origin, energy = get_latest_elnet_forecast_origin(
             now=ORIGIN + pd.Timedelta(minutes=29),
             readings_getter=getter,
-            latest_reading_getter=lambda *args, **kwargs: latest,
+            latest_reading_getter=lambda *args, **kwargs: self.fail(
+                "latest reading must not select the completed interval"
+            ),
         )
-        self.assertEqual(origin, ORIGIN)
+        self.assertEqual(origin, ORIGIN + pd.Timedelta(minutes=15))
         self.assertEqual(energy, 0.8125)
-        self.assertEqual(calls[0][2], ORIGIN.tz_convert("UTC").to_pydatetime())
-
-    def test_origin_rejects_measurements_more_than_one_quarter_behind(self):
-        stale = PowerReading(
-            "elnet",
-            pd.Timestamp("2026-06-01 09:44", tz="Europe/Bucharest")
-            .tz_convert("UTC")
-            .isoformat(),
-            3.25,
-            None,
-            None,
-            "test",
+        self.assertEqual(
+            calls[0][2],
+            (ORIGIN + pd.Timedelta(minutes=15)).tz_convert("UTC").to_pydatetime(),
         )
-        with self.assertRaisesRegex(ElnetIntradayInputError, "too old"):
+
+    def test_origin_rejects_completed_quarter_without_enough_samples(self):
+        with self.assertRaisesRegex(ElnetIntradayInputError, "at least two"):
             get_latest_elnet_forecast_origin(
                 now=ORIGIN + pd.Timedelta(minutes=29),
                 readings_getter=lambda *args, **kwargs: production_readings(),
-                latest_reading_getter=lambda *args, **kwargs: stale,
             )
 
     def test_missing_production_fails_clearly(self):

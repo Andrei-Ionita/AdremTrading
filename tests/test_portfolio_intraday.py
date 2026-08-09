@@ -262,24 +262,29 @@ class PortfolioProductionTests(unittest.TestCase):
         self.assertAlmostEqual(energy, 1.25)
         self.assertEqual(calls[0][0], "test_asset")
 
-    def test_origin_rolls_back_one_quarter_for_delayed_reader(self):
-        latest = PowerReading(
-            "test_asset",
-            pd.Timestamp("2026-06-01 10:07", tz="Europe/Bucharest")
-            .tz_convert("UTC")
-            .isoformat(),
-            8.0,
-            None,
-            None,
-            "test",
-        )
+    def test_origin_uses_latest_completed_quarter_at_inference_time(self):
+        readings = [
+            PowerReading(
+                reading.asset,
+                (
+                    pd.Timestamp(reading.timestamp_utc) + pd.Timedelta(minutes=15)
+                ).isoformat(),
+                reading.pv_mw,
+                reading.load_mw,
+                reading.grid_mw,
+                reading.source,
+            )
+            for reading in production_readings()
+        ]
         origin, _ = get_latest_forecast_origin(
             CONFIG,
             now=ORIGIN + pd.Timedelta(minutes=29),
-            readings_getter=lambda *args, **kwargs: production_readings(),
-            latest_reading_getter=lambda *args, **kwargs: latest,
+            readings_getter=lambda *args, **kwargs: readings,
+            latest_reading_getter=lambda *args, **kwargs: self.fail(
+                "latest reading must not select the completed interval"
+            ),
         )
-        self.assertEqual(origin, ORIGIN)
+        self.assertEqual(origin, ORIGIN + pd.Timedelta(minutes=15))
 
     def test_run_writes_distinct_corrected_workbook(self):
         with tempfile.TemporaryDirectory() as directory:

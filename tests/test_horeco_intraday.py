@@ -163,23 +163,17 @@ class HorecoProductionTests(unittest.TestCase):
         self.assertEqual(calls[0][1].tzinfo, timezone.utc)
         self.assertEqual(calls[0][2].tzinfo, timezone.utc)
 
-    def test_origin_rolls_back_one_quarter_to_latest_supported_boundary(self):
-        latest = PowerReading(
-            "horeco",
-            pd.Timestamp("2026-07-29 10:07", tz="Europe/Bucharest")
-            .tz_convert("UTC")
-            .isoformat(),
-            1.25,
-            None,
-            None,
-            "test",
-        )
+    def test_origin_uses_latest_completed_quarter_at_inference_time(self):
         origin, energy = get_latest_horeco_forecast_origin(
             now=ORIGIN + pd.Timedelta(minutes=29),
-            readings_getter=lambda *args, **kwargs: production_readings(),
-            latest_reading_getter=lambda *args, **kwargs: latest,
+            readings_getter=lambda *args, **kwargs: production_readings(
+                timestamps=("10:00", "10:05", "10:10", "10:15")
+            ),
+            latest_reading_getter=lambda *args, **kwargs: self.fail(
+                "latest reading must not select the completed interval"
+            ),
         )
-        self.assertEqual(origin, ORIGIN)
+        self.assertEqual(origin, ORIGIN + pd.Timedelta(minutes=15))
         self.assertEqual(energy, 0.3125)
 
     def test_missing_production_fails_clearly(self):

@@ -10,7 +10,6 @@ import pandas as pd
 
 APP_ROOT = Path(__file__).resolve().parent
 LOCAL_TIMEZONE = "Europe/Bucharest"
-MAX_BOUNDARY_AGE = pd.Timedelta(minutes=5)
 MAX_SAMPLE_GAP = pd.Timedelta(minutes=7, seconds=30)
 CORRECTION_INITIAL_WEIGHT = 1.0
 CORRECTION_HALF_LIFE_MINUTES = 120.0
@@ -150,34 +149,23 @@ def calculate_interval_energy(
             f"{config.display_name} interval energy cannot use samples after the interval end."
         )
 
-    start_candidates = [sample for sample in samples if sample[0] <= start]
-    if not start_candidates:
+    interval_samples = [sample for sample in samples if start <= sample[0] <= end]
+    if len(interval_samples) < 2:
         raise PortfolioIntradayInputError(
-            f"{config.display_name} interval energy requires a power sample at or before "
-            "the interval start."
+            f"{config.display_name} interval energy requires at least two power samples "
+            "from the completed interval."
         )
-    start_sample = start_candidates[-1]
-    end_sample = samples[-1]
-    if start - start_sample[0] > MAX_BOUNDARY_AGE:
+    gaps = pd.Series([sample[0] for sample in interval_samples]).diff().dropna()
+    if (gaps > MAX_SAMPLE_GAP).any():
         raise PortfolioIntradayInputError(
-            f"The {config.display_name} sample at the interval start is too old."
-        )
-    if end - end_sample[0] > MAX_BOUNDARY_AGE:
-        raise PortfolioIntradayInputError(
-            f"The {config.display_name} sample at the interval end is too old."
+            f"{config.display_name} power samples contain a gap larger than 7.5 minutes."
         )
 
-    relevant = [sample for sample in samples if start_sample[0] <= sample[0] <= end]
-    if len(relevant) > 1:
-        gaps = pd.Series([sample[0] for sample in relevant]).diff().dropna()
-        if (gaps > MAX_SAMPLE_GAP).any():
-            raise PortfolioIntradayInputError(
-                f"{config.display_name} power samples contain a gap larger than 7.5 minutes."
-            )
-
-    points = [(start, start_sample[1])]
-    points.extend(sample for sample in samples if start < sample[0] < end)
-    points.append((end, end_sample[1]))
+    points = list(interval_samples)
+    if points[0][0] > start:
+        points.insert(0, (start, points[0][1]))
+    if points[-1][0] < end:
+        points.append((end, points[-1][1]))
 
     energy_mwh = 0.0
     for (left_time, left_power), (right_time, right_power) in zip(points, points[1:]):
@@ -201,16 +189,11 @@ def get_latest_forecast_origin(
         now if now is not None else pd.Timestamp.now(tz=LOCAL_TIMEZONE)
     )
     if readings_getter is None:
-        from power_reading.database import get_interval_readings, get_latest_reading
+        from power_reading.database import get_interval_readings
 
         readings_getter = get_interval_readings
-        latest_reading_getter = latest_reading_getter or get_latest_reading
 
-    forecast_origin = _latest_supported_origin(
-        config,
-        current_time,
-        latest_reading_getter,
-    )
+    forecast_origin = _latest_completed_origin(current_time)
     interval_start = forecast_origin - pd.Timedelta(minutes=15)
     try:
         readings = readings_getter(
@@ -531,43 +514,8 @@ def _local_timestamp(value) -> pd.Timestamp:
     return timestamp.tz_convert(LOCAL_TIMEZONE)
 
 
-def _latest_supported_origin(
-    config: PortfolioIntradayConfig,
-    current_time: pd.Timestamp,
-    latest_reading_getter: Callable | None,
-) -> pd.Timestamp:
-    wall_origin = current_time.floor("15min")
-    if latest_reading_getter is None:
-        return wall_origin
-
-    before_utc = (current_time + pd.Timedelta(microseconds=1)).tz_convert(
-        "UTC"
-    ).to_pydatetime()
-    try:
-        latest = latest_reading_getter(config.asset_key, before=before_utc)
-    except Exception as exc:
-        raise PortfolioIntradayInputError(
-            f"Could not retrieve the latest {config.display_name} production timestamp: {exc}"
-        ) from exc
-    if latest is None:
-        raise PortfolioIntradayInputError(
-            f"No {config.display_name} production measurement is available."
-        )
-
-    observed_at = pd.Timestamp(getattr(latest, "timestamp_utc", None))
-    if observed_at.tzinfo is None:
-        raise PortfolioIntradayInputError(
-            f"The latest {config.display_name} production timestamp has no timezone."
-        )
-    supported_origin = min(
-        wall_origin,
-        observed_at.tz_convert(LOCAL_TIMEZONE).floor("15min"),
-    )
-    if wall_origin - supported_origin > pd.Timedelta(minutes=15):
-        raise PortfolioIntradayInputError(
-            f"The latest {config.display_name} production measurement is too old."
-        )
-    return supported_origin
+def _latest_completed_origin(current_time: pd.Timestamp) -> pd.Timestamp:
+    return current_time.floor("15min")
 
 
 def _finite_number(value, label: str) -> float:

@@ -16,7 +16,6 @@ HNG_INTRADAY_RESULTS_PATH = (
     APP_ROOT / "HNG" / "Results_Production_HNG_DAM_Corrected_Intraday_15min.xlsx"
 )
 HNG_TIMEZONE = "Europe/Bucharest"
-MAX_BOUNDARY_AGE = pd.Timedelta(minutes=5)
 MAX_SAMPLE_GAP = pd.Timedelta(minutes=7, seconds=30)
 CORRECTION_INITIAL_WEIGHT = 1.0
 CORRECTION_HALF_LIFE_MINUTES = 120.0
@@ -190,27 +189,20 @@ def calculate_hng_interval_energy(
     if timestamps[-1] > end:
         raise HNGIntradayInputError("HNG interval energy cannot use samples after the interval end.")
 
-    start_candidates = [sample for sample in samples if sample[0] <= start]
-    if not start_candidates:
+    interval_samples = [sample for sample in samples if start <= sample[0] <= end]
+    if len(interval_samples) < 2:
         raise HNGIntradayInputError(
-            "HNG interval energy requires a power sample at or before the interval start."
+            "HNG interval energy requires at least two power samples from the completed interval."
         )
-    start_sample = start_candidates[-1]
-    end_sample = samples[-1]
-    if start - start_sample[0] > MAX_BOUNDARY_AGE:
-        raise HNGIntradayInputError("The HNG sample at the interval start is too old.")
-    if end - end_sample[0] > MAX_BOUNDARY_AGE:
-        raise HNGIntradayInputError("The HNG sample at the interval end is too old.")
+    gaps = pd.Series([sample[0] for sample in interval_samples]).diff().dropna()
+    if (gaps > MAX_SAMPLE_GAP).any():
+        raise HNGIntradayInputError("HNG power samples contain a gap larger than 7.5 minutes.")
 
-    relevant = [sample for sample in samples if start_sample[0] <= sample[0] <= end]
-    if len(relevant) > 1:
-        gaps = pd.Series([sample[0] for sample in relevant]).diff().dropna()
-        if (gaps > MAX_SAMPLE_GAP).any():
-            raise HNGIntradayInputError("HNG power samples contain a gap larger than 7.5 minutes.")
-
-    points = [(start, start_sample[1])]
-    points.extend(sample for sample in samples if start < sample[0] < end)
-    points.append((end, end_sample[1]))
+    points = list(interval_samples)
+    if points[0][0] > start:
+        points.insert(0, (start, points[0][1]))
+    if points[-1][0] < end:
+        points.append((end, points[-1][1]))
 
     energy_mwh = 0.0
     for (left_time, left_power), (right_time, right_power) in zip(points, points[1:]):
@@ -230,16 +222,11 @@ def get_latest_hng_forecast_origin(
     current_time = _local_timestamp(now if now is not None else pd.Timestamp.now(tz=HNG_TIMEZONE))
 
     if readings_getter is None:
-        from power_reading.database import get_interval_readings, get_latest_reading
+        from power_reading.database import get_interval_readings
 
         readings_getter = get_interval_readings
-        latest_reading_getter = latest_reading_getter or get_latest_reading
 
-    forecast_origin = _latest_supported_origin(
-        current_time,
-        latest_reading_getter,
-        "hng",
-    )
+    forecast_origin = _latest_completed_origin(current_time)
     interval_start = forecast_origin - pd.Timedelta(minutes=15)
 
     try:
@@ -474,34 +461,8 @@ def _local_timestamp(value) -> pd.Timestamp:
     return timestamp.tz_convert(HNG_TIMEZONE)
 
 
-def _latest_supported_origin(
-    current_time: pd.Timestamp,
-    latest_reading_getter: Callable | None,
-    asset: str,
-) -> pd.Timestamp:
-    wall_origin = current_time.floor("15min")
-    if latest_reading_getter is None:
-        return wall_origin
-
-    before_utc = (current_time + pd.Timedelta(microseconds=1)).tz_convert(
-        "UTC"
-    ).to_pydatetime()
-    try:
-        latest = latest_reading_getter(asset, before=before_utc)
-    except Exception as exc:
-        raise HNGIntradayInputError(
-            f"Could not retrieve the latest HNG production timestamp: {exc}"
-        ) from exc
-    if latest is None:
-        raise HNGIntradayInputError("No HNG production measurement is available.")
-
-    observed_at = pd.Timestamp(getattr(latest, "timestamp_utc", None))
-    if observed_at.tzinfo is None:
-        raise HNGIntradayInputError("The latest HNG production timestamp has no timezone.")
-    supported_origin = min(wall_origin, observed_at.tz_convert(HNG_TIMEZONE).floor("15min"))
-    if wall_origin - supported_origin > pd.Timedelta(minutes=15):
-        raise HNGIntradayInputError("The latest HNG production measurement is too old.")
-    return supported_origin
+def _latest_completed_origin(current_time: pd.Timestamp) -> pd.Timestamp:
+    return current_time.floor("15min")
 
 
 def _finite_number(value, label: str) -> float:

@@ -54,8 +54,10 @@ def weather_for_origin(origin=ORIGIN, ghi=100.0):
     )
 
 
-def production_readings(values=(0.4, 0.4, 0.4, 0.4)):
-    timestamps = ("09:45", "09:50", "09:55", "10:00")
+def production_readings(
+    values=(0.4, 0.4, 0.4, 0.4),
+    timestamps=("09:45", "09:50", "09:55", "10:00"),
+):
     return [
         PowerReading(
             "incuba",
@@ -181,23 +183,17 @@ class IncubaProductionTests(unittest.TestCase):
         self.assertAlmostEqual(energy, 0.1)
         self.assertEqual(calls[0][0], "incuba")
 
-    def test_origin_rolls_back_one_quarter_for_delayed_reading(self):
-        latest = PowerReading(
-            "incuba",
-            pd.Timestamp("2026-06-01 10:07", tz="Europe/Bucharest")
-            .tz_convert("UTC")
-            .isoformat(),
-            0.4,
-            None,
-            None,
-            "test",
-        )
+    def test_origin_uses_latest_completed_quarter_at_inference_time(self):
         origin, energy = get_latest_incuba_forecast_origin(
             now=ORIGIN + pd.Timedelta(minutes=29),
-            readings_getter=lambda *args, **kwargs: production_readings(),
-            latest_reading_getter=lambda *args, **kwargs: latest,
+            readings_getter=lambda *args, **kwargs: production_readings(
+                timestamps=("10:00", "10:05", "10:10", "10:15")
+            ),
+            latest_reading_getter=lambda *args, **kwargs: self.fail(
+                "latest reading must not select the completed interval"
+            ),
         )
-        self.assertEqual(origin, ORIGIN)
+        self.assertEqual(origin, ORIGIN + pd.Timedelta(minutes=15))
         self.assertAlmostEqual(energy, 0.1)
 
     def test_run_path_writes_incuba_workbook(self):
