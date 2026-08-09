@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -26,6 +27,7 @@ class PortfolioIntradayConfig:
     intraday_results_path: Path
     max_interval_energy_mwh: float | None = None
     min_actual_to_forecast_ratio: float | None = MIN_ACTUAL_TO_FORECAST_RATIO
+    uses_reported_interval_energy: bool = False
 
 
 IMPERIAL_INTRADAY_CONFIG = PortfolioIntradayConfig(
@@ -36,6 +38,7 @@ IMPERIAL_INTRADAY_CONFIG = PortfolioIntradayConfig(
     intraday_results_path=(
         APP_ROOT / "Imperial" / "Results_Production_Imperial_DAM_Corrected_Intraday_15min.xlsx"
     ),
+    uses_reported_interval_energy=True,
 )
 ANTO_INTRADAY_CONFIG = PortfolioIntradayConfig(
     asset_key="anto",
@@ -187,10 +190,22 @@ def get_latest_forecast_origin(
     now: pd.Timestamp | None = None,
     readings_getter: Callable | None = None,
     latest_reading_getter: Callable | None = None,
+    recent_readings_getter: Callable | None = None,
 ) -> tuple[pd.Timestamp, float]:
     current_time = _local_timestamp(
         now if now is not None else pd.Timestamp.now(tz=LOCAL_TIMEZONE)
     )
+    if config.uses_reported_interval_energy:
+        if recent_readings_getter is None:
+            from power_reading.database import get_recent_readings
+
+            recent_readings_getter = get_recent_readings
+        return _latest_reported_interval_energy(
+            config,
+            current_time,
+            recent_readings_getter,
+        )
+
     if readings_getter is None:
         from power_reading.database import get_interval_readings, get_latest_reading
 
@@ -322,6 +337,7 @@ def run_portfolio_intraday_forecast(
     now: pd.Timestamp | None = None,
     readings_getter: Callable | None = None,
     latest_reading_getter: Callable | None = None,
+    recent_readings_getter: Callable | None = None,
 ) -> pd.DataFrame:
     run_time = _local_timestamp(
         now if now is not None else pd.Timestamp.now(tz=LOCAL_TIMEZONE)
@@ -331,6 +347,7 @@ def run_portfolio_intraday_forecast(
         now=run_time,
         readings_getter=readings_getter,
         latest_reading_getter=latest_reading_getter,
+        recent_readings_getter=recent_readings_getter,
     )
 
     if not config.dam_results_path.is_file():
@@ -559,6 +576,86 @@ def _latest_supported_origin(
             f"The latest {config.display_name} production measurement is too old."
         )
     return supported_origin
+
+
+_IMPERIAL_INTERVAL_SOURCE = re.compile(
+    r"^imperial-csv@[^:|]+:(?P<primary>[^|]+)\|[^:|]+:(?P<secondary>.+)$"
+)
+
+
+def _latest_reported_interval_energy(
+    config: PortfolioIntradayConfig,
+    current_time: pd.Timestamp,
+    recent_readings_getter: Callable,
+) -> tuple[pd.Timestamp, float]:
+    try:
+        readings = recent_readings_getter(config.asset_key, limit=96)
+    except Exception as exc:
+        raise PortfolioIntradayInputError(
+            f"Could not retrieve recent {config.display_name} interval energy: {exc}"
+        ) from exc
+
+    by_interval: dict[pd.Timestamp, list[tuple[pd.Timestamp, float]]] = {}
+    for reading in readings:
+        match = _IMPERIAL_INTERVAL_SOURCE.match(str(getattr(reading, "source", "")))
+        if match is None:
+            continue
+        primary = pd.Timestamp(match.group("primary"))
+        secondary = pd.Timestamp(match.group("secondary"))
+        observed_at = pd.Timestamp(getattr(reading, "timestamp_utc", None))
+        if primary.tzinfo is None or secondary.tzinfo is None or observed_at.tzinfo is None:
+            raise PortfolioIntradayInputError(
+                f"A {config.display_name} interval-energy timestamp has no timezone."
+            )
+        if primary != secondary:
+            raise PortfolioIntradayInputError(
+                f"{config.display_name} component interval timestamps do not match."
+            )
+        try:
+            energy_mwh = float(getattr(reading, "pv_mw", None))
+        except (TypeError, ValueError):
+            energy_mwh = float("nan")
+        by_interval.setdefault(primary.tz_convert("UTC"), []).append(
+            (observed_at.tz_convert("UTC"), energy_mwh)
+        )
+
+    # Aurora revises the current bucket until the next bucket appears. Only a
+    # bucket followed by a newer source timestamp is considered finalized.
+    source_starts = sorted(by_interval)
+    wall_origin_utc = current_time.floor("15min").tz_convert("UTC")
+    finalized = [
+        start
+        for start in source_starts[:-1]
+        if start + pd.Timedelta(minutes=15) <= wall_origin_utc
+    ]
+    if not finalized:
+        raise PortfolioIntradayInputError(
+            f"No finalized {config.display_name} interval energy is available."
+        )
+
+    interval_start = finalized[-1]
+    observed_at, energy_mwh = max(by_interval[interval_start], key=lambda item: item[0])
+    if not np.isfinite(energy_mwh):
+        raise PortfolioIntradayInputError(
+            f"The latest finalized {config.display_name} interval energy is invalid."
+        )
+    if energy_mwh < 0:
+        raise PortfolioIntradayInputError(
+            f"The latest finalized {config.display_name} interval energy cannot be negative."
+        )
+    forecast_origin = (interval_start + pd.Timedelta(minutes=15)).tz_convert(
+        LOCAL_TIMEZONE
+    )
+    wall_origin = current_time.floor("15min")
+    if wall_origin - forecast_origin > pd.Timedelta(minutes=15):
+        raise PortfolioIntradayInputError(
+            f"The latest finalized {config.display_name} interval energy is too old."
+        )
+    if observed_at < interval_start:
+        raise PortfolioIntradayInputError(
+            f"The latest {config.display_name} interval energy has an invalid observation time."
+        )
+    return forecast_origin, energy_mwh
 
 
 def _finite_number(value, label: str) -> float:

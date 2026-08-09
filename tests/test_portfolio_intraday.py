@@ -82,6 +82,20 @@ def production_readings(asset="test_asset", values=(2.0, 4.0, 6.0, 8.0)):
     ]
 
 
+def imperial_energy_reading(source_start_utc, observed_utc, energy_mwh):
+    return PowerReading(
+        "imperial",
+        pd.Timestamp(observed_utc, tz="UTC").isoformat(),
+        energy_mwh,
+        None,
+        None,
+        (
+            f"imperial-csv@PV Jucu:{source_start_utc}|"
+            f"Imperial 2:{source_start_utc}"
+        ),
+    )
+
+
 class PortfolioConfigurationTests(unittest.TestCase):
     def test_only_approved_remaining_portfolio_assets_are_configured(self):
         configs = (
@@ -107,6 +121,8 @@ class PortfolioConfigurationTests(unittest.TestCase):
             self.assertTrue(config.dam_results_path.is_file())
             self.assertTrue(config.weather_path.is_file())
             self.assertEqual(config.min_actual_to_forecast_ratio, 0.5)
+        self.assertTrue(IMPERIAL_INTRADAY_CONFIG.uses_reported_interval_energy)
+        self.assertFalse(ANTO_INTRADAY_CONFIG.uses_reported_interval_energy)
 
 
 class PortfolioPredictionTests(unittest.TestCase):
@@ -277,6 +293,146 @@ class PortfolioProductionTests(unittest.TestCase):
             latest_reading_getter=lambda *args, **kwargs: latest,
         )
         self.assertEqual(origin, ORIGIN)
+
+    def test_imperial_uses_latest_finalized_interval_energy_directly(self):
+        readings = [
+            imperial_energy_reading(
+                "2026-06-01 06:45:00.000Z",
+                "2026-06-01 06:55:00",
+                1.2,
+            ),
+            imperial_energy_reading(
+                "2026-06-01 06:45:00.000Z",
+                "2026-06-01 07:04:00",
+                1.7,
+            ),
+            imperial_energy_reading(
+                "2026-06-01 07:00:00.000Z",
+                "2026-06-01 07:07:00",
+                0.4,
+            ),
+        ]
+        calls = []
+
+        def recent_getter(asset, *, limit):
+            calls.append((asset, limit))
+            return readings
+
+        origin, energy = get_latest_forecast_origin(
+            IMPERIAL_INTRADAY_CONFIG,
+            now=ORIGIN + pd.Timedelta(minutes=10),
+            recent_readings_getter=recent_getter,
+        )
+
+        self.assertEqual(origin, ORIGIN)
+        self.assertEqual(energy, 1.7)
+        self.assertEqual(calls, [("imperial", 96)])
+
+    def test_imperial_rejects_a_still_partial_latest_bucket(self):
+        readings = [
+            imperial_energy_reading(
+                "2026-06-01 07:00:00.000Z",
+                "2026-06-01 07:07:00",
+                0.4,
+            )
+        ]
+
+        with self.assertRaisesRegex(
+            PortfolioIntradayInputError,
+            "No finalized Imperial interval energy",
+        ):
+            get_latest_forecast_origin(
+                IMPERIAL_INTRADAY_CONFIG,
+                now=ORIGIN + pd.Timedelta(minutes=10),
+                recent_readings_getter=lambda *args, **kwargs: readings,
+            )
+
+    def test_imperial_ignores_invalid_energy_from_an_older_bucket(self):
+        readings = [
+            imperial_energy_reading(
+                "2026-05-31 17:45:00.000Z",
+                "2026-05-31 18:04:00",
+                -0.01,
+            ),
+            imperial_energy_reading(
+                "2026-06-01 06:45:00.000Z",
+                "2026-06-01 07:04:00",
+                1.7,
+            ),
+            imperial_energy_reading(
+                "2026-06-01 07:00:00.000Z",
+                "2026-06-01 07:07:00",
+                0.4,
+            ),
+        ]
+
+        origin, energy = get_latest_forecast_origin(
+            IMPERIAL_INTRADAY_CONFIG,
+            now=ORIGIN + pd.Timedelta(minutes=10),
+            recent_readings_getter=lambda *args, **kwargs: readings,
+        )
+
+        self.assertEqual(origin, ORIGIN)
+        self.assertEqual(energy, 1.7)
+
+    def test_imperial_rejects_invalid_energy_in_selected_bucket(self):
+        readings = [
+            imperial_energy_reading(
+                "2026-06-01 06:45:00.000Z",
+                "2026-06-01 07:04:00",
+                float("nan"),
+            ),
+            imperial_energy_reading(
+                "2026-06-01 07:00:00.000Z",
+                "2026-06-01 07:07:00",
+                0.4,
+            ),
+        ]
+
+        with self.assertRaisesRegex(
+            PortfolioIntradayInputError,
+            "latest finalized Imperial interval energy is invalid",
+        ):
+            get_latest_forecast_origin(
+                IMPERIAL_INTRADAY_CONFIG,
+                now=ORIGIN + pd.Timedelta(minutes=10),
+                recent_readings_getter=lambda *args, **kwargs: readings,
+            )
+
+    def test_imperial_refresh_applies_finalized_energy_to_first_forecast(self):
+        readings = [
+            imperial_energy_reading(
+                "2026-06-01 06:45:00.000Z",
+                "2026-06-01 07:04:00",
+                1.7,
+            ),
+            imperial_energy_reading(
+                "2026-06-01 07:00:00.000Z",
+                "2026-06-01 07:07:00",
+                0.4,
+            ),
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = replace(
+                IMPERIAL_INTRADAY_CONFIG,
+                dam_results_path=root / "dam.xlsx",
+                weather_path=root / "weather.csv",
+                intraday_results_path=root / "corrected.xlsx",
+            )
+            dam_forecast(prediction=1.168).to_excel(config.dam_results_path, index=False)
+            weather_for_origin().to_csv(config.weather_path, index=False)
+
+            result = run_portfolio_intraday_forecast(
+                config,
+                now=ORIGIN + pd.Timedelta(minutes=10),
+                recent_readings_getter=lambda *args, **kwargs: readings,
+            )
+
+        self.assertEqual(result["Prediction_DAM"].iloc[0], 1.168)
+        self.assertEqual(result["Last_Productie"].iloc[0], 1.7)
+        self.assertEqual(result["Correction"].iloc[0], 0.532)
+        self.assertEqual(result["Prediction_ID"].iloc[0], 1.7)
 
     def test_run_writes_distinct_corrected_workbook(self):
         with tempfile.TemporaryDirectory() as directory:

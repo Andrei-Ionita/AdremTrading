@@ -252,6 +252,8 @@ def _to_mw(value: float | None, asset: str) -> float | None:
         return None
     numeric = float(value)
     if asset == "imperial":
+        # Imperial's Aurora CSV reports 15-minute energy. Keep the normalized
+        # MWh value intact; its source-aware forecast path consumes it directly.
         return numeric
     if asset in {"elnet", "incuba"} and numeric > 10_000:
         return numeric / 1_000_000.0

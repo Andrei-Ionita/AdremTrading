@@ -62,32 +62,32 @@ class ImperialScraper:
                 primary_plant = (self.plant_name or "PV Jucu").strip()
                 secondary_plant = (self.secondary_plant_name or "Imperial 2").strip()
 
-                p1_mw, p1_ts, csv1 = self._read_plant_power(
+                p1_energy_mwh, p1_ts, csv1 = self._read_plant_power(
                     page,
                     _plant_aliases(primary_plant),
                     required=True,
                 )
-                p2_mw, p2_ts, csv2 = self._read_plant_power(
+                p2_energy_mwh, p2_ts, csv2 = self._read_plant_power(
                     page,
                     _plant_aliases(secondary_plant),
                     required=True,
                 )
                 used_visible_fallback = str(csv1).startswith("visible-power:") or str(csv2).startswith("visible-power:")
-                if p1_mw is None or p2_mw is None:
-                    raise RuntimeError("Imperial requires valid power readings for both component plants.")
+                if p1_energy_mwh is None or p2_energy_mwh is None:
+                    raise RuntimeError("Imperial requires valid interval energy for both component plants.")
                 if not used_visible_fallback:
-                    aligned = _extract_latest_common_power_mw(csv1, csv2)
+                    aligned = _extract_latest_common_interval_energy_mwh(csv1, csv2)
                     if aligned is None:
                         raise RuntimeError(
                             "Imperial CSV feeds have no common valid timestamp; refusing a mixed-quarter total."
                         )
-                    p1_mw, p2_mw, common_ts = aligned
+                    p1_energy_mwh, p2_energy_mwh, common_ts = aligned
                     p1_ts = p2_ts = common_ts
-                total_mw = p1_mw + p2_mw
+                total_energy_mwh = p1_energy_mwh + p2_energy_mwh
                 source_prefix = "imperial-visible-fallback" if used_visible_fallback else "imperial-csv"
                 source = (
                     f"{source_prefix}@{primary_plant}:{p1_ts or 'n/a'}|{secondary_plant}:{p2_ts or 'n/a'}"
-                    if total_mw is not None
+                    if total_energy_mwh is not None
                     else "imperial-unmatched"
                 )
                 raw_excerpt = _compact_excerpt(
@@ -95,11 +95,11 @@ class ImperialScraper:
                 )
 
                 return PowerSnapshot(
-                    # For Imperial, primary value is total asset power.
-                    pv_kw=total_mw,
-                    # Keep components available for UI visibility.
-                    load_kw=p1_mw,
-                    grid_kw=p2_mw,
+                    # Aurora exports 15-minute energy in Wh. The Imperial
+                    # correction consumes these normalized MWh values directly.
+                    pv_kw=total_energy_mwh,
+                    load_kw=p1_energy_mwh,
+                    grid_kw=p2_energy_mwh,
                     timestamp_utc=datetime.now(tz=timezone.utc).isoformat(),
                     source=source,
                     raw_excerpt=raw_excerpt,
@@ -191,9 +191,9 @@ class ImperialScraper:
         best_ts = None
         for _ in range(6):
             csv_text = self._download_csv_text(page)
-            mw_value, ts = _extract_latest_power_mw(csv_text)
+            energy_mwh, ts = _extract_latest_interval_energy_mwh(csv_text)
             if _is_newer_ts(ts, best_ts):
-                best_text, best_value, best_ts = csv_text, mw_value, ts
+                best_text, best_value, best_ts = csv_text, energy_mwh, ts
             if _is_recent_enough(best_ts, max_age_minutes=45):
                 break
             page.wait_for_timeout(2_000)
@@ -794,33 +794,33 @@ def _plant_aliases(name: str) -> list[str]:
     return out
 
 
-def _extract_latest_power_mw(csv_text: str) -> tuple[Optional[float], Optional[str]]:
-    series = _extract_power_series_mw(csv_text)
+def _extract_latest_interval_energy_mwh(csv_text: str) -> tuple[Optional[float], Optional[str]]:
+    series = _extract_interval_energy_series_mwh(csv_text)
     if not series:
         return None, None
 
     latest_ts = max(series)
-    power_mw, latest_ts_raw = series[latest_ts]
-    return power_mw, latest_ts_raw
+    energy_mwh, latest_ts_raw = series[latest_ts]
+    return energy_mwh, latest_ts_raw
 
 
-def _extract_latest_common_power_mw(
+def _extract_latest_common_interval_energy_mwh(
     primary_csv: str,
     secondary_csv: str,
 ) -> Optional[tuple[float, float, str]]:
-    primary = _extract_power_series_mw(primary_csv)
-    secondary = _extract_power_series_mw(secondary_csv)
+    primary = _extract_interval_energy_series_mwh(primary_csv)
+    secondary = _extract_interval_energy_series_mwh(secondary_csv)
     common_timestamps = primary.keys() & secondary.keys()
     if not common_timestamps:
         return None
 
     latest_common = max(common_timestamps)
-    primary_mw, primary_ts_raw = primary[latest_common]
-    secondary_mw, _ = secondary[latest_common]
-    return primary_mw, secondary_mw, primary_ts_raw
+    primary_energy_mwh, primary_ts_raw = primary[latest_common]
+    secondary_energy_mwh, _ = secondary[latest_common]
+    return primary_energy_mwh, secondary_energy_mwh, primary_ts_raw
 
 
-def _extract_power_series_mw(csv_text: str) -> dict[datetime, tuple[float, str]]:
+def _extract_interval_energy_series_mwh(csv_text: str) -> dict[datetime, tuple[float, str]]:
     reader = csv.reader(csv_text.splitlines())
     rows = [row for row in reader if row]
     if not rows:
@@ -848,7 +848,7 @@ def _extract_power_series_mw(csv_text: str) -> dict[datetime, tuple[float, str]]
         energy_kwh = _parse_number(energy_raw)
         if ts is None or energy_kwh is None:
             continue
-        # In this tenant export, values align with chart tooltip "Generated Power: ... W".
+        # Despite the tenant's kWh label, the numeric export is Wh per interval.
         parsed[ts] = (energy_kwh / 1_000_000.0, ts_raw)
     return parsed
 
