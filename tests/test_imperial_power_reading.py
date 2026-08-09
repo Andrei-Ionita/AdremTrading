@@ -18,7 +18,7 @@ def imperial_csv(*rows: tuple[str, str]) -> str:
 
 
 class ImperialPowerReadingTests(unittest.TestCase):
-    def test_aurora_assets_are_independent_single_plant_readers(self):
+    def test_aurora_assets_use_their_distinct_plant_boundaries(self):
         with tempfile.TemporaryDirectory() as directory:
             with patch.dict(
                 os.environ,
@@ -37,8 +37,17 @@ class ImperialPowerReadingTests(unittest.TestCase):
         self.assertIsNone(astro.secondary_plant_name)
         self.assertEqual(astro.source_prefix, "astro-aurora")
         self.assertEqual(imperial.plant_name, "PV Jucu")
-        self.assertIsNone(imperial.secondary_plant_name)
+        self.assertEqual(imperial.secondary_plant_name, "Imperial 2")
         self.assertEqual(imperial.source_prefix, "imperial")
+
+    def test_imperial_two_aliases_never_include_astro_luna(self):
+        from power_reading.scrapers.imperial_scraper import _plant_aliases
+
+        aliases = _plant_aliases("Imperial 2")
+
+        self.assertIn("Imperial 2", aliases)
+        self.assertNotIn("PV Luna de Jos", aliases)
+        self.assertNotIn("Luna de Jos", aliases)
 
     def test_aurora_values_are_already_normalized_to_mw(self):
         self.assertEqual(_to_mw(1.7, "astro"), 1.7)

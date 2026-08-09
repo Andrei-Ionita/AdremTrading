@@ -157,7 +157,9 @@ def _build_scraper(spec: AssetSpec, *, headless: bool):
             user_data_dir=str(profile_dir),
             headless=headless,
             force_relogin_each_run=_bool_env("IMPERIAL_FORCE_RELOGIN", bool(os.getenv("RAILWAY_ENVIRONMENT"))),
-            secondary_plant_name=None,
+            secondary_plant_name=(
+                None if spec.asset_type == "astro_aurora" else "Imperial 2"
+            ),
             source_prefix="astro-aurora" if spec.asset_type == "astro_aurora" else "imperial",
         )
 

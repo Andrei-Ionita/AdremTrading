@@ -794,8 +794,6 @@ def _plant_aliases(name: str) -> list[str]:
             [
                 "Imperial2",
                 "Imperial 2",
-                "PV Luna de Jos",
-                "Luna de Jos",
             ]
         )
     if normalized in {"pvjucu", "jucu"}:
