@@ -65,6 +65,12 @@ _ASSETS = {
         "https://www1.meteocontrol.de/vcom/default/login/index/",
         "RO-Slatioara 31.6MWp",
     ),
+    "mm_mv": AssetSpec(
+        "isolarcloud",
+        "MM_MV",
+        "https://web3.isolarcloud.eu/#/login",
+        "Reghin",
+    ),
 }
 
 
@@ -193,6 +199,19 @@ def _build_scraper(spec: AssetSpec, *, headless: bool):
             user_data_dir=str(profile_dir),
             headless=headless,
             browser_timeout_ms=_int_env("NECALUXAN_BROWSER_TIMEOUT_MS", 60_000),
+        )
+
+    if spec.asset_type == "isolarcloud":
+        from .scrapers.isolarcloud_scraper import ISolarCloudScraper
+
+        return ISolarCloudScraper(
+            target_url=url,
+            username=username,
+            password=password,
+            plant_name=plant_name,
+            user_data_dir=str(profile_dir),
+            headless=headless,
+            browser_timeout_ms=_int_env("MM_MV_BROWSER_TIMEOUT_MS", 60_000),
         )
 
     from .scrapers.fusionsolar_scraper import FusionSolarScraper
