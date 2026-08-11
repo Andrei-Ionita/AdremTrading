@@ -8,6 +8,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
+def asset_limitations_enabled():
+    """Return whether the deferred asset-limitation database is active."""
+    return (os.getenv("ASSET_LIMITATIONS_ENABLED") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
 def get_database_url():
     """Read the PostgreSQL URL from local env or Streamlit secrets."""
     database_url = (
@@ -30,6 +41,9 @@ def get_database_url():
 
 # Establish a connection to the PostgreSQL database
 def get_connection():
+    if not asset_limitations_enabled():
+        return None
+
     db_url = get_database_url()
     if not db_url:
         st.error("Database URL is not configured. Set pulseai-db-url, pulseai_db_url, or DATABASE_URL.")
@@ -161,6 +175,9 @@ def check_tomorrow_indisponibilities(table_name):
 
 # Render and manage the indisponibility database for the given client
 def render_indisponibility_db(table_name, title):
+    if not asset_limitations_enabled():
+        return None, None, None
+
     def generate_key(prefix):
         # Generate a consistent key with a prefix for each widget using table name and title
         return f"{prefix}_{table_name}_{title}"
