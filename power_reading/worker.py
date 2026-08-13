@@ -279,10 +279,12 @@ def _configured_assets() -> list[str]:
     raw = (os.getenv("POWER_READING_ASSETS") or "").strip()
     assets = [part.strip().lower().replace(" ", "_") for part in raw.split(",") if part.strip()]
     if not assets:
-        return list(available_assets())
+        assets = list(available_assets())
     unknown = sorted(set(assets) - set(available_assets()))
     if unknown:
         raise ValueError(f"Unknown POWER_READING_ASSETS: {', '.join(unknown)}")
+    if not _bool_env("ULMENI_ENABLED", False):
+        assets = [asset for asset in assets if asset != "ulmeni"]
     return list(dict.fromkeys(assets))
 
 

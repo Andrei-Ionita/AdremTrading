@@ -60,7 +60,7 @@ _ASSETS = {
     "ulmeni": AssetSpec(
         "ulmeni",
         "ULMENI",
-        "https://oltenita2.epgr.ro/~ViewOfThings/index.html",
+        "https://oltenita1.epgr.ro/~ViewOfThings/index.html",
         "Solar Energy Ulmeni",
     ),
     "imperial": AssetSpec("imperial", "IMPERIAL", DEFAULT_AURORA_URL, "PV Jucu"),

@@ -10,12 +10,16 @@ from unittest.mock import patch
 from power_reading.scrapers.pcsun_scraper import DEFAULT_PCSUN_TAG, PCSunScraper
 from power_reading import service
 from power_reading.service import available_assets, read_asset
+from power_reading.worker import _configured_assets
+
+
+ULMENI_URL = "https://oltenita1.epgr.ro/~ViewOfThings/index.html"
 
 
 class UlmeniJSONRPCReaderTests(unittest.TestCase):
     def test_default_tag_is_meter_three_phase_active_power_in_kw(self):
         scraper = PCSunScraper(
-            "https://oltenita2.epgr.ro/~ViewOfThings/index.html",
+            ULMENI_URL,
             active_power_tag=None,
             source_name="ulmeni",
         )
@@ -28,7 +32,7 @@ class UlmeniJSONRPCReaderTests(unittest.TestCase):
 
     def test_first_gate_uses_basic_authentication(self):
         scraper = PCSunScraper(
-            "https://oltenita2.epgr.ro/~ViewOfThings/index.html",
+            ULMENI_URL,
             http_username="gate-user",
             http_password="gate-password",
             source_name="ulmeni",
@@ -39,7 +43,7 @@ class UlmeniJSONRPCReaderTests(unittest.TestCase):
 
     def test_snapshot_is_labelled_as_ulmeni(self):
         scraper = PCSunScraper(
-            "https://oltenita2.epgr.ro/~ViewOfThings/index.html",
+            ULMENI_URL,
             username="operator",
             password="password",
             source_name="ulmeni",
@@ -58,6 +62,9 @@ class UlmeniJSONRPCReaderTests(unittest.TestCase):
 
 
 class UlmeniPowerServiceTests(unittest.TestCase):
+    def test_ulmeni_defaults_to_oltenita_one(self):
+        self.assertEqual(service._ASSETS["ulmeni"].default_url, ULMENI_URL)
+
     def test_ulmeni_is_registered(self):
         self.assertIn("ulmeni", available_assets())
 
@@ -101,6 +108,31 @@ class UlmeniPowerServiceTests(unittest.TestCase):
         self.assertEqual(reading.asset, "ulmeni")
         self.assertAlmostEqual(reading.pv_mw, 0.74792)
         self.assertEqual(reading.source, "ulmeni-jsonrpc")
+
+
+class UlmeniCollectionGuardTests(unittest.TestCase):
+    def test_default_schedule_excludes_ulmeni_before_live_validation(self):
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertNotIn("ulmeni", _configured_assets())
+
+    def test_ulmeni_is_not_scheduled_before_live_validation(self):
+        with patch.dict(
+            os.environ,
+            {"POWER_READING_ASSETS": "hng,ulmeni"},
+            clear=True,
+        ):
+            self.assertEqual(_configured_assets(), ["hng"])
+
+    def test_ulmeni_can_be_scheduled_after_live_validation(self):
+        with patch.dict(
+            os.environ,
+            {
+                "POWER_READING_ASSETS": "hng,ulmeni",
+                "ULMENI_ENABLED": "true",
+            },
+            clear=True,
+        ):
+            self.assertEqual(_configured_assets(), ["hng", "ulmeni"])
 
 
 if __name__ == "__main__":
