@@ -85,6 +85,24 @@ NECALUXAN_INTRADAY_CONFIG = PortfolioIntradayConfig(
         / "Results_Production_Necaluxan_DAM_Corrected_Intraday_15min.xlsx"
     ),
 )
+ULMENI_INTRADAY_CONFIG = PortfolioIntradayConfig(
+    asset_key="ulmeni",
+    display_name="Solar Energy Ulmeni",
+    dam_results_path=(
+        APP_ROOT
+        / "Solar Energy Ulmeni"
+        / "Results_Production_SolarEnergy_xgb_15min.xlsx"
+    ),
+    weather_path=(
+        APP_ROOT / "Solar Energy Ulmeni" / "Solcast" / "Oltenita_15min.csv"
+    ),
+    intraday_results_path=(
+        APP_ROOT
+        / "Solar Energy Ulmeni"
+        / "Results_Production_SolarEnergy_DAM_Corrected_Intraday_15min.xlsx"
+    ),
+    max_interval_energy_mwh=4.35 / 4,
+)
 
 
 class PortfolioIntradayError(RuntimeError):

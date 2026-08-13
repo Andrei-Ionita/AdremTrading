@@ -14,6 +14,7 @@ from portfolio_intraday import (
     IMPERIAL_INTRADAY_CONFIG,
     MOTIF_INTRADAY_CONFIG,
     NECALUXAN_INTRADAY_CONFIG,
+    ULMENI_INTRADAY_CONFIG,
     PortfolioIntradayConfig,
     PortfolioIntradayInputError,
     calculate_interval_energy,
@@ -92,6 +93,7 @@ class PortfolioConfigurationTests(unittest.TestCase):
             MOTIF_INTRADAY_CONFIG,
             FERMA_INTRADAY_CONFIG,
             NECALUXAN_INTRADAY_CONFIG,
+            ULMENI_INTRADAY_CONFIG,
         )
         self.assertEqual(
             {config.asset_key for config in configs},
@@ -102,6 +104,7 @@ class PortfolioConfigurationTests(unittest.TestCase):
                 "motif",
                 "ferma_frumusica",
                 "necaluxan",
+                "ulmeni",
             },
         )
         self.assertNotIn("snk", {config.asset_key for config in configs})
@@ -110,6 +113,7 @@ class PortfolioConfigurationTests(unittest.TestCase):
             self.assertTrue(config.dam_results_path.is_file())
             self.assertTrue(config.weather_path.is_file())
             self.assertEqual(config.min_actual_to_forecast_ratio, 0.5)
+        self.assertEqual(ULMENI_INTRADAY_CONFIG.max_interval_energy_mwh, 1.0875)
 
 
 class PortfolioPredictionTests(unittest.TestCase):

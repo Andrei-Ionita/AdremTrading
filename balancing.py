@@ -55,6 +55,7 @@ from portfolio_intraday import (
 	IMPERIAL_INTRADAY_CONFIG,
 	MOTIF_INTRADAY_CONFIG,
 	NECALUXAN_INTRADAY_CONFIG,
+	ULMENI_INTRADAY_CONFIG,
 	PortfolioIntradayError,
 	run_portfolio_intraday_forecast,
 )
@@ -476,6 +477,7 @@ def create_excel_file_with_all_forecasts_15min(
 	use_motif_intraday=True,
 	use_ferma_intraday=True,
 	use_necaluxan_intraday=True,
+	use_ulmeni_intraday=True,
 ):
 	df_Astro = pd.read_excel("./Astro/Results_Production_Astro_xgb_15min.xlsx")
 	df_Imperial = pd.read_excel("./Imperial/Results_Production_Imperial_xgb_15min.xlsx")
@@ -557,6 +559,7 @@ def create_excel_file_with_all_forecasts_15min(
 	portfolio_intraday_overlays = (
 		(use_astro_intraday, "Prediction_Astro", ASTRO_INTRADAY_CONFIG),
 		(use_imperial_intraday, "Prediction_Imperial", IMPERIAL_INTRADAY_CONFIG),
+		(use_ulmeni_intraday, "Prediction_SolEn_Ulmeni", ULMENI_INTRADAY_CONFIG),
 		(use_anto_intraday, "Prediction_Anto", ANTO_INTRADAY_CONFIG),
 		(use_motif_intraday, "Prediction_Motif", MOTIF_INTRADAY_CONFIG),
 		(use_ferma_intraday, "Prediction_Ferma", FERMA_INTRADAY_CONFIG),
@@ -609,6 +612,7 @@ def refresh_intraday_corrections(refreshers=None):
 			("motif", "Motif", lambda: run_portfolio_intraday_forecast(MOTIF_INTRADAY_CONFIG), PortfolioIntradayError),
 			("ferma", "Ferma Frumusica", lambda: run_portfolio_intraday_forecast(FERMA_INTRADAY_CONFIG), PortfolioIntradayError),
 			("necaluxan", "Necaluxan", lambda: run_portfolio_intraday_forecast(NECALUXAN_INTRADAY_CONFIG), PortfolioIntradayError),
+			("ulmeni", "Solar Energy Ulmeni", lambda: run_portfolio_intraday_forecast(ULMENI_INTRADAY_CONFIG), PortfolioIntradayError),
 		)
 	available = {key: False for key, _, _, _ in refreshers}
 	results = {}
@@ -644,6 +648,7 @@ def render_balancing_market_intraday_page():
 			motif_intraday_available = False
 			ferma_intraday_available = False
 			necaluxan_intraday_available = False
+			ulmeni_intraday_available = False
 			# Forecasting Astro
 			# Updating the indisponibility, if any
 			result_Astro = render_indisponibility_db_Astro()
@@ -785,6 +790,15 @@ def render_balancing_market_intraday_page():
 			# access_token = upload_file_with_retries(file_path)
 			# check_file_sync(file_path, access_token)
 			st.dataframe(predicting_exporting_SolarEnergy_15min(interval_to, interval_from, limitation_percentage))
+			try:
+				df_ulmeni_intraday = run_portfolio_intraday_forecast(
+					ULMENI_INTRADAY_CONFIG
+				)
+			except PortfolioIntradayError as exc:
+				st.warning(f"Solar Energy Ulmeni correction skipped; DAM retained: {exc}")
+			else:
+				ulmeni_intraday_available = True
+				st.dataframe(df_ulmeni_intraday)
 			file_path = './Solar Energy Ulmeni/Results_Production_SolarEnergy_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
 			# access_token = upload_file_with_retries(file_path)
@@ -1208,6 +1222,7 @@ def render_balancing_market_intraday_page():
 				use_motif_intraday=intraday_available["motif"],
 				use_ferma_intraday=intraday_available["ferma"],
 				use_necaluxan_intraday=intraday_available["necaluxan"],
+				use_ulmeni_intraday=intraday_available["ulmeni"],
 			)
 
 	with col2:
@@ -1227,6 +1242,7 @@ def render_balancing_market_intraday_page():
 				use_motif_intraday=intraday_available["motif"],
 				use_ferma_intraday=intraday_available["ferma"],
 				use_necaluxan_intraday=intraday_available["necaluxan"],
+				use_ulmeni_intraday=intraday_available["ulmeni"],
 			)
 			file_path = './Forecast.xlsx'
 			with open(file_path, "rb") as f:

@@ -57,6 +57,12 @@ _ASSETS = {
     ),
     "hng": AssetSpec("hng", "HNG", "https://app.veltol-ems.ro/locations/3068", "HNG"),
     "pcsun": AssetSpec("pcsun", "PCSUN", "https://oltenita2.epgr.ro/~ViewOfThings/index.html", "PCSun"),
+    "ulmeni": AssetSpec(
+        "ulmeni",
+        "ULMENI",
+        "https://oltenita2.epgr.ro/~ViewOfThings/index.html",
+        "Solar Energy Ulmeni",
+    ),
     "imperial": AssetSpec("imperial", "IMPERIAL", DEFAULT_AURORA_URL, "PV Jucu"),
     "horeco": AssetSpec("horeco", "HORECO", DEFAULT_FUSIONSOLAR_URL, "CEF HORECO Costesti"),
     "necaluxan": AssetSpec(
@@ -139,17 +145,19 @@ def _build_scraper(spec: AssetSpec, *, headless: bool):
             headless=headless,
         )
 
-    if spec.asset_type == "pcsun":
+    if spec.asset_type in {"pcsun", "ulmeni"}:
         from .scrapers.pcsun_scraper import PCSunScraper
 
+        prefix = spec.env_prefix
         return PCSunScraper(
             target_url=url,
             username=username,
             password=password,
-            http_username=_env("PCSUN_HTTP_USERNAME"),
-            http_password=_env("PCSUN_HTTP_PASSWORD"),
-            active_power_tag=_env("PCSUN_ACTIVE_POWER_TAG"),
-            timeout_sec=_int_env("PCSUN_TIMEOUT_SEC", 60),
+            http_username=_env(f"{prefix}_HTTP_USERNAME"),
+            http_password=_env(f"{prefix}_HTTP_PASSWORD"),
+            active_power_tag=_env(f"{prefix}_ACTIVE_POWER_TAG"),
+            timeout_sec=_int_env(f"{prefix}_TIMEOUT_SEC", 60),
+            source_name=spec.asset_type,
         )
 
     if spec.asset_type in {"imperial", "astro_aurora"}:

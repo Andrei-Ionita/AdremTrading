@@ -21,6 +21,7 @@ class PCSunScraper:
         http_password: Optional[str] = None,
         active_power_tag: Optional[str] = None,
         timeout_sec: int = 60,
+        source_name: str = "pcsun",
     ) -> None:
         self.target_url = target_url
         self.username = username
@@ -29,6 +30,7 @@ class PCSunScraper:
         self.http_password = http_password
         self.active_power_tag = (active_power_tag or DEFAULT_PCSUN_TAG).strip()
         self.timeout_sec = max(5, int(timeout_sec))
+        self.source_name = source_name.strip() or "pcsun"
 
     def scrape_once(self) -> PowerSnapshot:
         token = self._login()
@@ -40,7 +42,7 @@ class PCSunScraper:
             load_kw=None,
             grid_kw=None,
             timestamp_utc=datetime.now(tz=timezone.utc).isoformat(),
-            source="pcsun-jsonrpc",
+            source=f"{self.source_name}-jsonrpc",
             raw_excerpt=f"tag={self.active_power_tag} value={pv_kw}",
         )
 

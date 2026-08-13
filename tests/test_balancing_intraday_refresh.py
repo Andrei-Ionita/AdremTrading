@@ -3,7 +3,10 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from balancing import refresh_intraday_corrections
+import pandas as pd
+
+from balancing import create_excel_file_with_all_forecasts_15min, refresh_intraday_corrections
+from portfolio_intraday import ULMENI_INTRADAY_CONFIG
 
 
 class IntradayRefreshTests(unittest.TestCase):
@@ -45,9 +48,55 @@ class IntradayRefreshTests(unittest.TestCase):
                 "motif",
                 "ferma",
                 "necaluxan",
+                "ulmeni",
             },
         )
         self.assertEqual(errors, {})
+
+    def test_ulmeni_correction_is_applied_to_portfolio_export(self):
+        timestamps = pd.to_datetime(["2026-08-13 10:15", "2026-08-13 10:30"])
+        dam = pd.DataFrame(
+            {
+                "Data": timestamps,
+                "Interval": [42, 43],
+                "Prediction": [0.4, 0.3],
+                "Lookup": ["unused", "unused"],
+            }
+        )
+        corrected = pd.DataFrame(
+            {
+                "Data": [timestamps[0]],
+                "Prediction_ID": [0.7],
+            }
+        )
+
+        def read_excel(path, *args, **kwargs):
+            if str(path) == str(ULMENI_INTRADAY_CONFIG.intraday_results_path):
+                return corrected.copy()
+            if str(path).endswith("Forecast_template.xlsx"):
+                return pd.DataFrame(index=range(len(dam)))
+            return dam.copy()
+
+        with (
+            patch("balancing.pd.read_excel", side_effect=read_excel),
+            patch("balancing.pd.DataFrame.to_excel"),
+            patch("pathlib.Path.is_file", return_value=True),
+        ):
+            result = create_excel_file_with_all_forecasts_15min(
+                use_astro_intraday=False,
+                use_imperial_intraday=False,
+                use_elnet_intraday=False,
+                use_horeco_intraday=False,
+                use_hng_intraday=False,
+                use_incuba_intraday=False,
+                use_anto_intraday=False,
+                use_motif_intraday=False,
+                use_ferma_intraday=False,
+                use_necaluxan_intraday=False,
+                use_ulmeni_intraday=True,
+            )
+
+        self.assertEqual(result["Prediction_SolEn_Ulmeni"].tolist(), [0.7, 0.3])
 
 
 if __name__ == "__main__":
