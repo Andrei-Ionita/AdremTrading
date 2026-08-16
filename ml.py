@@ -5883,7 +5883,7 @@ def predicting_exporting_HNG_15min(interval_from, interval_to, limitation_percen
 
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Umiditate"]]
 
-	xgb_loaded = joblib.load("./HNG/rs_xgb_hng_prod_15min_0626.pkl")
+	xgb_loaded = joblib.load("./HNG/rs_xgb_hng_prod_15min_0726.pkl")
 
 	df["Month"] = df.Data.dt.month
 	IRR_COL = "Radiatie"      # <- adjust to your irradiance column name (e.g., "GHI")
