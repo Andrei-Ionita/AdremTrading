@@ -42,6 +42,10 @@ def _get_rapidocr_class():
 
 LABELS = ("PV", "Load", "Grid")
 NUM_RE = re.compile(r"([0-9]+(?:[.,][0-9]+)?)")
+VALIDATED_OVERVIEW_ACTIVE_POWER_PLANTS = {
+    "cai de vis",
+    "elnet biomasa.gr",
+}
 
 
 @dataclass
@@ -102,6 +106,20 @@ class FusionSolarScraper:
                 page.goto(self.target_url, wait_until="domcontentloaded")
                 if not self.use_saved_session_only:
                     self._maybe_login(page)
+
+                if self._uses_validated_overview_active_power():
+                    self._open_plant_if_needed(page)
+                    validated_power = self._read_validated_overview_active_power(page)
+                    if validated_power is not None:
+                        active_kw, text = validated_power
+                        return PowerSnapshot(
+                            pv_kw=active_kw,
+                            load_kw=None,
+                            grid_kw=None,
+                            timestamp_utc=datetime.now(tz=timezone.utc).isoformat(),
+                            source="active-power-text",
+                            raw_excerpt=_compact_excerpt(text),
+                        )
 
                 if self._force_table_current_power():
                     table_kw = self._extract_current_power_with_plants_fallback(page)
@@ -209,6 +227,23 @@ class FusionSolarScraper:
     def _force_table_current_power(self) -> bool:
         plant_name = (self.plant_name or "").strip().lower()
         return plant_name == "elnet biomasa.gr"
+
+    def _uses_validated_overview_active_power(self) -> bool:
+        plant_name = (self.plant_name or "").strip().lower()
+        return plant_name in VALIDATED_OVERVIEW_ACTIVE_POWER_PLANTS
+
+    def _read_validated_overview_active_power(self, page) -> Optional[tuple[float, str]]:
+        for attempt in range(4):
+            try:
+                text = page.locator("body").first.inner_text(timeout=1_500)
+            except Exception:
+                text = ""
+            active_kw = _extract_validated_overview_active_power_kw(text, self.plant_name)
+            if active_kw is not None:
+                return active_kw, text
+            if attempt < 3:
+                page.wait_for_timeout(500)
+        return None
 
     def _extract_current_power_with_plants_fallback(self, page) -> Optional[float]:
         self._open_plants_page(page)
@@ -1048,6 +1083,18 @@ def _extract_active_power_kw(text: str) -> Optional[float]:
                 return None
             return _to_kw_value(value, m.group(2).lower())
     return None
+
+
+def _extract_validated_overview_active_power_kw(
+    text: str,
+    plant_name: Optional[str],
+) -> Optional[float]:
+    normalized_plant = (plant_name or "").strip().lower()
+    if normalized_plant not in VALIDATED_OVERVIEW_ACTIVE_POWER_PLANTS:
+        return None
+    if not re.search(re.escape(normalized_plant), text, re.I):
+        return None
+    return _extract_active_power_kw(text)
 
 
 def _fold_ascii(text: str) -> str:

@@ -14,6 +14,7 @@ from power_reading.database import (
 from power_reading.service import PowerReading
 from power_reading.scrapers.fusionsolar_scraper import (
     _extract_inverter_nominal_power_kw,
+    _extract_validated_overview_active_power_kw,
     _select_overview_pv_kw,
 )
 from power_reading.worker import CollectionResult, collect_once, run_cycle
@@ -139,6 +140,30 @@ class WorkerTests(unittest.TestCase):
 
 
 class FusionSolarSelectionTests(unittest.TestCase):
+    def test_elnet_validated_overview_power_is_not_rejected_by_inverter_nominal(self):
+        value_kw = _extract_validated_overview_active_power_kw(
+            "Elnet Biomasa.GR 3,188 MW Putere activ\u0103 Putere nominal\u0103 invertor 2.700,0 kW",
+            "Elnet Biomasa.GR",
+        )
+
+        self.assertEqual(value_kw, 3_188.0)
+
+    def test_motif_validated_overview_power_uses_active_power(self):
+        value_kw = _extract_validated_overview_active_power_kw(
+            "Cai de vis 1.888 MW Active power PV 1.944 MW",
+            "Cai de vis",
+        )
+
+        self.assertEqual(value_kw, 1_888.0)
+
+    def test_validated_overview_power_requires_the_requested_plant(self):
+        value_kw = _extract_validated_overview_active_power_kw(
+            "Another plant 1.888 MW Active power",
+            "Cai de vis",
+        )
+
+        self.assertIsNone(value_kw)
+
     def test_explicit_plant_active_power_replaces_partial_ocr_flow_value(self):
         selected_kw, used_active_power = _select_overview_pv_kw(
             1_423.0,
