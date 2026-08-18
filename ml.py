@@ -2511,7 +2511,7 @@ def predicting_exporting_Astro_15min(interval_from, interval_to, limitation_perc
 
 	df = df[["Data", "Interval", "Temperatura", "Nori", "Radiatie", "Dewpoint", "Zenith", "Azimuth", "Umiditate"]]
 
-	xgb_loaded = joblib.load("./Astro/rs_xgb_astro_prod_15min_0626.pkl")
+	xgb_loaded = joblib.load("./Astro/rs_xgb_astro_prod_15min_0726.pkl")
 
 	df["Month"] = df.Data.dt.month
 	IRR_COL = "Radiatie"      # <- adjust to your irradiance column name (e.g., "GHI")
