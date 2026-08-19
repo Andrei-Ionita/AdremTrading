@@ -136,7 +136,7 @@ ANASUN_INTRADAY_CONFIG = PortfolioIntradayConfig(
         / "AnaSun"
         / "Results_Production_AnaSun_DAM_Corrected_Intraday_15min.xlsx"
     ),
-    max_interval_energy_mwh=9.36 / 4,
+    max_interval_energy_mwh=7.5 / 4,
 )
 
 

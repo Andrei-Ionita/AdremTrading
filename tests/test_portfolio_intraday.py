@@ -126,7 +126,7 @@ class PortfolioConfigurationTests(unittest.TestCase):
             START_FOTOVOLTAICE_INTRADAY_CONFIG.max_interval_energy_mwh,
             0.996 / 4,
         )
-        self.assertEqual(ANASUN_INTRADAY_CONFIG.max_interval_energy_mwh, 9.36 / 4)
+        self.assertEqual(ANASUN_INTRADAY_CONFIG.max_interval_energy_mwh, 7.5 / 4)
 
 
 class PortfolioPredictionTests(unittest.TestCase):
