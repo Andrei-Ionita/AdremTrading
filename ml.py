@@ -2145,6 +2145,20 @@ def fetching_MM_MV_data_15min():
 	# Adjusting the values to EET time
 	data = pd.read_csv("./MM_MV/Solcast/Reghin_15min.csv")
 
+def fetching_AnaSun_data_15min(output_path="./AnaSun/Solcast/Ulmi_15min.csv"):
+	lat = 44.897116
+	lon = 25.499325
+	api_url = "https://api.solcast.com.au/data/forecast/radiation_and_weather?latitude={}&longitude={}&hours=168&output_parameters=air_temp,ghi,azimuth,cloud_opacity,dewpoint_temp,relative_humidity,zenith&period=PT15M&format=csv&time_zone=3&api_key={}".format(lat, lon, solcast_api_key)
+	response = requests.get(api_url)
+	print("Fetching data...")
+	if response.status_code == 200:
+		with open(output_path, 'wb') as file:
+			file.write(response.content)
+	else:
+		print(response.text)
+		raise Exception(f"Failed to fetch data: Status code {response.status_code}")
+	return pd.read_csv(output_path)
+
 def fetching_Rosiori_data_15min():
 	lat = 44.108557
 	lon = 24.994978
@@ -5373,6 +5387,72 @@ def predicting_exporting_MM_MV_15min(interval_from, interval_to, limitation_perc
 	df['Lookup'] = df["Data"].dt.strftime('%d.%m.%Y') + df["Interval"].astype(str)
 	df.to_excel(file_path, index=False)
 	return dataset
+
+def predicting_exporting_AnaSun_15min(
+	interval_from,
+	interval_to,
+	limitation_percentage,
+	weather_path="./AnaSun/Solcast/Ulmi_15min.csv",
+	model_path="./AnaSun/rs_xgb_anasun_prod_15min_0426.pkl",
+	output_path="./AnaSun/Results_Production_AnaSun_xgb_15min.xlsx",
+):
+	df = pd.read_csv(weather_path)
+	required_columns = {"period_end", "air_temp", "cloud_opacity", "ghi"}
+	missing_columns = sorted(required_columns - set(df.columns))
+	if missing_columns:
+		raise ValueError(
+			"AnaSun weather data is missing columns: " + ", ".join(missing_columns)
+		)
+
+	period_end = pd.to_datetime(
+		df["period_end"], errors="coerce", utc=True, format="mixed"
+	)
+	if period_end.isna().any():
+		raise ValueError("AnaSun weather data contains invalid period_end values.")
+	df["Data"] = (
+		period_end.dt.tz_convert("Europe/Bucharest").dt.tz_localize(None)
+	)
+	df["Interval"] = df.Data.dt.hour * 4 + df.Data.dt.minute // 15 + 1
+	df.rename(
+		columns={
+			"ghi": "Radiatie",
+			"air_temp": "Temperatura",
+			"cloud_opacity": "Nori",
+		},
+		inplace=True,
+	)
+	df["Month"] = df.Data.dt.month
+	df["is_dark"] = (df["Radiatie"] <= 0).astype(int)
+	feature_columns = [
+		"Interval",
+		"Temperatura",
+		"Nori",
+		"Radiatie",
+		"Month",
+		"is_dark",
+	]
+	forecast_dataset = df[feature_columns]
+	if not np.isfinite(forecast_dataset.to_numpy(dtype=float)).all():
+		raise ValueError("AnaSun forecast features contain NaN or infinite values.")
+
+	model = joblib.load(model_path)
+	predictions = np.asarray(model.predict(forecast_dataset.values), dtype=float)
+	if predictions.shape != (len(df),) or not np.isfinite(predictions).all():
+		raise ValueError("AnaSun model returned invalid predictions.")
+	predictions = np.maximum(predictions, 0)
+	predictions[df["is_dark"].to_numpy(dtype=bool)] = 0
+	limited = df["Interval"].between(interval_from * 4, interval_to * 4)
+	predictions[limited] *= 1 - limitation_percentage / 100
+	predictions = np.round(predictions, 3)
+	predictions[predictions < 0.01] = 0
+
+	result = df[["Data", "Interval"]].copy()
+	result["Prediction"] = predictions
+	result["Lookup"] = (
+		result["Data"].dt.strftime("%d.%m.%Y") + result["Interval"].astype(str)
+	)
+	result.to_excel(output_path, index=False, sheet_name="Production_Predictions")
+	return result
 
 def predicting_exporting_Rosiori_15min(interval_from, interval_to, limitation_percentage):
 	# Creating the forecast_dataset df

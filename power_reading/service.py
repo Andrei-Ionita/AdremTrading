@@ -83,6 +83,12 @@ _ASSETS = {
         "https://web3.isolarcloud.eu/#/login",
         "Reghin",
     ),
+    "anasun": AssetSpec(
+        "anasun_isolarcloud",
+        "ANASUN",
+        "https://web3.isolarcloud.eu/#/login",
+        "AnaSun Ulmi",
+    ),
 }
 
 
@@ -215,7 +221,7 @@ def _build_scraper(spec: AssetSpec, *, headless: bool):
             browser_timeout_ms=_int_env("NECALUXAN_BROWSER_TIMEOUT_MS", 60_000),
         )
 
-    if spec.asset_type == "isolarcloud":
+    if spec.asset_type in {"isolarcloud", "anasun_isolarcloud"}:
         from .scrapers.isolarcloud_scraper import ISolarCloudScraper
 
         return ISolarCloudScraper(
@@ -225,7 +231,10 @@ def _build_scraper(spec: AssetSpec, *, headless: bool):
             plant_name=plant_name,
             user_data_dir=str(profile_dir),
             headless=headless,
-            browser_timeout_ms=_int_env("MM_MV_BROWSER_TIMEOUT_MS", 60_000),
+            browser_timeout_ms=_int_env(
+                f"{spec.env_prefix}_BROWSER_TIMEOUT_MS", 60_000
+            ),
+            credential_env_prefix=spec.env_prefix,
         )
 
     from .scrapers.fusionsolar_scraper import FusionSolarScraper

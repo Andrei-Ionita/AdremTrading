@@ -26,6 +26,7 @@ from pytz import timezone
 from ml import fetching_Imperial_data, fetching_Astro_data, predicting_exporting_Astro, predicting_exporting_Imperial, fetching_Imperial_data_15min, fetching_Astro_data_15min, predicting_exporting_Astro_15min, predicting_exporting_Imperial_15min, fetching_Kahraman_data, fetching_Kahraman_data_15min, predicting_exporting_Kahraman, predicting_exporting_Kahraman_15min, fetching_SunEnergy_data, fetching_SunEnergy_data_15min, predicting_exporting_SunEnergy, predicting_exporting_SunEnergy_15min, fetching_Dragosel_data, fetching_Dragosel_data_15min, predicting_exporting_Dragosel, predicting_exporting_Dragosel_15min, fetching_Sun_Grow_Lucia_data_15min, predicting_exporting_Sun_Grow_Lucia_15min
 from ml import uploading_onedrive_file, upload_file_with_retries, check_file_sync, predicting_exporting_SolarEnergy, predicting_exporting_SolarEnergy_15min, fetching_SolarEnergy_data, fetching_SolarEnergy_data_15min, fetching_Elnet_data, fetching_Elnet_data_15min, predicting_exporting_Elnet, predicting_exporting_Elnet_15min, fetching_Horeco_data, fetching_Horeco_data_15min, predicting_exporting_Horeco, predicting_exporting_Horeco_15min, fetching_3D_Steel_data, fetching_3D_Steel_data_15min, predicting_exporting_3D_Steel, predicting_exporting_3D_Steel_15min, fetching_GESS_data_15min, predicting_exporting_GESS_15min, predicting_exporting_NRG_15min, fetching_NRG_data_15min, fetching_Photovoltaic_Energy_Project_data_15min, predicting_exporting_Photovoltaic_Energy_Project_15min, predicting_exporting_Anto_15min
 from ml import fetching_MM_MV_data_15min, predicting_exporting_MM_MV_15min, fetching_Rosiori_data_15min, predicting_exporting_Rosiori_15min, fetching_Necaluxan_data_15min, predicting_exporting_Necaluxan_15min, fetching_Adrem_data_15min, predicting_exporting_Adrem_15min, fetching_Anto_data_15min, fetching_Motif_data_15min, predicting_exporting_Motif_15min, fetching_Ferma_data_15min, predicting_exporting_Ferma_15min, fetching_HNG_data_15min, predicting_exporting_HNG_15min
+from ml import fetching_AnaSun_data_15min, predicting_exporting_AnaSun_15min
 from database import render_indisponibility_db_Kahraman, render_indisponibility_db_Astro, render_indisponibility_db_Imperial, render_indisponibility_db_SunEnergy, render_indisponibility_db_SolarEnergy, render_indisponibility_db_Elnet, render_indisponibility_db_Horeco, render_indisponibility_db_3D_Steel, render_indisponibility_db_Dragosel, render_indisponibility_db_GESS, render_indisponibility_db_NRG, render_indisponibility_db_Sun_Grow_Lucia, render_indisponibility_db_Photovoltaic_Energy_Project, render_indisponibility_db_MM_MV, render_indisponibility_db_Rosiori, render_indisponibility_db_Necaluxan, render_indisponibility_db_Adrem, render_indisponibility_db_Anto, render_indisponibility_db_Motif, render_indisponibility_db_Ferma, render_indisponibility_db_HNG				
 from data_fetching.entsoe_newapi_data import fetch_process_wind_notified, fetch_process_wind_actual_production, fetch_process_solar_notified, fetch_process_solar_actual_production
 from data_fetching.entsoe_newapi_data import fetch_consumption_forecast, fetch_actual_consumption, render_test_entsoe_newapi_functions
@@ -49,6 +50,7 @@ from incuba_intraday import (
 	run_incuba_intraday_forecast,
 )
 from portfolio_intraday import (
+	ANASUN_INTRADAY_CONFIG,
 	ANTO_INTRADAY_CONFIG,
 	ASTRO_INTRADAY_CONFIG,
 	FERMA_INTRADAY_CONFIG,
@@ -449,6 +451,7 @@ def create_excel_file_with_all_forecasts():
 	df_Horeco = pd.read_excel("./Horeco/Results_Production_Horeco_xgb.xlsx")
 	df_3D_Steel = pd.read_excel("./3D_Steel/Results_Production_3D_Steel_xgb.xlsx")
 	df_Dragosel = pd.read_excel("./Dragosel/Results_Production_Dragosel_xgb.xlsx")
+	df_AnaSun_15min = pd.read_excel("./AnaSun/Results_Production_AnaSun_xgb_15min.xlsx")
 	df_all = pd.read_excel("./Forecast_template.xlsx")
 
 	# Writing in the Excel file
@@ -467,12 +470,25 @@ def create_excel_file_with_all_forecasts():
 		df_SolarEnergy["Prediction"] * START_FOTOVOLTAICE_SCALE
 	)
 	df_all["Lookup"] = df_Astro["Lookup"]
+	anasun_data = df_AnaSun_15min[["Data", "Interval", "Prediction"]].copy()
+	anasun_data["Data"] = pd.to_datetime(anasun_data["Data"])
+	anasun_data["Hourly_interval"] = (
+		(pd.to_numeric(anasun_data["Interval"]) - 1) // 4 + 1
+	).astype(int)
+	anasun_data["Hourly_lookup"] = (
+		anasun_data["Data"].dt.strftime("%d.%m.%Y")
+		+ anasun_data["Hourly_interval"].astype(str)
+	)
+	anasun_hourly = anasun_data.groupby("Hourly_lookup")["Prediction"].sum()
+	df_all["Prediction_AnaSun"] = df_all["Lookup"].map(anasun_hourly)
 	start_column = df_all.pop("Prediction_Start_Fotovoltaice")
 	df_all.insert(
 		df_all.columns.get_loc("Lookup"),
 		"Prediction_Start_Fotovoltaice",
 		start_column,
 	)
+	anasun_column = df_all.pop("Prediction_AnaSun")
+	df_all.insert(df_all.columns.get_loc("Lookup"), "Prediction_AnaSun", anasun_column)
 
 	df_all.to_excel("./Forecast.xlsx", index=False)
 	return df_all
@@ -490,6 +506,7 @@ def create_excel_file_with_all_forecasts_15min(
 	use_necaluxan_intraday=True,
 	use_ulmeni_intraday=True,
 	use_start_fotovoltaice_intraday=True,
+	use_anasun_intraday=True,
 ):
 	df_Astro = pd.read_excel("./Astro/Results_Production_Astro_xgb_15min.xlsx")
 	df_Imperial = pd.read_excel("./Imperial/Results_Production_Imperial_xgb_15min.xlsx")
@@ -512,6 +529,7 @@ def create_excel_file_with_all_forecasts_15min(
 	df_Motif = pd.read_excel("./Motif/Results_Production_Motif_xgb_15min.xlsx")
 	df_Ferma = pd.read_excel("./Ferma/Results_Production_Ferma_xgb_15min.xlsx")
 	df_HNG = pd.read_excel("./HNG/Results_Production_HNG_xgb_15min.xlsx")
+	df_AnaSun = pd.read_excel("./AnaSun/Results_Production_AnaSun_xgb_15min.xlsx")
 	df_all = pd.read_excel("./Forecast_template.xlsx")
 
 	# Writing in the Excel file
@@ -558,6 +576,7 @@ def create_excel_file_with_all_forecasts_15min(
 	df_all["Prediction_Motif"] = df_Motif["Prediction"]
 	df_all["Prediction_Ferma"] = df_Ferma["Prediction"]
 	df_all["Prediction_HNG"] = df_HNG["Prediction"]
+	df_all["Prediction_AnaSun"] = df_AnaSun["Prediction"]
 	if use_hng_intraday and HNG_INTRADAY_RESULTS_PATH.is_file():
 		df_HNG_intraday = pd.read_excel(HNG_INTRADAY_RESULTS_PATH)
 		if not df_HNG_intraday.empty:
@@ -572,6 +591,7 @@ def create_excel_file_with_all_forecasts_15min(
 		(use_astro_intraday, "Prediction_Astro", ASTRO_INTRADAY_CONFIG),
 		(use_imperial_intraday, "Prediction_Imperial", IMPERIAL_INTRADAY_CONFIG),
 		(use_ulmeni_intraday, "Prediction_SolEn_Ulmeni", ULMENI_INTRADAY_CONFIG),
+		(use_anasun_intraday, "Prediction_AnaSun", ANASUN_INTRADAY_CONFIG),
 		(use_anto_intraday, "Prediction_Anto", ANTO_INTRADAY_CONFIG),
 		(use_motif_intraday, "Prediction_Motif", MOTIF_INTRADAY_CONFIG),
 		(use_ferma_intraday, "Prediction_Ferma", FERMA_INTRADAY_CONFIG),
@@ -634,6 +654,8 @@ def create_excel_file_with_all_forecasts_15min(
 		"Prediction_Start_Fotovoltaice",
 		start_column,
 	)
+	anasun_column = df_all.pop("Prediction_AnaSun")
+	df_all.insert(df_all.columns.get_loc("Lookup"), "Prediction_AnaSun", anasun_column)
 
 	df_all.to_excel("./Forecast_15min.xlsx", index=False)
 	return df_all
@@ -654,6 +676,7 @@ def refresh_intraday_corrections(refreshers=None):
 			("necaluxan", "Necaluxan", lambda: run_portfolio_intraday_forecast(NECALUXAN_INTRADAY_CONFIG), PortfolioIntradayError),
 			("ulmeni", "Solar Energy Ulmeni", lambda: run_portfolio_intraday_forecast(ULMENI_INTRADAY_CONFIG), PortfolioIntradayError),
 			("start_fotovoltaice", "Start Fotovoltaice", lambda: run_portfolio_intraday_forecast(START_FOTOVOLTAICE_INTRADAY_CONFIG), PortfolioIntradayError),
+			("anasun", "AnaSun", lambda: run_portfolio_intraday_forecast(ANASUN_INTRADAY_CONFIG), PortfolioIntradayError),
 		)
 	available = {key: False for key, _, _, _ in refreshers}
 	results = {}
@@ -1247,6 +1270,10 @@ def render_balancing_market_intraday_page():
 			# access_token = upload_file_with_retries(file_path)
 			# check_file_sync(file_path, access_token)
 
+			# Forecasting AnaSun
+			fetching_AnaSun_data_15min()
+			st.dataframe(predicting_exporting_AnaSun_15min(1, 24, 0))
+
 			# Refresh corrections after every DAM file is ready so the export uses the newest readings.
 			intraday_available, _, correction_errors = refresh_intraday_corrections()
 			for display_name, error in correction_errors.items():
@@ -1265,6 +1292,7 @@ def render_balancing_market_intraday_page():
 				use_necaluxan_intraday=intraday_available["necaluxan"],
 				use_ulmeni_intraday=intraday_available["ulmeni"],
 				use_start_fotovoltaice_intraday=intraday_available["start_fotovoltaice"],
+				use_anasun_intraday=intraday_available["anasun"],
 			)
 
 	with col2:
@@ -1286,6 +1314,7 @@ def render_balancing_market_intraday_page():
 				use_necaluxan_intraday=intraday_available["necaluxan"],
 				use_ulmeni_intraday=intraday_available["ulmeni"],
 				use_start_fotovoltaice_intraday=intraday_available["start_fotovoltaice"],
+				use_anasun_intraday=intraday_available["anasun"],
 			)
 			file_path = './Forecast.xlsx'
 			with open(file_path, "rb") as f:

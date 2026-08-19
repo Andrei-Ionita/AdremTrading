@@ -124,6 +124,20 @@ START_FOTOVOLTAICE_INTRADAY_CONFIG = PortfolioIntradayConfig(
     max_interval_energy_mwh=0.996 / 4,
     baseline_scale=START_FOTOVOLTAICE_SCALE,
 )
+ANASUN_INTRADAY_CONFIG = PortfolioIntradayConfig(
+    asset_key="anasun",
+    display_name="AnaSun",
+    dam_results_path=(
+        APP_ROOT / "AnaSun" / "Results_Production_AnaSun_xgb_15min.xlsx"
+    ),
+    weather_path=APP_ROOT / "AnaSun" / "Solcast" / "Ulmi_15min.csv",
+    intraday_results_path=(
+        APP_ROOT
+        / "AnaSun"
+        / "Results_Production_AnaSun_DAM_Corrected_Intraday_15min.xlsx"
+    ),
+    max_interval_energy_mwh=9.36 / 4,
+)
 
 
 class PortfolioIntradayError(RuntimeError):

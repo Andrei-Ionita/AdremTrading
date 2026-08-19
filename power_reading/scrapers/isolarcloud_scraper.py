@@ -31,6 +31,7 @@ class ISolarCloudScraper:
         user_data_dir: str = ".playwright_profile_isolarcloud",
         browser_timeout_ms: int = 60_000,
         headless: bool = False,
+        credential_env_prefix: str = "MM_MV",
     ) -> None:
         self.target_url = target_url
         self.username = username
@@ -39,6 +40,7 @@ class ISolarCloudScraper:
         self.user_data_dir = Path(user_data_dir)
         self.browser_timeout_ms = browser_timeout_ms
         self.headless = headless
+        self.credential_env_prefix = credential_env_prefix
 
     def scrape_once(self) -> PowerSnapshot:
         self._validate_credentials()
@@ -84,12 +86,12 @@ class ISolarCloudScraper:
     def _validate_credentials(self) -> None:
         missing = []
         if not self.username:
-            missing.append("MM_MV_USERNAME")
+            missing.append(f"{self.credential_env_prefix}_USERNAME")
         if not self.password:
-            missing.append("MM_MV_PASSWORD")
+            missing.append(f"{self.credential_env_prefix}_PASSWORD")
         if missing:
             raise ISolarCloudReadOnlyError(
-                f"Missing required MM&MV credentials: {', '.join(missing)}."
+                f"Missing required iSolarCloud credentials: {', '.join(missing)}."
             )
 
     def _accept_cookies(self, page) -> None:
@@ -175,7 +177,7 @@ def extract_realtime_power_kw(
     column = matching_columns[0]
     if column >= len(cells):
         raise ISolarCloudReadOnlyError(
-            "The iSolarCloud Reghin row does not match the visible table columns."
+            f"The iSolarCloud {plant_name} row does not match the visible table columns."
         )
 
     plant_lines = [line.strip() for line in str(cells[0]).splitlines() if line.strip()]

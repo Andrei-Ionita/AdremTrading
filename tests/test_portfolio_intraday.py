@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 
 from portfolio_intraday import (
+    ANASUN_INTRADAY_CONFIG,
     ANTO_INTRADAY_CONFIG,
     ASTRO_INTRADAY_CONFIG,
     CORRECTION_HALF_LIFE_MINUTES,
@@ -97,6 +98,7 @@ class PortfolioConfigurationTests(unittest.TestCase):
             NECALUXAN_INTRADAY_CONFIG,
             ULMENI_INTRADAY_CONFIG,
             START_FOTOVOLTAICE_INTRADAY_CONFIG,
+            ANASUN_INTRADAY_CONFIG,
         )
         self.assertEqual(
             {config.asset_key for config in configs},
@@ -109,6 +111,7 @@ class PortfolioConfigurationTests(unittest.TestCase):
                 "necaluxan",
                 "ulmeni",
                 "start_fotovoltaice",
+                "anasun",
             },
         )
         self.assertNotIn("snk", {config.asset_key for config in configs})
@@ -123,6 +126,7 @@ class PortfolioConfigurationTests(unittest.TestCase):
             START_FOTOVOLTAICE_INTRADAY_CONFIG.max_interval_energy_mwh,
             0.996 / 4,
         )
+        self.assertEqual(ANASUN_INTRADAY_CONFIG.max_interval_energy_mwh, 9.36 / 4)
 
 
 class PortfolioPredictionTests(unittest.TestCase):

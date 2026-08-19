@@ -5,8 +5,13 @@ from unittest.mock import patch
 
 import pandas as pd
 
-from balancing import create_excel_file_with_all_forecasts_15min, refresh_intraday_corrections
+from balancing import (
+    create_excel_file_with_all_forecasts,
+    create_excel_file_with_all_forecasts_15min,
+    refresh_intraday_corrections,
+)
 from portfolio_intraday import (
+    ANASUN_INTRADAY_CONFIG,
     START_FOTOVOLTAICE_INTRADAY_CONFIG,
     START_FOTOVOLTAICE_SCALE,
     ULMENI_INTRADAY_CONFIG,
@@ -14,6 +19,42 @@ from portfolio_intraday import (
 
 
 class IntradayRefreshTests(unittest.TestCase):
+    def test_anasun_is_aggregated_into_hourly_portfolio_export(self):
+        hourly = pd.DataFrame(
+            {
+                "Data": pd.to_datetime(["2026-08-19", "2026-08-19"]),
+                "Interval": [10, 11],
+                "Prediction": [2.0, 1.5],
+                "Lookup": ["19.08.202610", "19.08.202611"],
+            }
+        )
+        quarter_hourly = pd.DataFrame(
+            {
+                "Data": pd.date_range("2026-08-19 09:00", periods=8, freq="15min"),
+                "Interval": range(37, 45),
+                "Prediction": [0.1, 0.2, 0.3, 0.4, 0.2, 0.2, 0.2, 0.2],
+            }
+        )
+
+        def read_excel(path, *args, **kwargs):
+            if str(path).endswith("Results_Production_AnaSun_xgb_15min.xlsx"):
+                return quarter_hourly.copy()
+            if str(path).endswith("Forecast_template.xlsx"):
+                return pd.DataFrame(index=range(len(hourly)))
+            return hourly.copy()
+
+        with (
+            patch("balancing.pd.read_excel", side_effect=read_excel),
+            patch("balancing.pd.DataFrame.to_excel"),
+        ):
+            result = create_excel_file_with_all_forecasts()
+
+        self.assertEqual(result["Prediction_AnaSun"].tolist(), [1.0, 0.8])
+        self.assertLess(
+            result.columns.get_loc("Prediction_AnaSun"),
+            result.columns.get_loc("Lookup"),
+        )
+
     def test_failed_refresh_is_disabled_for_the_export(self):
         def fail():
             raise ValueError("missing fresh reading")
@@ -54,6 +95,7 @@ class IntradayRefreshTests(unittest.TestCase):
                 "necaluxan",
                 "ulmeni",
                 "start_fotovoltaice",
+                "anasun",
             },
         )
         self.assertEqual(errors, {})
@@ -100,6 +142,7 @@ class IntradayRefreshTests(unittest.TestCase):
                 use_necaluxan_intraday=False,
                 use_ulmeni_intraday=True,
                 use_start_fotovoltaice_intraday=False,
+                use_anasun_intraday=False,
             )
 
         self.assertEqual(result["Prediction_SolEn_Ulmeni"].tolist(), [0.7, 0.3])
@@ -145,6 +188,7 @@ class IntradayRefreshTests(unittest.TestCase):
                 use_necaluxan_intraday=False,
                 use_ulmeni_intraday=False,
                 use_start_fotovoltaice_intraday=True,
+                use_anasun_intraday=False,
             )
 
         self.assertEqual(
@@ -155,6 +199,55 @@ class IntradayRefreshTests(unittest.TestCase):
             result.columns.get_loc("Prediction_Start_Fotovoltaice"),
             result.columns.get_loc("Lookup"),
         )
+        self.assertEqual(result["Prediction_AnaSun"].tolist(), dam["Prediction"].tolist())
+        self.assertLess(
+            result.columns.get_loc("Prediction_AnaSun"),
+            result.columns.get_loc("Lookup"),
+        )
+
+    def test_anasun_correction_is_applied_to_portfolio_export(self):
+        timestamps = pd.to_datetime(["2026-08-19 10:15", "2026-08-19 10:30"])
+        dam = pd.DataFrame(
+            {
+                "Data": timestamps,
+                "Interval": [42, 43],
+                "Prediction": [1.0, 0.9],
+                "Lookup": ["unused", "unused"],
+            }
+        )
+        corrected = pd.DataFrame(
+            {"Data": [timestamps[0]], "Prediction_ID": [1.4]}
+        )
+
+        def read_excel(path, *args, **kwargs):
+            if str(path) == str(ANASUN_INTRADAY_CONFIG.intraday_results_path):
+                return corrected.copy()
+            if str(path).endswith("Forecast_template.xlsx"):
+                return pd.DataFrame(index=range(len(dam)))
+            return dam.copy()
+
+        with (
+            patch("balancing.pd.read_excel", side_effect=read_excel),
+            patch("balancing.pd.DataFrame.to_excel"),
+            patch("pathlib.Path.is_file", return_value=True),
+        ):
+            result = create_excel_file_with_all_forecasts_15min(
+                use_astro_intraday=False,
+                use_imperial_intraday=False,
+                use_elnet_intraday=False,
+                use_horeco_intraday=False,
+                use_hng_intraday=False,
+                use_incuba_intraday=False,
+                use_anto_intraday=False,
+                use_motif_intraday=False,
+                use_ferma_intraday=False,
+                use_necaluxan_intraday=False,
+                use_ulmeni_intraday=False,
+                use_start_fotovoltaice_intraday=False,
+                use_anasun_intraday=True,
+            )
+
+        self.assertEqual(result["Prediction_AnaSun"].tolist(), [1.4, 0.9])
 
 
 if __name__ == "__main__":

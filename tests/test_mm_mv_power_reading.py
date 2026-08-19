@@ -8,7 +8,7 @@ from power_reading.scrapers.isolarcloud_scraper import (
     ISolarCloudReadOnlyError,
     extract_realtime_power_kw,
 )
-from power_reading.service import available_assets, read_asset
+from power_reading.service import _ASSETS, available_assets, read_asset
 
 
 HEADERS = [
@@ -79,6 +79,43 @@ class MM_MVPowerServiceTests(unittest.TestCase):
 
         self.assertEqual(reading.pv_mw, 4.37)
         self.assertEqual(reading.asset, "mm_mv")
+
+
+class AnaSunPowerServiceTests(unittest.TestCase):
+    def test_anasun_is_registered_for_its_own_isolarcloud_account(self):
+        self.assertIn("anasun", available_assets())
+        self.assertEqual(_ASSETS["anasun"].default_plant_name, "AnaSun Ulmi")
+        self.assertEqual(_ASSETS["anasun"].env_prefix, "ANASUN")
+        self.assertNotEqual(_ASSETS["anasun"].asset_type, _ASSETS["mm_mv"].asset_type)
+
+    def test_reads_anasun_realtime_power_column(self):
+        cells = [*CELLS]
+        cells[0] = "AnaSun Ulmi\nGuest\nAnaSun Ulmi"
+        cells[3] = "9.36 MWp"
+        cells[4] = "7.6 MW"
+
+        power_kw, raw_value = extract_realtime_power_kw(
+            HEADERS, cells, "AnaSun Ulmi"
+        )
+
+        self.assertEqual(power_kw, 7_600.0)
+        self.assertEqual(raw_value, "7.6 MW")
+
+    @patch("power_reading.service._build_scraper")
+    def test_service_normalizes_anasun_kw_to_mw(self, build_scraper):
+        build_scraper.return_value.scrape_once.return_value = SimpleNamespace(
+            pv_kw=7_600.0,
+            load_kw=None,
+            grid_kw=None,
+            timestamp_utc="2026-08-19T10:00:00+00:00",
+            source="isolarcloud-plant-list-real-time-power@AnaSun Ulmi",
+            raw_excerpt="AnaSun Ulmi | Real-time power 7.6 MW",
+        )
+
+        reading = read_asset("anasun")
+
+        self.assertEqual(reading.pv_mw, 7.6)
+        self.assertEqual(reading.asset, "anasun")
 
 
 if __name__ == "__main__":
