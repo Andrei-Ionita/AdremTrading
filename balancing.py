@@ -55,6 +55,8 @@ from portfolio_intraday import (
 	IMPERIAL_INTRADAY_CONFIG,
 	MOTIF_INTRADAY_CONFIG,
 	NECALUXAN_INTRADAY_CONFIG,
+	START_FOTOVOLTAICE_INTRADAY_CONFIG,
+	START_FOTOVOLTAICE_SCALE,
 	ULMENI_INTRADAY_CONFIG,
 	PortfolioIntradayError,
 	run_portfolio_intraday_forecast,
@@ -461,7 +463,16 @@ def create_excel_file_with_all_forecasts():
 	df_all["Prediction_Horeco"] = df_Horeco["Prediction"]
 	df_all["Prediction_3D_Steel"] = df_3D_Steel["Prediction"]
 	df_all["Prediction_Dragosel"] = df_Dragosel["Prediction"]
+	df_all["Prediction_Start_Fotovoltaice"] = (
+		df_SolarEnergy["Prediction"] * START_FOTOVOLTAICE_SCALE
+	)
 	df_all["Lookup"] = df_Astro["Lookup"]
+	start_column = df_all.pop("Prediction_Start_Fotovoltaice")
+	df_all.insert(
+		df_all.columns.get_loc("Lookup"),
+		"Prediction_Start_Fotovoltaice",
+		start_column,
+	)
 
 	df_all.to_excel("./Forecast.xlsx", index=False)
 	return df_all
@@ -478,6 +489,7 @@ def create_excel_file_with_all_forecasts_15min(
 	use_ferma_intraday=True,
 	use_necaluxan_intraday=True,
 	use_ulmeni_intraday=True,
+	use_start_fotovoltaice_intraday=True,
 ):
 	df_Astro = pd.read_excel("./Astro/Results_Production_Astro_xgb_15min.xlsx")
 	df_Imperial = pd.read_excel("./Imperial/Results_Production_Imperial_xgb_15min.xlsx")
@@ -591,9 +603,37 @@ def create_excel_file_with_all_forecasts_15min(
 			df_all["Prediction_Incuba"] = corrected_incuba.combine_first(
 				df_all["Prediction_Incuba"]
 			)
+	df_all["Prediction_Start_Fotovoltaice"] = (
+		df_SolarEnergy["Prediction"] * START_FOTOVOLTAICE_SCALE
+	)
+	if (
+		use_start_fotovoltaice_intraday
+		and START_FOTOVOLTAICE_INTRADAY_CONFIG.intraday_results_path.is_file()
+	):
+		df_start_intraday = pd.read_excel(
+			START_FOTOVOLTAICE_INTRADAY_CONFIG.intraday_results_path
+		)
+		if not df_start_intraday.empty:
+			start_intraday_by_timestamp = (
+				df_start_intraday.assign(Data=pd.to_datetime(df_start_intraday["Data"]))
+				.drop_duplicates(subset="Data", keep="last")
+				.set_index("Data")["Prediction_ID"]
+			)
+			corrected_start = pd.to_datetime(df_all["Data"]).map(
+				start_intraday_by_timestamp
+			)
+			df_all["Prediction_Start_Fotovoltaice"] = corrected_start.combine_first(
+				df_all["Prediction_Start_Fotovoltaice"]
+			)
 	df_all["Lookup"] = df_Astro["Lookup"]
 	incuba_column = df_all.pop("Prediction_Incuba")
 	df_all.insert(df_all.columns.get_loc("Lookup"), "Prediction_Incuba", incuba_column)
+	start_column = df_all.pop("Prediction_Start_Fotovoltaice")
+	df_all.insert(
+		df_all.columns.get_loc("Lookup"),
+		"Prediction_Start_Fotovoltaice",
+		start_column,
+	)
 
 	df_all.to_excel("./Forecast_15min.xlsx", index=False)
 	return df_all
@@ -613,6 +653,7 @@ def refresh_intraday_corrections(refreshers=None):
 			("ferma", "Ferma Frumusica", lambda: run_portfolio_intraday_forecast(FERMA_INTRADAY_CONFIG), PortfolioIntradayError),
 			("necaluxan", "Necaluxan", lambda: run_portfolio_intraday_forecast(NECALUXAN_INTRADAY_CONFIG), PortfolioIntradayError),
 			("ulmeni", "Solar Energy Ulmeni", lambda: run_portfolio_intraday_forecast(ULMENI_INTRADAY_CONFIG), PortfolioIntradayError),
+			("start_fotovoltaice", "Start Fotovoltaice", lambda: run_portfolio_intraday_forecast(START_FOTOVOLTAICE_INTRADAY_CONFIG), PortfolioIntradayError),
 		)
 	available = {key: False for key, _, _, _ in refreshers}
 	results = {}
@@ -1223,6 +1264,7 @@ def render_balancing_market_intraday_page():
 				use_ferma_intraday=intraday_available["ferma"],
 				use_necaluxan_intraday=intraday_available["necaluxan"],
 				use_ulmeni_intraday=intraday_available["ulmeni"],
+				use_start_fotovoltaice_intraday=intraday_available["start_fotovoltaice"],
 			)
 
 	with col2:
@@ -1243,6 +1285,7 @@ def render_balancing_market_intraday_page():
 				use_ferma_intraday=intraday_available["ferma"],
 				use_necaluxan_intraday=intraday_available["necaluxan"],
 				use_ulmeni_intraday=intraday_available["ulmeni"],
+				use_start_fotovoltaice_intraday=intraday_available["start_fotovoltaice"],
 			)
 			file_path = './Forecast.xlsx'
 			with open(file_path, "rb") as f:

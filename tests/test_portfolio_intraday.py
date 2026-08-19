@@ -14,6 +14,8 @@ from portfolio_intraday import (
     IMPERIAL_INTRADAY_CONFIG,
     MOTIF_INTRADAY_CONFIG,
     NECALUXAN_INTRADAY_CONFIG,
+    START_FOTOVOLTAICE_INTRADAY_CONFIG,
+    START_FOTOVOLTAICE_SCALE,
     ULMENI_INTRADAY_CONFIG,
     PortfolioIntradayConfig,
     PortfolioIntradayInputError,
@@ -94,6 +96,7 @@ class PortfolioConfigurationTests(unittest.TestCase):
             FERMA_INTRADAY_CONFIG,
             NECALUXAN_INTRADAY_CONFIG,
             ULMENI_INTRADAY_CONFIG,
+            START_FOTOVOLTAICE_INTRADAY_CONFIG,
         )
         self.assertEqual(
             {config.asset_key for config in configs},
@@ -105,6 +108,7 @@ class PortfolioConfigurationTests(unittest.TestCase):
                 "ferma_frumusica",
                 "necaluxan",
                 "ulmeni",
+                "start_fotovoltaice",
             },
         )
         self.assertNotIn("snk", {config.asset_key for config in configs})
@@ -114,9 +118,26 @@ class PortfolioConfigurationTests(unittest.TestCase):
             self.assertTrue(config.weather_path.is_file())
             self.assertEqual(config.min_actual_to_forecast_ratio, 0.5)
         self.assertEqual(ULMENI_INTRADAY_CONFIG.max_interval_energy_mwh, 1.0875)
+        self.assertEqual(START_FOTOVOLTAICE_SCALE, 0.996 / 4.44)
+        self.assertEqual(
+            START_FOTOVOLTAICE_INTRADAY_CONFIG.max_interval_energy_mwh,
+            0.996 / 4,
+        )
 
 
 class PortfolioPredictionTests(unittest.TestCase):
+    def test_start_fotovoltaice_baseline_scales_ulmeni_forecast(self):
+        result = predict_portfolio_intraday(
+            START_FOTOVOLTAICE_INTRADAY_CONFIG,
+            dam_forecast(prediction=0.444),
+            weather_for_origin(),
+            ORIGIN,
+            0.0996,
+        )
+
+        self.assertEqual(result["Prediction_DAM"].iloc[0], 0.1)
+        self.assertEqual(result["Actual_minus_DAM"].iloc[0], 0.0)
+
     def test_ten_o_clock_origin_generates_55_same_day_targets(self):
         result = predict_portfolio_intraday(
             CONFIG,

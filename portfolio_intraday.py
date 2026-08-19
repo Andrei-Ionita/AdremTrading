@@ -25,6 +25,7 @@ class PortfolioIntradayConfig:
     intraday_results_path: Path
     max_interval_energy_mwh: float | None = None
     min_actual_to_forecast_ratio: float | None = MIN_ACTUAL_TO_FORECAST_RATIO
+    baseline_scale: float = 1.0
 
 
 ASTRO_INTRADAY_CONFIG = PortfolioIntradayConfig(
@@ -102,6 +103,26 @@ ULMENI_INTRADAY_CONFIG = PortfolioIntradayConfig(
         / "Results_Production_SolarEnergy_DAM_Corrected_Intraday_15min.xlsx"
     ),
     max_interval_energy_mwh=4.35 / 4,
+)
+START_FOTOVOLTAICE_SCALE = 0.996 / 4.44
+START_FOTOVOLTAICE_INTRADAY_CONFIG = PortfolioIntradayConfig(
+    asset_key="start_fotovoltaice",
+    display_name="Start Fotovoltaice",
+    dam_results_path=(
+        APP_ROOT
+        / "Solar Energy Ulmeni"
+        / "Results_Production_SolarEnergy_xgb_15min.xlsx"
+    ),
+    weather_path=(
+        APP_ROOT / "Solar Energy Ulmeni" / "Solcast" / "Oltenita_15min.csv"
+    ),
+    intraday_results_path=(
+        APP_ROOT
+        / "Start Fotovoltaice"
+        / "Results_Production_Start_Fotovoltaice_Derived_Corrected_Intraday_15min.xlsx"
+    ),
+    max_interval_energy_mwh=0.996 / 4,
+    baseline_scale=START_FOTOVOLTAICE_SCALE,
 )
 
 
@@ -456,9 +477,20 @@ def _remaining_dam_baseline(
             f"{config.display_name} DAM Interval values do not match their timestamps."
         )
 
+    if not np.isfinite(config.baseline_scale) or config.baseline_scale < 0:
+        raise PortfolioIntradayInputError(
+            f"{config.display_name} baseline scale must be finite and non-negative."
+        )
+
     baseline = pd.DataFrame(index=targets)
     baseline["Interval"] = expected_intervals
-    baseline["Prediction_DAM"] = predictions.to_numpy(dtype=float)
+    scaled_predictions = predictions.to_numpy(dtype=float) * config.baseline_scale
+    if config.max_interval_energy_mwh is not None:
+        scaled_predictions = np.minimum(
+            scaled_predictions,
+            config.max_interval_energy_mwh,
+        )
+    baseline["Prediction_DAM"] = scaled_predictions
     return targets, baseline
 
 

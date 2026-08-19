@@ -65,6 +65,22 @@ class ADCMonitoringTests(unittest.TestCase):
         self.assertEqual(scraper.username, "adc-user")
         self.assertEqual(scraper.password, "adc-password")
 
+    def test_start_fotovoltaice_uses_borcea_and_shared_adc_credentials(self):
+        spec = _ASSETS["start_fotovoltaice"]
+        environment = {"ANTO_USERNAME": "adc-user", "ANTO_PASSWORD": "adc-password"}
+        with patch.dict(os.environ, environment, clear=True), patch(
+            "power_reading.service._profile_dir",
+            return_value=Path(".playwright_profiles/start_fotovoltaice"),
+        ):
+            scraper = _build_scraper(spec, headless=True)
+
+        self.assertEqual(type(scraper).__name__, "ADCMonitoringScraper")
+        self.assertEqual(scraper.plant_name, "CEF Borcea")
+        self.assertEqual(scraper.username, "adc-user")
+        self.assertEqual(scraper.password, "adc-password")
+        borcea = _extract_plant_section(FLEET_TEXT, "CEF Borcea")
+        self.assertEqual(_extract_metric_kw(borcea, "POWER OUTPUT"), 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()
