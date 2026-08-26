@@ -156,10 +156,10 @@ class ImperialScraper:
                 raise last_exc
             self._open_plant_performance_if_needed(page)
             self._set_1d_range(page)
-            # Primary path: read visible on-screen power directly from dashboard.
-            vis_mw = self._extract_visible_power_mw(page)
+            # Aurora's CSV export can lag the live chart by hours.
+            vis_mw, vis_ts = self._extract_visible_power_sample(page)
             if vis_mw is not None:
-                ts = datetime.now(timezone.utc).isoformat()
+                ts = vis_ts or datetime.now(timezone.utc).isoformat()
                 return vis_mw, ts, f"visible-power:{vis_mw}"
             try:
                 self._ensure_csv_ready(page)
@@ -660,10 +660,14 @@ class ImperialScraper:
         return False
 
     def _extract_visible_power_mw(self, page) -> Optional[float]:
+        value_mw, _ = self._extract_visible_power_sample(page)
+        return value_mw
+
+    def _extract_visible_power_sample(self, page) -> tuple[Optional[float], Optional[str]]:
         try:
             text = page.locator("body").inner_text()
         except Exception:
-            return None
+            text = ""
 
         patterns = (
             r"(?is)\bActive\s*Power\b[^0-9-]{0,30}(-?[0-9][0-9\s,.'']*)\s*(MW|kW|W)\b",
@@ -680,12 +684,92 @@ class ImperialScraper:
                 continue
             unit = (m.group(2) or "").lower()
             if unit == "mw":
-                return value
+                return value, datetime.now(timezone.utc).isoformat()
             if unit == "kw":
-                return value / 1000.0
+                return value / 1000.0, datetime.now(timezone.utc).isoformat()
             if unit == "w":
-                return value / 1_000_000.0
-        return None
+                return value / 1_000_000.0, datetime.now(timezone.utc).isoformat()
+
+        return self._extract_chart_power_sample(page)
+
+    def _extract_chart_power_sample(self, page) -> tuple[Optional[float], Optional[str]]:
+        chart = page.locator(".chartdiv").first
+        if _safe_count(chart) == 0:
+            return None, None
+
+        try:
+            chart.scroll_into_view_if_needed()
+        except Exception:
+            pass
+
+        endpoint_script = r"""
+() => {
+  const chart = document.querySelector('.chartdiv');
+  if (!chart) return null;
+
+  const generatedPowerGroup = Array.from(chart.querySelectorAll('[aria-label]'))
+    .find(el => /generated\s*power/i.test(el.getAttribute('aria-label') || ''));
+  const root = generatedPowerGroup || chart;
+  const candidates = Array.from(root.querySelectorAll('path'))
+    .map(path => {
+      const d = path.getAttribute('d') || '';
+      const box = path.getBoundingClientRect();
+      return { path, d, box, segments: (d.match(/L/g) || []).length };
+    })
+    .filter(item => item.segments >= 2 && item.box.width > 5 && item.box.height > 1 && !/Z\s*$/.test(item.d));
+  if (!candidates.length) return null;
+
+  return candidates
+    .map(candidate => {
+      const coordinates = Array.from(
+        candidate.d.matchAll(/[ML]\s*(-?\d+(?:\.\d+)?)[,\s]+(-?\d+(?:\.\d+)?)/g)
+      ).map(match => [Number(match[1]), Number(match[2])]);
+      if (!coordinates.length) return null;
+
+      const [x, y] = coordinates[coordinates.length - 1];
+      const svg = candidate.path.ownerSVGElement;
+      const matrix = candidate.path.getScreenCTM();
+      if (!svg || !matrix) return null;
+      const point = svg.createSVGPoint();
+      point.x = x;
+      point.y = y;
+      const screen = point.matrixTransform(matrix);
+      return { x: screen.x, y: screen.y };
+    })
+    .filter(Boolean)
+    .sort((left, right) => right.x - left.x);
+}
+"""
+
+        endpoints = None
+        for _ in range(20):
+            try:
+                endpoints = page.evaluate(endpoint_script)
+            except Exception:
+                endpoints = None
+            if endpoints:
+                break
+            page.wait_for_timeout(500)
+        if not endpoints:
+            return None, None
+
+        for endpoint in endpoints:
+            try:
+                page.mouse.move(float(endpoint["x"]), float(endpoint["y"]))
+            except Exception:
+                continue
+
+            for _ in range(6):
+                page.wait_for_timeout(250)
+                try:
+                    tooltip_texts = page.locator("[role='tooltip']").all_text_contents()
+                except Exception:
+                    tooltip_texts = []
+                for tooltip_text in tooltip_texts:
+                    parsed = _parse_chart_power_tooltip(tooltip_text)
+                    if parsed is not None:
+                        return parsed
+        return None, None
 
 
 def _first_present(locators):
@@ -890,6 +974,41 @@ def _parse_ts(raw: str) -> Optional[datetime]:
         return datetime.fromisoformat(txt)
     except ValueError:
         return None
+
+
+def _parse_chart_power_tooltip(text: Optional[str]) -> Optional[tuple[float, Optional[str]]]:
+    if not isinstance(text, str) or not text.strip():
+        return None
+    power_match = re.search(
+        r"Generated\s*Power\s*:\s*(-?[0-9][0-9\s,.'']*)\s*(MW|kW|W)\b",
+        text,
+        re.I,
+    )
+    if not power_match:
+        return None
+
+    value = _parse_number(power_match.group(1))
+    if value is None:
+        return None
+    unit = power_match.group(2).lower()
+    if unit == "mw":
+        value_mw = value
+    elif unit == "kw":
+        value_mw = value / 1000.0
+    else:
+        value_mw = value / 1_000_000.0
+
+    timestamp_match = re.search(
+        r"\b(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(?::\d{2})?)\b",
+        text,
+    )
+    timestamp_utc = None
+    if timestamp_match:
+        try:
+            timestamp_utc = datetime.fromisoformat(timestamp_match.group(1)).isoformat()
+        except ValueError:
+            timestamp_utc = None
+    return value_mw, timestamp_utc
 
 
 def _is_newer_ts(left_raw: Optional[str], right_raw: Optional[str]) -> bool:

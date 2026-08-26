@@ -3,12 +3,14 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from power_reading.service import _ASSETS, _build_scraper, _to_mw
 from power_reading.scrapers.imperial_scraper import (
+    ImperialScraper,
     _extract_latest_common_power_mw,
     _extract_latest_power_mw,
+    _parse_chart_power_tooltip,
 )
 
 
@@ -83,6 +85,95 @@ class ImperialPowerReadingTests(unittest.TestCase):
         secondary = imperial_csv(("2026-08-08 08:15:00.000Z", "2000000"))
 
         self.assertIsNone(_extract_latest_common_power_mw(primary, secondary))
+
+    def test_reads_current_power_from_aurora_chart_tooltip(self):
+        self.assertEqual(
+            _parse_chart_power_tooltip(
+                "2026-08-26 14:30\nGenerated Power: 2220100.00 W"
+            ),
+            (2.2201, "2026-08-26T14:30:00"),
+        )
+
+    def test_chart_tooltip_normalizes_kw_to_mw(self):
+        self.assertEqual(
+            _parse_chart_power_tooltip(
+                "2026-01-15 09:45\nGenerated Power: 1,234.50 kW"
+            ),
+            (1.2345, "2026-01-15T09:45:00"),
+        )
+
+    def test_ignores_empty_chart_tooltips(self):
+        self.assertIsNone(_parse_chart_power_tooltip(None))
+
+    def test_imperial_sums_tooltip_values_and_preserves_both_timestamps(self):
+        scraper = ImperialScraper(
+            target_url="https://example.test",
+            plant_name="PV Jucu",
+            secondary_plant_name="Imperial 2",
+            headless=True,
+        )
+        context = MagicMock()
+        context.new_page.return_value = MagicMock()
+        playwright = MagicMock()
+        playwright.chromium.launch_persistent_context.return_value = context
+        playwright_manager = MagicMock()
+        playwright_manager.__enter__.return_value = playwright
+
+        component_samples = [
+            (2.2201, "2026-08-26T14:30:00", "visible-power:2.2201"),
+            (1.1254, "2026-08-26T14:31:00", "visible-power:1.1254"),
+        ]
+        with (
+            patch(
+                "power_reading.scrapers.imperial_scraper.sync_playwright",
+                return_value=playwright_manager,
+            ),
+            patch.object(scraper, "_goto_with_fallbacks"),
+            patch.object(scraper, "_maybe_login"),
+            patch.object(scraper, "_go_home"),
+            patch.object(scraper, "_read_plant_power", side_effect=component_samples),
+        ):
+            snapshot = scraper.scrape_once()
+
+        self.assertAlmostEqual(snapshot.pv_kw, 3.3455)
+        self.assertEqual(snapshot.load_kw, 2.2201)
+        self.assertEqual(snapshot.grid_kw, 1.1254)
+        self.assertEqual(
+            snapshot.source,
+            "imperial-visible-fallback@PV Jucu:2026-08-26T14:30:00|"
+            "Imperial 2:2026-08-26T14:31:00",
+        )
+
+    def test_chart_reader_uses_rightmost_segment_after_data_gap(self):
+        scraper = ImperialScraper(target_url="https://example.test", headless=True)
+        page = MagicMock()
+        chart = MagicMock()
+        chart.count.return_value = 1
+        chart_container = MagicMock()
+        chart_container.first = chart
+        tooltip_locator = MagicMock()
+        tooltip_locator.all_text_contents.return_value = [
+            "2026-08-26 15:30\nGenerated Power: 410000.00 W"
+        ]
+
+        def locate(selector):
+            if selector == ".chartdiv":
+                return chart_container
+            if selector == "[role='tooltip']":
+                return tooltip_locator
+            return MagicMock()
+
+        page.locator.side_effect = locate
+        page.evaluate.return_value = [
+            {"x": 900.0, "y": 120.0},
+            {"x": 500.0, "y": 140.0},
+        ]
+
+        self.assertEqual(
+            scraper._extract_chart_power_sample(page),
+            (0.41, "2026-08-26T15:30:00"),
+        )
+        page.mouse.move.assert_called_once_with(900.0, 120.0)
 
 
 if __name__ == "__main__":
