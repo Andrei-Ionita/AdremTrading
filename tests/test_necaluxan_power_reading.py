@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from power_reading.scrapers.necaluxan_scraper import (
+    NecaluxanScraper,
     _unique_visible_locator,
     extract_actual_power_kw,
     select_stable_power_sample,
@@ -91,6 +92,43 @@ class NecaluxanPowerServiceTests(unittest.TestCase):
 
         self.assertEqual(reading.pv_mw, 17.64)
         self.assertEqual(reading.asset, "necaluxan")
+
+    @patch("power_reading.scrapers.necaluxan_scraper.sync_playwright")
+    def test_live_read_uses_a_clean_browser_context(self, sync_playwright):
+        playwright = Mock()
+        sync_playwright.return_value.__enter__.return_value = playwright
+        browser = playwright.chromium.launch.return_value
+        context = browser.new_context.return_value
+        page = context.new_page.return_value
+        master_page = Mock()
+        scraper = NecaluxanScraper(
+            target_url="https://example.test/vcom/",
+            username="portal-user",
+            password="portal-password",
+            master_username="master-user",
+            master_password="master-password",
+            headless=True,
+        )
+
+        with (
+            patch.object(scraper, "_login_vcom"),
+            patch.object(scraper, "_open_plant_cockpit"),
+            patch.object(scraper, "_open_power_control"),
+            patch.object(scraper, "_open_bluelog_master", return_value=master_page),
+            patch.object(scraper, "_login_bluelog"),
+            patch.object(scraper, "_read_actual_power", return_value=(17_640.0, "17.64 MW")),
+        ):
+            reading = scraper.scrape_once()
+
+        playwright.chromium.launch.assert_called_once()
+        playwright.chromium.launch_persistent_context.assert_not_called()
+        browser.new_context.assert_called_once()
+        context.close.assert_called_once()
+        browser.close.assert_called_once()
+        self.assertEqual(reading.pv_kw, 17_640.0)
+        page.goto.assert_called_once_with(
+            "https://example.test/vcom/", wait_until="domcontentloaded"
+        )
 
 
 class _FakeItem:

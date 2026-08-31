@@ -54,15 +54,15 @@ class NecaluxanScraper:
 
     def scrape_once(self) -> PowerSnapshot:
         self._validate_credentials()
-        self.user_data_dir.mkdir(parents=True, exist_ok=True)
 
         with sync_playwright() as playwright:
-            context: BrowserContext = playwright.chromium.launch_persistent_context(
-                user_data_dir=str(self.user_data_dir.resolve()),
+            browser = playwright.chromium.launch(
                 headless=self.headless,
+                args=["--window-size=1800,1100"],
+            )
+            context: BrowserContext = browser.new_context(
                 ignore_https_errors=True,
                 viewport={"width": 1800, "height": 1100},
-                args=["--window-size=1800,1100"],
             )
             try:
                 page = context.new_page()
@@ -84,15 +84,17 @@ class NecaluxanScraper:
                 )
             finally:
                 context.close()
+                browser.close()
 
     def read_interval_energy(self, *, start: datetime, end: datetime) -> float:
         self._validate_credentials()
-        self.user_data_dir.mkdir(parents=True, exist_ok=True)
         graph_payloads: list[dict] = []
         with sync_playwright() as playwright:
-            context: BrowserContext = playwright.chromium.launch_persistent_context(
-                user_data_dir=str(self.user_data_dir.resolve()),
+            browser = playwright.chromium.launch(
                 headless=self.headless,
+                args=["--window-size=1800,1100"],
+            )
+            context: BrowserContext = browser.new_context(
                 ignore_https_errors=True,
                 viewport={"width": 1800, "height": 1100},
             )
@@ -125,6 +127,7 @@ class NecaluxanScraper:
                 return _vcom_interval_energy_mwh(graph_payloads[-1], start, end)
             finally:
                 context.close()
+                browser.close()
 
     def _validate_credentials(self) -> None:
         missing = []
