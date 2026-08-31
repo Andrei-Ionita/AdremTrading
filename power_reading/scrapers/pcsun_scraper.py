@@ -1,5 +1,6 @@
 ﻿import base64
 import json
+import math
 from datetime import datetime, timezone
 from typing import Optional
 from urllib.parse import urlsplit
@@ -45,6 +46,22 @@ class PCSunScraper:
             source=f"{self.source_name}-jsonrpc",
             raw_excerpt=f"tag={self.active_power_tag} value={pv_kw}",
         )
+
+    def read_interval_energy(self, *, start: datetime, end: datetime) -> float:
+        if (end - start).total_seconds() != 15 * 60:
+            raise RuntimeError("Ulmeni correction requires exactly one 15-minute interval.")
+        token = self._login()
+        try:
+            value = self._read_value(token, self.active_power_tag)
+        finally:
+            self._logout(token)
+        try:
+            power_kw = float(value)
+        except (TypeError, ValueError) as exc:
+            raise RuntimeError("Ulmeni live power is missing or invalid.") from exc
+        if not math.isfinite(power_kw) or power_kw < 0:
+            raise RuntimeError("Ulmeni live power is missing or invalid.")
+        return power_kw / 1000.0 * 0.25
 
     def _api_url(self) -> str:
         parts = urlsplit(self.target_url)

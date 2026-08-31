@@ -1,11 +1,13 @@
 ﻿from __future__ import annotations
 
+import math
 import re
 import unicodedata
 from dataclasses import dataclass, asdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from playwright.sync_api import BrowserContext, TimeoutError as PlaywrightTimeoutError, sync_playwright
 cv2 = None
@@ -221,6 +223,50 @@ class FusionSolarScraper:
                     source=source,
                     raw_excerpt=_compact_excerpt(text),
                 )
+            finally:
+                context.close()
+
+    def read_interval_energy(self, start: datetime, end: datetime) -> float:
+        """Read one completed quarter-hour from FusionSolar's 5-minute chart."""
+        self.user_data_dir.mkdir(parents=True, exist_ok=True)
+        responses: list[dict] = []
+
+        with sync_playwright() as p:
+            context: BrowserContext = p.chromium.launch_persistent_context(
+                user_data_dir=str(self.user_data_dir.resolve()),
+                headless=self.headless,
+                viewport={"width": 1920, "height": 1200},
+                args=["--disable-blink-features=AutomationControlled"],
+            )
+            try:
+                context.add_init_script(
+                    "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
+                )
+                page = context.new_page()
+                page.set_default_timeout(self.browser_timeout_ms)
+
+                def capture(response) -> None:
+                    if "overview/energy-balance" not in response.url:
+                        return
+                    try:
+                        payload = response.json()
+                    except Exception:
+                        return
+                    if isinstance(payload, dict):
+                        responses.append(payload)
+
+                page.on("response", capture)
+                page.goto(self.target_url, wait_until="domcontentloaded")
+                if not self.use_saved_session_only:
+                    self._maybe_login(page)
+                self._open_plant_if_needed(page)
+                for _ in range(20):
+                    if responses:
+                        break
+                    page.wait_for_timeout(500)
+                if not responses:
+                    raise RuntimeError("FusionSolar did not return the 5-minute energy-balance series.")
+                return _fusionsolar_interval_energy_mwh(responses[-1], start, end)
             finally:
                 context.close()
 
@@ -1351,4 +1397,50 @@ def _to_kw_value(value: float, unit: str) -> float:
     if u == "w":
         return value / 1000.0
     return value
+
+
+def _fusionsolar_interval_energy_mwh(
+    payload: dict,
+    start: datetime,
+    end: datetime,
+) -> float:
+    local_tz = ZoneInfo("Europe/Bucharest")
+    local_start = start.astimezone(local_tz)
+    local_end = end.astimezone(local_tz)
+    if local_end - local_start != timedelta(minutes=15):
+        raise ValueError("FusionSolar interval must be exactly 15 minutes.")
+    if local_start.date() != local_end.date():
+        raise ValueError("FusionSolar interval cannot cross a delivery day.")
+    if local_start.minute % 5 or local_start.second or local_start.microsecond:
+        raise ValueError("FusionSolar interval must start on a 5-minute boundary.")
+
+    values = (payload.get("data") or {}).get("productPower")
+    if not isinstance(values, list) or len(values) < 288:
+        raise ValueError("FusionSolar returned an incomplete 5-minute power series.")
+
+    first = local_start.hour * 12 + local_start.minute // 5
+    raw_points = values[first:first + 4]
+    if len(raw_points) != 4:
+        raise ValueError("FusionSolar did not return all boundaries for the completed interval.")
+
+    powers_mw: list[float] = []
+    for raw in raw_points:
+        if raw in (None, "", "--"):
+            raise ValueError("FusionSolar has a missing power value in the completed interval.")
+        try:
+            power_kw = float(str(raw).replace(",", "."))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("FusionSolar returned an invalid power value.") from exc
+        if not math.isfinite(power_kw) or power_kw < 0:
+            raise ValueError("FusionSolar returned a non-finite or negative power value.")
+        powers_mw.append(power_kw / 1000.0)
+
+    five_minutes_hours = 5.0 / 60.0
+    energy_mwh = sum(
+        (left + right) / 2.0 * five_minutes_hours
+        for left, right in zip(powers_mw, powers_mw[1:])
+    )
+    if not math.isfinite(energy_mwh) or energy_mwh < 0:
+        raise ValueError("Calculated FusionSolar interval energy is invalid.")
+    return energy_mwh
 

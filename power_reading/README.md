@@ -24,43 +24,25 @@ profiles are written below `POWER_READING_PROFILE_DIR` (default:
 `.playwright_profiles`). SNK uses a private IP and requires Railway network access
 to that endpoint; Windows-only SCADA window capture is not available on Railway.
 
-## PostgreSQL storage
+## Forecast-time interval retrieval
 
-The worker creates `power_readings` and `power_reading_errors` automatically,
-fetches configured assets in parallel, and stores all successful fields in MW.
-
-Run one collection cycle locally:
-
-```powershell
-$env:POWER_READING_RUN_ONCE="true"
-python -m power_reading.worker
-```
-
-Run continuously at the default three-minute interval:
-
-```powershell
-python -m power_reading.worker
-```
-
-The worker reads `DATABASE_URL`, matching the existing application. Optional
-settings are `POWER_READING_INTERVAL_SECONDS`, `POWER_READING_MAX_WORKERS`, and a
-comma-separated `POWER_READING_ASSETS` list. `POWER_READING_ASSET_TIMEOUT_SECONDS`
-defaults to 120 and terminates a stuck portal browser without blocking other assets.
-
-Create a second Railway service from this repository and set its Start Command to:
-
-```text
-python -m power_reading.worker
-```
-
-Give that service the PostgreSQL `DATABASE_URL`, portal credentials, and the same
-Dockerfile build. The Streamlit service remains unchanged.
-
-Forecast code can retrieve the previous value directly:
+Production corrections retrieve one completed 15-minute interval only when a
+forecast is triggered:
 
 ```python
-from power_reading import get_latest_reading
+from power_reading import read_interval_energy
 
-previous = get_latest_reading("incuba")
-previous_power_mw = previous.pv_mw if previous else None
+energy_mwh = read_interval_energy("hng", start=interval_start, end=interval_end)
 ```
+
+The background worker entry point is disabled and is not a Railway process.
+Completed intervals are cached for 15 minutes to avoid reopening a portal when
+the same forecast workflow requests the same asset more than once.
+
+`read_asset()` remains available as a manual diagnostic for a current power
+snapshot. It is not used to calculate production energy for forecast correction.
+
+ADC assets intentionally estimate the quarter from the equal-weight mean of the
+portal's current `15M AVG` and live power. Ulmeni has no historical source, so its
+quarter estimate intentionally uses the current validated WinCC power for the
+full 0.25-hour interval.

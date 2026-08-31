@@ -1,16 +1,51 @@
 ﻿from __future__ import annotations
 
 import csv
+import math
 import re
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from playwright.sync_api import BrowserContext, TimeoutError as PlaywrightTimeoutError, sync_playwright
 
 from power_reading.scrapers.fusionsolar_scraper import PowerSnapshot
+
+
+_AURORA_CHART_COORDINATES_SCRIPT = r"""
+() => {
+  const chart = document.querySelector('.chartdiv');
+  if (!chart) return [];
+  const generatedPowerGroup = Array.from(chart.querySelectorAll('[aria-label]'))
+    .find(el => /generated\s*power/i.test(el.getAttribute('aria-label') || ''));
+  const root = generatedPowerGroup || chart;
+  const candidates = Array.from(root.querySelectorAll('path'))
+    .map(path => {
+      const d = path.getAttribute('d') || '';
+      const box = path.getBoundingClientRect();
+      return {path, d, box, segments: (d.match(/L/g) || []).length};
+    })
+    .filter(item => item.segments >= 2 && item.box.width > 5 && item.box.height > 1 && !/Z\s*$/.test(item.d));
+  if (!candidates.length) return [];
+  const candidate = candidates.sort((left, right) => right.segments - left.segments)[0];
+  const matrix = candidate.path.getScreenCTM();
+  const svg = candidate.path.ownerSVGElement;
+  if (!matrix || !svg) return [];
+  const coordinates = Array.from(
+    candidate.d.matchAll(/[ML]\s*(-?\d+(?:\.\d+)?)[,\s]+(-?\d+(?:\.\d+)?)/g)
+  ).map(match => [Number(match[1]), Number(match[2])]);
+  return coordinates.map(([x, y]) => {
+    const point = svg.createSVGPoint();
+    point.x = x;
+    point.y = y;
+    const screen = point.matrixTransform(matrix);
+    return {x: screen.x, y: screen.y};
+  }).sort((left, right) => right.x - left.x);
+}
+"""
 
 
 class ImperialScraper:
@@ -129,6 +164,87 @@ class ImperialScraper:
                     if remaining > 0:
                         time.sleep(remaining)
                 context.close()
+
+    def read_interval_energy(self, *, start: datetime, end: datetime) -> float:
+        self.user_data_dir.mkdir(parents=True, exist_ok=True)
+        with sync_playwright() as playwright:
+            context: BrowserContext = playwright.chromium.launch_persistent_context(
+                user_data_dir=str(self.user_data_dir.resolve()),
+                headless=self.headless,
+                ignore_https_errors=True,
+                viewport={"width": 1600, "height": 1000},
+            )
+            try:
+                page = context.new_page()
+                page.set_default_timeout(self.browser_timeout_ms)
+                self._goto_with_fallbacks(page)
+                if self.force_relogin_each_run:
+                    self._force_relogin(page)
+                else:
+                    self._maybe_login(page)
+                self._go_home(page)
+                plants = [(self.plant_name or "PV Jucu").strip()]
+                if self.secondary_plant_name:
+                    plants.append(self.secondary_plant_name.strip())
+                energies = [
+                    self._read_plant_interval_energy(page, plant, start, end)
+                    for plant in plants
+                ]
+                return sum(energies)
+            finally:
+                context.close()
+
+    def _read_plant_interval_energy(
+        self,
+        page,
+        plant_name: str,
+        start: datetime,
+        end: datetime,
+    ) -> float:
+        self._go_home(page)
+        if not self._open_target_plant(page, _plant_aliases(plant_name), required=True):
+            raise RuntimeError(f"Aurora plant {plant_name!r} was not found.")
+        self._open_plant_performance_if_needed(page)
+        self._set_1d_range(page)
+        points = self._extract_chart_power_points(page, start, end)
+        return _integrate_aurora_interval(points, start, end, plant_name)
+
+    def _extract_chart_power_points(
+        self,
+        page,
+        start: datetime,
+        end: datetime,
+    ) -> list[tuple[datetime, float]]:
+        chart = page.locator(".chartdiv").first
+        if _safe_count(chart) == 0:
+            raise RuntimeError("Aurora 1D power chart is unavailable.")
+        chart.scroll_into_view_if_needed()
+        coordinates = page.evaluate(_AURORA_CHART_COORDINATES_SCRIPT)
+        if not coordinates:
+            raise RuntimeError("Aurora 1D power curve has no readable points.")
+
+        local_tz = ZoneInfo("Europe/Bucharest")
+        local_start = start.astimezone(local_tz)
+        local_end = end.astimezone(local_tz)
+        points: dict[datetime, float] = {}
+        for coordinate in coordinates[:80]:
+            page.mouse.move(float(coordinate["x"]), float(coordinate["y"]))
+            page.wait_for_timeout(80)
+            for tooltip_text in page.locator("[role='tooltip']").all_text_contents():
+                parsed = _parse_chart_power_tooltip(tooltip_text)
+                if parsed is None or parsed[1] is None:
+                    continue
+                timestamp = _parse_ts(parsed[1])
+                if timestamp is None:
+                    continue
+                if timestamp.tzinfo is None:
+                    timestamp = timestamp.replace(tzinfo=local_tz)
+                else:
+                    timestamp = timestamp.astimezone(local_tz)
+                points[timestamp] = parsed[0]
+            if local_start in points and local_end in points:
+                break
+        return sorted(points.items())
 
     def _read_plant_power(
         self,
@@ -974,6 +1090,40 @@ def _parse_ts(raw: str) -> Optional[datetime]:
         return datetime.fromisoformat(txt)
     except ValueError:
         return None
+
+
+def _integrate_aurora_interval(
+    points: list[tuple[datetime, float]],
+    start: datetime,
+    end: datetime,
+    plant_name: str,
+) -> float:
+    local_tz = ZoneInfo("Europe/Bucharest")
+    local_start = start.astimezone(local_tz)
+    local_end = end.astimezone(local_tz)
+    by_timestamp = {timestamp.astimezone(local_tz): power for timestamp, power in points}
+    if local_start not in by_timestamp or local_end not in by_timestamp:
+        available = "no timestamped points"
+        if by_timestamp:
+            available = f"points from {min(by_timestamp).isoformat()} to {max(by_timestamp).isoformat()}"
+        raise RuntimeError(
+            f"Aurora {plant_name} chart is missing a boundary for the completed interval; "
+            f"source returned {available}."
+        )
+    ordered = sorted(
+        (timestamp, power)
+        for timestamp, power in by_timestamp.items()
+        if local_start <= timestamp <= local_end
+    )
+    energy_mwh = 0.0
+    for (left_time, left_power), (right_time, right_power) in zip(ordered, ordered[1:]):
+        if right_time - left_time > timedelta(minutes=15):
+            raise RuntimeError(f"Aurora {plant_name} chart has a gap in the completed interval.")
+        hours = (right_time - left_time).total_seconds() / 3600.0
+        energy_mwh += (left_power + right_power) / 2.0 * hours
+    if not math.isfinite(energy_mwh) or energy_mwh < 0:
+        raise RuntimeError(f"Aurora {plant_name} interval energy is invalid.")
+    return energy_mwh
 
 
 def _parse_chart_power_tooltip(text: Optional[str]) -> Optional[tuple[float, Optional[str]]]:

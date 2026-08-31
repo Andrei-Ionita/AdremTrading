@@ -3,9 +3,10 @@ from __future__ import annotations
 import math
 import re
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from playwright.sync_api import BrowserContext, TimeoutError as PlaywrightTimeoutError, sync_playwright
 
@@ -81,6 +82,47 @@ class NecaluxanScraper:
                     source="meteocontrol-bluelog-actual-power",
                     raw_excerpt=f"Actual power {raw_value}",
                 )
+            finally:
+                context.close()
+
+    def read_interval_energy(self, *, start: datetime, end: datetime) -> float:
+        self._validate_credentials()
+        self.user_data_dir.mkdir(parents=True, exist_ok=True)
+        graph_payloads: list[dict] = []
+        with sync_playwright() as playwright:
+            context: BrowserContext = playwright.chromium.launch_persistent_context(
+                user_data_dir=str(self.user_data_dir.resolve()),
+                headless=self.headless,
+                ignore_https_errors=True,
+                viewport={"width": 1800, "height": 1100},
+            )
+            try:
+                page = context.new_page()
+                page.set_default_timeout(self.browser_timeout_ms)
+
+                def capture(response) -> None:
+                    if "/default/static/graph" not in response.url:
+                        return
+                    try:
+                        payload = response.json()
+                    except Exception:
+                        return
+                    if isinstance(payload, dict):
+                        graph_payloads.append(payload)
+
+                page.on("response", capture)
+                page.goto(self.target_url, wait_until="domcontentloaded")
+                self._login_vcom(page)
+                self._open_plant_cockpit(page)
+                for _ in range(30):
+                    if graph_payloads:
+                        break
+                    page.wait_for_timeout(500)
+                if not graph_payloads:
+                    raise NecaluxanReadOnlyError(
+                        "VCOM did not return the Necaluxan actual-power history."
+                    )
+                return _vcom_interval_energy_mwh(graph_payloads[-1], start, end)
             finally:
                 context.close()
 
@@ -323,6 +365,59 @@ def _parse_number(raw: str) -> Optional[float]:
     except ValueError:
         return None
     return value if math.isfinite(value) else None
+
+
+def _vcom_interval_energy_mwh(payload: dict, start: datetime, end: datetime) -> float:
+    local_tz = ZoneInfo("Europe/Bucharest")
+    local_start = start.astimezone(local_tz)
+    local_end = end.astimezone(local_tz)
+    if local_end - local_start != timedelta(minutes=15):
+        raise NecaluxanReadOnlyError("VCOM interval must be exactly 15 minutes.")
+
+    series = [
+        item
+        for item in payload.get("data", [])
+        if str(item.get("name") or "").strip().casefold() == "power"
+    ]
+    if len(series) != 1 or str(series[0].get("unit") or "").lower() != "kw":
+        raise NecaluxanReadOnlyError("VCOM did not expose one Power series in kW.")
+
+    points: dict[datetime, float] = {}
+    for item in series[0].get("data", []):
+        if not isinstance(item, list) or len(item) < 2 or item[1] is None:
+            continue
+        try:
+            wall_time = datetime.fromtimestamp(float(item[0]) / 1000.0, tz=timezone.utc)
+            timestamp = wall_time.replace(tzinfo=None).replace(tzinfo=local_tz)
+            power_mw = float(item[1]) / 1000.0
+        except (TypeError, ValueError, OSError):
+            continue
+        if math.isfinite(power_mw) and power_mw >= 0:
+            points[timestamp] = power_mw
+
+    if local_start not in points or local_end not in points:
+        raise NecaluxanReadOnlyError(
+            "VCOM actual-power history is missing a completed-interval boundary."
+        )
+    ordered = sorted(
+        (timestamp, power)
+        for timestamp, power in points.items()
+        if local_start <= timestamp <= local_end
+    )
+    energy_mwh = 0.0
+    for (left_time, left_power), (right_time, right_power) in zip(ordered, ordered[1:]):
+        if right_time - left_time > timedelta(minutes=5):
+            raise NecaluxanReadOnlyError(
+                "VCOM actual-power history has a gap in the completed interval."
+            )
+        energy_mwh += (
+            (left_power + right_power) / 2.0
+            * (right_time - left_time).total_seconds()
+            / 3600.0
+        )
+    if not math.isfinite(energy_mwh) or energy_mwh < 0:
+        raise NecaluxanReadOnlyError("VCOM interval energy is invalid.")
+    return energy_mwh
 
 
 def _unique_visible_locator(candidates):

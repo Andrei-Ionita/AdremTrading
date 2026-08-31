@@ -221,13 +221,23 @@ def get_latest_hng_forecast_origin(
 ) -> tuple[pd.Timestamp, float]:
     current_time = _local_timestamp(now if now is not None else pd.Timestamp.now(tz=HNG_TIMEZONE))
 
-    if readings_getter is None:
-        from power_reading.database import get_interval_readings
-
-        readings_getter = get_interval_readings
-
     forecast_origin = _latest_completed_origin(current_time)
     interval_start = forecast_origin - pd.Timedelta(minutes=15)
+
+    if readings_getter is None:
+        from power_reading.service import read_interval_energy
+
+        try:
+            energy_mwh = read_interval_energy(
+                "hng",
+                start=interval_start.tz_convert("UTC").to_pydatetime(),
+                end=forecast_origin.tz_convert("UTC").to_pydatetime(),
+            )
+        except Exception as exc:
+            raise HNGIntradayInputError(
+                f"Could not retrieve HNG interval production: {exc}"
+            ) from exc
+        return forecast_origin, energy_mwh
 
     try:
         readings = readings_getter(

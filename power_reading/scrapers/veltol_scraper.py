@@ -4,6 +4,7 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_playwright
 
@@ -67,6 +68,44 @@ class VeltolScraper:
                     source="veltol-text",
                     raw_excerpt=_compact_excerpt(text),
                 )
+            finally:
+                context.close()
+                browser.close()
+
+    def read_interval_energy(self, *, start: datetime, end: datetime) -> float:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=self.headless)
+            context = browser.new_context(ignore_https_errors=True)
+            try:
+                page = context.new_page()
+                page.set_default_timeout(self.browser_timeout_ms)
+                responses: list[dict] = []
+
+                def capture(response) -> None:
+                    if "charts/balance" not in response.url or "interval=quarter_hour" not in response.url:
+                        return
+                    try:
+                        payload = response.json()
+                    except Exception:
+                        return
+                    if isinstance(payload, dict):
+                        responses.append(payload)
+
+                page.on("response", capture)
+                page.goto(self.target_url, wait_until="domcontentloaded")
+                self._accept_cookies(page)
+                self._maybe_login(page)
+                if page.url.rstrip("/") != self.target_url.rstrip("/"):
+                    page.goto(self.target_url, wait_until="domcontentloaded")
+                self._accept_cookies(page)
+                for _ in range(30):
+                    if responses:
+                        break
+                    page.wait_for_timeout(500)
+                if not responses:
+                    raise RuntimeError("HNG did not return its authenticated quarter-hour series.")
+                local_start = start.astimezone(ZoneInfo("Europe/Bucharest"))
+                return _veltol_interval_energy_mwh(responses[-1], local_start)
             finally:
                 context.close()
                 browser.close()
@@ -189,4 +228,29 @@ def _compact_excerpt(text: str, max_len: int = 1600) -> str:
     if len(one_line) <= max_len:
         return one_line
     return one_line[: max_len - 3] + "..."
+
+
+def _veltol_interval_energy_mwh(payload: dict, interval_start: datetime) -> float:
+    data = payload.get("data", {})
+    matches = []
+    for item in data.get("measurements", []):
+        try:
+            timestamp = datetime.fromisoformat(str(item["timeIso"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+        if timestamp == interval_start:
+            matches.append(item)
+    if len(matches) != 1:
+        raise RuntimeError(
+            f"HNG history expected one quarter at {interval_start.isoformat()}, found {len(matches)}."
+        )
+    try:
+        production = float(matches[0]["production"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise RuntimeError("HNG quarter production is missing or invalid.") from exc
+    unit = str(matches[0].get("unit") or data.get("unit") or "").upper()
+    divisors = {"W": 1_000_000.0, "KW": 1000.0, "MW": 1.0}
+    if unit not in divisors or production < 0:
+        raise RuntimeError(f"HNG returned an invalid quarter power unit/value: {unit!r}.")
+    return production / divisors[unit] * 0.25
 

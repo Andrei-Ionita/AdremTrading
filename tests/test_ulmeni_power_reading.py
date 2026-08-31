@@ -4,9 +4,17 @@ import base64
 import os
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pandas as pd
+
+from portfolio_intraday import (
+    PortfolioIntradayConfig,
+    predict_portfolio_intraday,
+)
 from power_reading.scrapers.pcsun_scraper import DEFAULT_PCSUN_TAG, PCSunScraper
 from power_reading import service
 from power_reading.service import available_assets, read_asset
@@ -59,6 +67,104 @@ class UlmeniJSONRPCReaderTests(unittest.TestCase):
         logout.assert_called_once_with("token")
         self.assertEqual(snapshot.pv_kw, 747.92)
         self.assertEqual(snapshot.source, "ulmeni-jsonrpc")
+
+    def test_interval_estimate_uses_current_kw_for_one_quarter(self):
+        scraper = PCSunScraper(
+            ULMENI_URL,
+            username="operator",
+            password="password",
+            source_name="ulmeni",
+        )
+        start = datetime(2026, 8, 31, 8, 0, tzinfo=timezone.utc)
+        with (
+            patch.object(scraper, "_login", return_value="token"),
+            patch.object(scraper, "_read_value", return_value=800.0),
+            patch.object(scraper, "_logout") as logout,
+        ):
+            energy = scraper.read_interval_energy(
+                start=start,
+                end=start + timedelta(minutes=15),
+            )
+
+        self.assertAlmostEqual(energy, 0.2)
+        logout.assert_called_once_with("token")
+
+    def test_live_estimate_drives_a_bounded_portfolio_correction(self):
+        scraper = PCSunScraper(
+            ULMENI_URL,
+            username="operator",
+            password="password",
+            source_name="ulmeni",
+        )
+        interval_start = datetime(2026, 8, 31, 7, 45, tzinfo=timezone.utc)
+        with (
+            patch.object(scraper, "_login", return_value="token"),
+            patch.object(scraper, "_read_value", return_value=800.0),
+            patch.object(scraper, "_logout"),
+        ):
+            actual_energy = scraper.read_interval_energy(
+                start=interval_start,
+                end=interval_start + timedelta(minutes=15),
+            )
+
+        origin = pd.Timestamp("2026-08-31 11:00", tz="Europe/Bucharest")
+        targets = pd.date_range(
+            origin + pd.Timedelta(minutes=15),
+            origin.normalize() + pd.Timedelta(hours=23, minutes=45),
+            freq="15min",
+            tz="Europe/Bucharest",
+        )
+        dam = pd.DataFrame(
+            {
+                "Data": targets.tz_localize(None),
+                "Interval": targets.hour * 4 + targets.minute // 15 + 1,
+                "Prediction": 0.3,
+            }
+        )
+        weather = pd.DataFrame(
+            {"period_end": targets.tz_convert("UTC"), "ghi": 100.0}
+        )
+        config = PortfolioIntradayConfig(
+            asset_key="ulmeni",
+            display_name="Solar Energy Ulmeni",
+            dam_results_path=Path("dam.xlsx"),
+            weather_path=Path("weather.csv"),
+            intraday_results_path=Path("intraday.xlsx"),
+            max_interval_energy_mwh=4.35 / 4,
+        )
+
+        result = predict_portfolio_intraday(
+            config,
+            dam,
+            weather,
+            origin,
+            actual_energy,
+        )
+
+        self.assertAlmostEqual(actual_energy, 0.2)
+        self.assertEqual(result["Prediction_ID"].iloc[0], 0.2)
+        self.assertEqual(result["Correction"].iloc[0], -0.1)
+        self.assertTrue((result["Prediction_ID"] >= 0).all())
+        self.assertTrue((result["Prediction_ID"] <= 4.35 / 4).all())
+
+    def test_interval_estimate_rejects_invalid_live_power(self):
+        scraper = PCSunScraper(
+            ULMENI_URL,
+            username="operator",
+            password="password",
+            source_name="ulmeni",
+        )
+        start = datetime(2026, 8, 31, 8, 0, tzinfo=timezone.utc)
+        with (
+            patch.object(scraper, "_login", return_value="token"),
+            patch.object(scraper, "_read_value", return_value=float("nan")),
+            patch.object(scraper, "_logout"),
+            self.assertRaisesRegex(RuntimeError, "missing or invalid"),
+        ):
+            scraper.read_interval_energy(
+                start=start,
+                end=start + timedelta(minutes=15),
+            )
 
 
 class UlmeniPowerServiceTests(unittest.TestCase):

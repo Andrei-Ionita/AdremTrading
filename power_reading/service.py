@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import os
+import math
+import threading
+import time
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Iterable
 
@@ -91,6 +95,10 @@ _ASSETS = {
     ),
 }
 
+_INTERVAL_CACHE: dict[tuple[str, str, str], tuple[float, float]] = {}
+_INTERVAL_CACHE_LOCK = threading.Lock()
+_INTERVAL_CACHE_SECONDS = 15 * 60.0
+
 
 def available_assets() -> tuple[str, ...]:
     return tuple(_ASSETS)
@@ -111,6 +119,48 @@ def read_asset(asset: str, *, headless: bool = True) -> PowerReading:
         source=snapshot.source,
         raw_excerpt=snapshot.raw_excerpt,
     )
+
+
+def read_interval_energy(
+    asset: str,
+    *,
+    start: datetime,
+    end: datetime,
+    headless: bool = True,
+) -> float:
+    """Fetch one completed interval from its source and return production in MWh."""
+    key = _normalize_asset(asset)
+    if start.tzinfo is None or end.tzinfo is None:
+        raise ValueError("Interval boundaries must be timezone-aware.")
+    if start >= end:
+        raise ValueError("Interval start must be earlier than interval end.")
+    if (end - start).total_seconds() != 15 * 60:
+        raise ValueError("Power correction requires exactly one 15-minute interval.")
+
+    cache_key = (key, start.isoformat(), end.isoformat())
+    now = time.monotonic()
+    with _INTERVAL_CACHE_LOCK:
+        cached = _INTERVAL_CACHE.get(cache_key)
+        if cached is not None and now - cached[0] <= _INTERVAL_CACHE_SECONDS:
+            return cached[1]
+
+    scraper = _build_scraper(_ASSETS[key], headless=headless)
+    reader = getattr(scraper, "read_interval_energy", None)
+    if not callable(reader):
+        raise RuntimeError(
+            f"{key} does not yet expose verified historical interval production."
+        )
+    energy_mwh = float(reader(start=start, end=end))
+    if not math.isfinite(energy_mwh) or energy_mwh < 0:
+        raise RuntimeError(f"{key} returned invalid interval production.")
+    with _INTERVAL_CACHE_LOCK:
+        _INTERVAL_CACHE[cache_key] = (now, energy_mwh)
+    return energy_mwh
+
+
+def clear_interval_cache() -> None:
+    with _INTERVAL_CACHE_LOCK:
+        _INTERVAL_CACHE.clear()
 
 
 def read_all_assets(

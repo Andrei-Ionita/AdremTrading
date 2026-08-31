@@ -3,9 +3,10 @@ from __future__ import annotations
 import math
 import re
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from playwright.sync_api import BrowserContext, TimeoutError as PlaywrightTimeoutError, sync_playwright
 
@@ -13,6 +14,7 @@ from power_reading.scrapers.fusionsolar_scraper import PowerSnapshot
 
 
 _POWER_RE = re.compile(r"^\s*(-?[0-9]+(?:[.,][0-9]+)?)\s*(MW|kW|W)\s*$", re.IGNORECASE)
+ISOLARCLOUD_CHART_TIMEZONE = ZoneInfo("Europe/Berlin")
 
 
 class ISolarCloudReadOnlyError(RuntimeError):
@@ -79,6 +81,57 @@ class ISolarCloudScraper:
                     timestamp_utc=datetime.now(tz=timezone.utc).isoformat(),
                     source=f"isolarcloud-plant-list-real-time-power@{self.plant_name}",
                     raw_excerpt=f"{self.plant_name} | Real-time power {raw_value}",
+                )
+            finally:
+                context.close()
+
+    def read_interval_energy(self, *, start: datetime, end: datetime) -> float:
+        self._validate_credentials()
+        self.user_data_dir.mkdir(parents=True, exist_ok=True)
+        with sync_playwright() as playwright:
+            context: BrowserContext = playwright.chromium.launch_persistent_context(
+                user_data_dir=str(self.user_data_dir.resolve()),
+                headless=self.headless,
+                viewport={"width": 1800, "height": 1000},
+                args=["--window-size=1800,1000"],
+            )
+            try:
+                page = context.new_page()
+                page.set_default_timeout(self.browser_timeout_ms)
+                page.goto(self.target_url, wait_until="domcontentloaded")
+                self._accept_cookies(page)
+                self._login_if_required(page)
+                self._find_plant_link(page).click()
+                page.wait_for_url(re.compile(r"#/plantDetail/overView"), timeout=self.browser_timeout_ms)
+                canvas = page.locator("canvas").first
+                canvas.wait_for(state="visible", timeout=self.browser_timeout_ms)
+                canvas.scroll_into_view_if_needed()
+                box = canvas.bounding_box()
+                if not box:
+                    raise ISolarCloudReadOnlyError("iSolarCloud history chart has no visible bounds.")
+
+                local_tz = ZoneInfo("Europe/Bucharest")
+                local_start = start.astimezone(local_tz)
+                local_end = end.astimezone(local_tz)
+                points: dict[datetime, float] = {}
+                chart = page.locator("[_echarts_instance_]").first
+                right = box["x"] + box["width"] - 5
+                left = box["x"] + 35
+                x = right
+                while x >= left and not (local_start in points and local_end in points):
+                    page.mouse.move(x, box["y"] + box["height"] / 2)
+                    page.wait_for_timeout(35)
+                    parsed = _parse_isolar_chart_tooltip(chart.inner_text())
+                    if parsed is not None:
+                        hour, minute, power_mw = parsed
+                        source_timestamp = local_start.astimezone(ISOLARCLOUD_CHART_TIMEZONE).replace(
+                            hour=hour, minute=minute, second=0, microsecond=0
+                        )
+                        timestamp = source_timestamp.astimezone(local_tz)
+                        points[timestamp] = power_mw
+                    x -= 3
+                return _integrate_isolar_interval(
+                    sorted(points.items()), local_start, local_end, self.plant_name
                 )
             finally:
                 context.close()
@@ -216,3 +269,71 @@ def _parse_number(raw: str) -> Optional[float]:
     except ValueError:
         return None
     return value if math.isfinite(value) else None
+
+
+def _parse_isolar_chart_tooltip(text: str) -> Optional[tuple[int, int, float]]:
+    match = re.search(
+        r"\b(\d{1,2}):(\d{2})\b.*?PV\s*[:\uff1a]\s*"
+        r"([0-9]+(?:[.,][0-9]+)*)\s*(MW|kW|W)\b",
+        str(text or ""),
+        re.I | re.S,
+    )
+    if not match:
+        return None
+    hour = int(match.group(1))
+    minute = int(match.group(2))
+    raw_value = match.group(3).replace(" ", "")
+    if "," in raw_value and "." in raw_value:
+        raw_value = raw_value.replace(",", "")
+    elif "," in raw_value:
+        raw_value = raw_value.replace(",", ".")
+    try:
+        value = float(raw_value)
+    except ValueError:
+        return None
+    unit = match.group(4).lower()
+    if unit == "kw":
+        value /= 1000.0
+    elif unit == "w":
+        value /= 1_000_000.0
+    if not math.isfinite(value) or value < 0 or hour > 23 or minute > 59:
+        return None
+    return hour, minute, value
+
+
+def _integrate_isolar_interval(
+    points: list[tuple[datetime, float]],
+    start: datetime,
+    end: datetime,
+    plant_name: str,
+) -> float:
+    by_timestamp = dict(points)
+    if start not in by_timestamp or end not in by_timestamp:
+        available = "no timestamped points"
+        if points:
+            available = f"points from {min(by_timestamp).isoformat()} to {max(by_timestamp).isoformat()}"
+        raise ISolarCloudReadOnlyError(
+            f"iSolarCloud {plant_name} chart is missing a completed-interval boundary; "
+            f"source returned {available}."
+        )
+    ordered = sorted(
+        (timestamp, power)
+        for timestamp, power in points
+        if start <= timestamp <= end
+    )
+    energy_mwh = 0.0
+    for (left_time, left_power), (right_time, right_power) in zip(ordered, ordered[1:]):
+        if right_time - left_time > timedelta(minutes=15):
+            raise ISolarCloudReadOnlyError(
+                f"iSolarCloud {plant_name} chart has a gap in the completed interval."
+            )
+        energy_mwh += (
+            (left_power + right_power) / 2.0
+            * (right_time - left_time).total_seconds()
+            / 3600.0
+        )
+    if not math.isfinite(energy_mwh) or energy_mwh < 0:
+        raise ISolarCloudReadOnlyError(
+            f"iSolarCloud {plant_name} interval energy is invalid."
+        )
+    return energy_mwh

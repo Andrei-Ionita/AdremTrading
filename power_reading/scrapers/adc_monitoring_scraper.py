@@ -1,5 +1,6 @@
 ﻿from __future__ import annotations
 
+import math
 import re
 import time
 import unicodedata
@@ -73,6 +74,39 @@ class ADCMonitoringScraper:
                     source=source,
                     raw_excerpt=_compact_excerpt(plant_text),
                 )
+            finally:
+                context.close()
+
+    def read_interval_energy(self, *, start: datetime, end: datetime) -> float:
+        self.user_data_dir.mkdir(parents=True, exist_ok=True)
+        with sync_playwright() as playwright:
+            context: BrowserContext = playwright.chromium.launch_persistent_context(
+                user_data_dir=str(self.user_data_dir.resolve()),
+                headless=self.headless,
+                viewport={"width": 1920, "height": 1080},
+            )
+            try:
+                page = context.new_page()
+                page.set_default_timeout(self.browser_timeout_ms)
+                page.goto(self.target_url, wait_until="domcontentloaded")
+                self._maybe_login(page)
+                grouped = page.request.get(
+                    "https://adc-monitoring.ro/api/v1/fleet/overview/grouped"
+                )
+                if not grouped.ok:
+                    raise RuntimeError(f"ADC site lookup failed with HTTP {grouped.status}.")
+                sites = [
+                    site
+                    for group in grouped.json().get("groups", [])
+                    for site in group.get("sites", [])
+                ]
+                wanted = _normalized_text(self.plant_name)
+                matches = [site for site in sites if _normalized_text(site.get("name")) == wanted]
+                if len(matches) != 1:
+                    raise RuntimeError(
+                        f"ADC expected one site named {self.plant_name!r}, found {len(matches)}."
+                    )
+                return _adc_live_interval_estimate_mwh(matches[0], start, end)
             finally:
                 context.close()
 
@@ -235,4 +269,61 @@ def _compact_excerpt(text: str, max_len: int = 1200) -> str:
     if len(one_line) <= max_len:
         return one_line
     return one_line[: max_len - 3] + "..."
+
+
+def _adc_interval_energy_mwh(payload: dict, start: datetime, end: datetime) -> float:
+    expected_seconds = (end - start).total_seconds()
+    covered_seconds = 0.0
+    energy_mwh = 0.0
+    source_timestamps: list[datetime] = []
+    for item in payload.get("data", []):
+        try:
+            timestamp = datetime.fromisoformat(str(item["ts"]).replace("Z", "+00:00"))
+            power_kw = float(item["pvPowerKw"])
+            coverage = float(item["coverageSeconds"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise RuntimeError("ADC power history contains an invalid bucket.") from exc
+        source_timestamps.append(timestamp)
+        if start <= timestamp < end:
+            if power_kw < 0 or coverage <= 0 or coverage > 60:
+                raise RuntimeError("ADC power history contains an invalid power or coverage value.")
+            covered_seconds += coverage
+            energy_mwh += power_kw / 1000.0 * coverage / 3600.0
+    if covered_seconds < expected_seconds * 0.9:
+        available = "no timestamped buckets"
+        if source_timestamps:
+            available = (
+                f"buckets from {min(source_timestamps).isoformat()} "
+                f"to {max(source_timestamps).isoformat()}"
+            )
+        raise RuntimeError(
+            f"ADC power history covers only {covered_seconds:.0f} of {expected_seconds:.0f} seconds; "
+            f"source returned {available}."
+        )
+    return energy_mwh
+
+
+def _adc_live_interval_estimate_mwh(
+    site: dict,
+    start: datetime,
+    end: datetime,
+) -> float:
+    if (end - start).total_seconds() != 15 * 60:
+        raise RuntimeError("ADC correction requires exactly one 15-minute interval.")
+    try:
+        average_kw = float(site["pvPowerAvg15MinKw"])
+        live_kw = float(site["pvPowerKw"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise RuntimeError(
+            "ADC requires both its current 15M AVG and live power values."
+        ) from exc
+    if (
+        not math.isfinite(average_kw)
+        or not math.isfinite(live_kw)
+        or average_kw < 0
+        or live_kw < 0
+    ):
+        raise RuntimeError("ADC returned an invalid 15M AVG or live power value.")
+    estimated_average_mw = (average_kw + live_kw) / 2.0 / 1000.0
+    return estimated_average_mw * 0.25
 
