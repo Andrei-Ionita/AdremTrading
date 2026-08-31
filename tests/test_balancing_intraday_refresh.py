@@ -12,6 +12,7 @@ from balancing import (
 )
 from portfolio_intraday import (
     ANASUN_INTRADAY_CONFIG,
+    MM_MV_INTRADAY_CONFIG,
     START_FOTOVOLTAICE_INTRADAY_CONFIG,
     START_FOTOVOLTAICE_SCALE,
     ULMENI_INTRADAY_CONFIG,
@@ -85,6 +86,7 @@ class IntradayRefreshTests(unittest.TestCase):
             {
                 "astro",
                 "imperial",
+                "mm_mv",
                 "elnet",
                 "horeco",
                 "hng",
@@ -132,6 +134,7 @@ class IntradayRefreshTests(unittest.TestCase):
             result = create_excel_file_with_all_forecasts_15min(
                 use_astro_intraday=False,
                 use_imperial_intraday=False,
+                use_mm_mv_intraday=False,
                 use_elnet_intraday=False,
                 use_horeco_intraday=False,
                 use_hng_intraday=False,
@@ -146,6 +149,51 @@ class IntradayRefreshTests(unittest.TestCase):
             )
 
         self.assertEqual(result["Prediction_SolEn_Ulmeni"].tolist(), [0.7, 0.3])
+
+    def test_mm_mv_correction_is_applied_to_portfolio_export(self):
+        timestamps = pd.to_datetime(["2026-08-13 10:15", "2026-08-13 10:30"])
+        dam = pd.DataFrame(
+            {
+                "Data": timestamps,
+                "Interval": [42, 43],
+                "Prediction": [0.4, 0.3],
+                "Lookup": ["unused", "unused"],
+            }
+        )
+        corrected = pd.DataFrame(
+            {"Data": [timestamps[0]], "Prediction_ID": [0.7]}
+        )
+
+        def read_excel(path, *args, **kwargs):
+            if str(path) == str(MM_MV_INTRADAY_CONFIG.intraday_results_path):
+                return corrected.copy()
+            if str(path).endswith("Forecast_template.xlsx"):
+                return pd.DataFrame(index=range(len(dam)))
+            return dam.copy()
+
+        with (
+            patch("balancing.pd.read_excel", side_effect=read_excel),
+            patch("balancing.pd.DataFrame.to_excel"),
+            patch("pathlib.Path.is_file", return_value=True),
+        ):
+            result = create_excel_file_with_all_forecasts_15min(
+                use_astro_intraday=False,
+                use_imperial_intraday=False,
+                use_mm_mv_intraday=True,
+                use_elnet_intraday=False,
+                use_horeco_intraday=False,
+                use_hng_intraday=False,
+                use_incuba_intraday=False,
+                use_anto_intraday=False,
+                use_motif_intraday=False,
+                use_ferma_intraday=False,
+                use_necaluxan_intraday=False,
+                use_ulmeni_intraday=False,
+                use_start_fotovoltaice_intraday=False,
+                use_anasun_intraday=False,
+            )
+
+        self.assertEqual(result["Prediction_MM_MV"].tolist(), [0.7, 0.3])
 
     def test_start_fotovoltaice_uses_scaled_ulmeni_and_intraday_overlay(self):
         timestamps = pd.to_datetime(["2026-08-13 10:15", "2026-08-13 10:30"])
@@ -178,6 +226,7 @@ class IntradayRefreshTests(unittest.TestCase):
             result = create_excel_file_with_all_forecasts_15min(
                 use_astro_intraday=False,
                 use_imperial_intraday=False,
+                use_mm_mv_intraday=False,
                 use_elnet_intraday=False,
                 use_horeco_intraday=False,
                 use_hng_intraday=False,
@@ -234,6 +283,7 @@ class IntradayRefreshTests(unittest.TestCase):
             result = create_excel_file_with_all_forecasts_15min(
                 use_astro_intraday=False,
                 use_imperial_intraday=False,
+                use_mm_mv_intraday=False,
                 use_elnet_intraday=False,
                 use_horeco_intraday=False,
                 use_hng_intraday=False,

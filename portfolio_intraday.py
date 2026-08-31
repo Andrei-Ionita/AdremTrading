@@ -86,6 +86,15 @@ NECALUXAN_INTRADAY_CONFIG = PortfolioIntradayConfig(
         / "Results_Production_Necaluxan_DAM_Corrected_Intraday_15min.xlsx"
     ),
 )
+MM_MV_INTRADAY_CONFIG = PortfolioIntradayConfig(
+    asset_key="mm_mv",
+    display_name="MM&MV",
+    dam_results_path=APP_ROOT / "MM_MV" / "Results_Production_MM_MV_xgb_15min.xlsx",
+    weather_path=APP_ROOT / "MM_MV" / "Solcast" / "Reghin_15min.csv",
+    intraday_results_path=(
+        APP_ROOT / "MM_MV" / "Results_Production_MM_MV_DAM_Corrected_Intraday_15min.xlsx"
+    ),
+)
 ULMENI_INTRADAY_CONFIG = PortfolioIntradayConfig(
     asset_key="ulmeni",
     display_name="Solar Energy Ulmeni",

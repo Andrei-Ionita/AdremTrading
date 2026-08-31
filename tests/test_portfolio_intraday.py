@@ -13,6 +13,7 @@ from portfolio_intraday import (
     CORRECTION_HALF_LIFE_MINUTES,
     FERMA_INTRADAY_CONFIG,
     IMPERIAL_INTRADAY_CONFIG,
+    MM_MV_INTRADAY_CONFIG,
     MOTIF_INTRADAY_CONFIG,
     NECALUXAN_INTRADAY_CONFIG,
     START_FOTOVOLTAICE_INTRADAY_CONFIG,
@@ -96,6 +97,7 @@ class PortfolioConfigurationTests(unittest.TestCase):
             MOTIF_INTRADAY_CONFIG,
             FERMA_INTRADAY_CONFIG,
             NECALUXAN_INTRADAY_CONFIG,
+            MM_MV_INTRADAY_CONFIG,
             ULMENI_INTRADAY_CONFIG,
             START_FOTOVOLTAICE_INTRADAY_CONFIG,
             ANASUN_INTRADAY_CONFIG,
@@ -109,6 +111,7 @@ class PortfolioConfigurationTests(unittest.TestCase):
                 "motif",
                 "ferma_frumusica",
                 "necaluxan",
+                "mm_mv",
                 "ulmeni",
                 "start_fotovoltaice",
                 "anasun",
@@ -127,6 +130,7 @@ class PortfolioConfigurationTests(unittest.TestCase):
             0.996 / 4,
         )
         self.assertEqual(ANASUN_INTRADAY_CONFIG.max_interval_energy_mwh, 7.5 / 4)
+        self.assertIsNone(MM_MV_INTRADAY_CONFIG.max_interval_energy_mwh)
 
 
 class PortfolioPredictionTests(unittest.TestCase):

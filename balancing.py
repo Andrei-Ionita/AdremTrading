@@ -55,6 +55,7 @@ from portfolio_intraday import (
 	ASTRO_INTRADAY_CONFIG,
 	FERMA_INTRADAY_CONFIG,
 	IMPERIAL_INTRADAY_CONFIG,
+	MM_MV_INTRADAY_CONFIG,
 	MOTIF_INTRADAY_CONFIG,
 	NECALUXAN_INTRADAY_CONFIG,
 	START_FOTOVOLTAICE_INTRADAY_CONFIG,
@@ -496,6 +497,7 @@ def create_excel_file_with_all_forecasts():
 def create_excel_file_with_all_forecasts_15min(
 	use_astro_intraday=True,
 	use_imperial_intraday=True,
+	use_mm_mv_intraday=True,
 	use_elnet_intraday=True,
 	use_horeco_intraday=True,
 	use_hng_intraday=True,
@@ -590,6 +592,7 @@ def create_excel_file_with_all_forecasts_15min(
 	portfolio_intraday_overlays = (
 		(use_astro_intraday, "Prediction_Astro", ASTRO_INTRADAY_CONFIG),
 		(use_imperial_intraday, "Prediction_Imperial", IMPERIAL_INTRADAY_CONFIG),
+		(use_mm_mv_intraday, "Prediction_MM_MV", MM_MV_INTRADAY_CONFIG),
 		(use_ulmeni_intraday, "Prediction_SolEn_Ulmeni", ULMENI_INTRADAY_CONFIG),
 		(use_anasun_intraday, "Prediction_AnaSun", ANASUN_INTRADAY_CONFIG),
 		(use_anto_intraday, "Prediction_Anto", ANTO_INTRADAY_CONFIG),
@@ -666,6 +669,7 @@ def refresh_intraday_corrections(refreshers=None):
 		refreshers = (
 			("astro", "Astro", lambda: run_portfolio_intraday_forecast(ASTRO_INTRADAY_CONFIG), PortfolioIntradayError),
 			("imperial", "Imperial", lambda: run_portfolio_intraday_forecast(IMPERIAL_INTRADAY_CONFIG), PortfolioIntradayError),
+			("mm_mv", "MM&MV", lambda: run_portfolio_intraday_forecast(MM_MV_INTRADAY_CONFIG), PortfolioIntradayError),
 			("elnet", "Elnet", run_elnet_intraday_forecast, ElnetIntradayError),
 			("horeco", "Horeco", run_horeco_intraday_forecast, HorecoIntradayError),
 			("hng", "HNG", run_hng_intraday_forecast, HNGIntradayError),
@@ -1282,6 +1286,7 @@ def render_balancing_market_intraday_page():
 			create_excel_file_with_all_forecasts_15min(
 				use_astro_intraday=intraday_available["astro"],
 				use_imperial_intraday=intraday_available["imperial"],
+				use_mm_mv_intraday=intraday_available["mm_mv"],
 				use_elnet_intraday=intraday_available["elnet"],
 				use_horeco_intraday=intraday_available["horeco"],
 				use_hng_intraday=intraday_available["hng"],
@@ -1304,6 +1309,7 @@ def render_balancing_market_intraday_page():
 			create_excel_file_with_all_forecasts_15min(
 				use_astro_intraday=intraday_available["astro"],
 				use_imperial_intraday=intraday_available["imperial"],
+				use_mm_mv_intraday=intraday_available["mm_mv"],
 				use_elnet_intraday=intraday_available["elnet"],
 				use_horeco_intraday=intraday_available["horeco"],
 				use_hng_intraday=intraday_available["hng"],
