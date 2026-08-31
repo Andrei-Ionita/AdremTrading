@@ -169,19 +169,18 @@ def get_latest_horeco_forecast_origin(
     interval_start = forecast_origin - pd.Timedelta(minutes=15)
 
     if readings_getter is None:
-        from power_reading.service import read_interval_energy
+        from power_reading.service import read_latest_interval_energy
 
         try:
-            energy_mwh = read_interval_energy(
+            source_origin, energy_mwh = read_latest_interval_energy(
                 "horeco",
-                start=interval_start.tz_convert("UTC").to_pydatetime(),
                 end=forecast_origin.tz_convert("UTC").to_pydatetime(),
             )
         except Exception as exc:
             raise HorecoIntradayInputError(
                 f"Could not retrieve Horeco interval production: {exc}"
             ) from exc
-        return forecast_origin, energy_mwh
+        return _local_timestamp(source_origin), energy_mwh
 
     try:
         readings = readings_getter(

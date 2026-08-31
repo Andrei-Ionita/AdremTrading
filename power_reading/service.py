@@ -5,7 +5,7 @@ import math
 import threading
 import time
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Iterable
 
@@ -98,6 +98,7 @@ _ASSETS = {
 _INTERVAL_CACHE: dict[tuple[str, str, str], tuple[float, float]] = {}
 _INTERVAL_CACHE_LOCK = threading.Lock()
 _INTERVAL_CACHE_SECONDS = 15 * 60.0
+_MAX_SOURCE_INTERVAL_LOOKBACK = 4
 
 
 def available_assets() -> tuple[str, ...]:
@@ -158,9 +159,63 @@ def read_interval_energy(
     return energy_mwh
 
 
+def read_latest_interval_energy(
+    asset: str,
+    *,
+    end: datetime,
+    headless: bool = True,
+) -> tuple[datetime, float]:
+    """Return the most recent source-published 15-minute production interval.
+
+    Some portals publish a completed quarter several minutes late.  We only
+    step back when their response explicitly identifies an unpublished
+    interval; authentication and data-quality failures remain visible.
+    """
+    if end.tzinfo is None:
+        raise ValueError("Interval end must be timezone-aware.")
+    if end != end.replace(second=0, microsecond=0) or end.minute % 15:
+        raise ValueError("Interval end must be on a 15-minute boundary.")
+
+    last_unpublished_error: Exception | None = None
+    for offset in range(_MAX_SOURCE_INTERVAL_LOOKBACK):
+        candidate_end = end - timedelta(minutes=15 * offset)
+        candidate_start = candidate_end - timedelta(minutes=15)
+        try:
+            return candidate_end, read_interval_energy(
+                asset,
+                start=candidate_start,
+                end=candidate_end,
+                headless=headless,
+            )
+        except Exception as exc:
+            if not _is_unpublished_interval_error(exc):
+                raise
+            last_unpublished_error = exc
+
+    key = _normalize_asset(asset)
+    raise RuntimeError(
+        f"{key} has no source-published completed interval within the last "
+        f"{_MAX_SOURCE_INTERVAL_LOOKBACK * 15} minutes: {last_unpublished_error}"
+    ) from last_unpublished_error
+
+
 def clear_interval_cache() -> None:
     with _INTERVAL_CACHE_LOCK:
         _INTERVAL_CACHE.clear()
+
+
+def _is_unpublished_interval_error(exc: Exception) -> bool:
+    message = str(exc).casefold()
+    return any(
+        marker in message
+        for marker in (
+            "missing a boundary for the completed interval",
+            "missing a completed-interval boundary",
+            "did not return all boundaries for the completed interval",
+            "missing power value in the completed interval",
+            "power history covers only",
+        )
+    )
 
 
 def read_all_assets(

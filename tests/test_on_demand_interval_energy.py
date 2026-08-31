@@ -25,7 +25,11 @@ from power_reading.scrapers.isolarcloud_scraper import (
 )
 from power_reading.scrapers.necaluxan_scraper import _vcom_interval_energy_mwh
 from power_reading.scrapers.veltol_scraper import _veltol_interval_energy_mwh
-from power_reading.service import clear_interval_cache, read_interval_energy
+from power_reading.service import (
+    clear_interval_cache,
+    read_interval_energy,
+    read_latest_interval_energy,
+)
 
 
 START = datetime(2026, 8, 30, 9, 0, tzinfo=timezone.utc)
@@ -199,7 +203,34 @@ class OnDemandRoutingTests(unittest.TestCase):
         self.assertEqual(read_interval_energy("hng", start=START, end=END), 0.42)
         scraper.read_interval_energy.assert_called_once_with(start=START, end=END)
 
-    @patch("power_reading.service.read_interval_energy", return_value=0.31)
+    @patch(
+        "power_reading.service.read_interval_energy",
+        side_effect=(
+            RuntimeError("Aurora PV Jucu chart is missing a boundary for the completed interval."),
+            0.42,
+        ),
+    )
+    def test_service_uses_latest_source_published_interval(self, reader):
+        source_end, energy = read_latest_interval_energy("imperial", end=END)
+
+        self.assertEqual(source_end, START)
+        self.assertEqual(energy, 0.42)
+        self.assertEqual(reader.call_count, 2)
+        self.assertEqual(reader.call_args_list[0].kwargs["start"], START)
+        self.assertEqual(reader.call_args_list[0].kwargs["end"], END)
+        self.assertEqual(reader.call_args_list[1].kwargs["start"], START - timedelta(minutes=15))
+        self.assertEqual(reader.call_args_list[1].kwargs["end"], START)
+
+    @patch(
+        "power_reading.service.read_interval_energy",
+        side_effect=RuntimeError("HNG/Veltol credentials are missing."),
+    )
+    def test_service_does_not_mask_authentication_failure(self, reader):
+        with self.assertRaisesRegex(RuntimeError, "credentials are missing"):
+            read_latest_interval_energy("hng", end=END)
+        reader.assert_called_once()
+
+    @patch("power_reading.service.read_latest_interval_energy", return_value=(START, 0.31))
     def test_hng_default_origin_reads_portal_on_demand(self, reader):
         origin, energy = get_latest_hng_forecast_origin(
             now=pd.Timestamp("2026-08-30 12:08", tz="Europe/Bucharest")
@@ -208,13 +239,27 @@ class OnDemandRoutingTests(unittest.TestCase):
         self.assertEqual(energy, 0.31)
         self.assertEqual(reader.call_args.args[0], "hng")
 
-    @patch("power_reading.service.read_interval_energy", return_value=0.22)
+    @patch("power_reading.service.read_latest_interval_energy", return_value=(START, 0.22))
     def test_portfolio_default_origin_uses_configured_portal_asset(self, reader):
         origin, energy = get_latest_forecast_origin(
             ANTO_INTRADAY_CONFIG,
             now=pd.Timestamp("2026-08-30 12:08", tz="Europe/Bucharest"),
         )
         self.assertEqual(origin, pd.Timestamp("2026-08-30 12:00", tz="Europe/Bucharest"))
+        self.assertEqual(energy, 0.22)
+        self.assertEqual(reader.call_args.args[0], "anto")
+
+    @patch(
+        "power_reading.service.read_latest_interval_energy",
+        return_value=(START - timedelta(minutes=15), 0.22),
+    )
+    def test_portfolio_uses_delayed_source_interval_as_forecast_origin(self, reader):
+        origin, energy = get_latest_forecast_origin(
+            ANTO_INTRADAY_CONFIG,
+            now=pd.Timestamp("2026-08-30 12:08", tz="Europe/Bucharest"),
+        )
+
+        self.assertEqual(origin, pd.Timestamp("2026-08-30 11:45", tz="Europe/Bucharest"))
         self.assertEqual(energy, 0.22)
         self.assertEqual(reader.call_args.args[0], "anto")
 
