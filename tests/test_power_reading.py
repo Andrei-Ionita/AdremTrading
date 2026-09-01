@@ -17,7 +17,7 @@ from power_reading.scrapers.fusionsolar_scraper import (
     _extract_validated_overview_active_power_kw,
     _select_overview_pv_kw,
 )
-from power_reading.worker import CollectionResult, collect_once, run_cycle
+from power_reading.worker import CollectionResult, STOP_EVENT, collect_once, main, run_cycle
 
 
 class FakeCursor:
@@ -94,6 +94,9 @@ class DatabaseTests(unittest.TestCase):
 
 
 class WorkerTests(unittest.TestCase):
+    def tearDown(self):
+        STOP_EVENT.clear()
+
     def test_collect_once_keeps_successes_when_an_asset_fails(self):
         def fake_reader(asset, *, headless):
             if asset == "hng":
@@ -137,6 +140,19 @@ class WorkerTests(unittest.TestCase):
         store.assert_any_call((readings[1],))
         store_errors.assert_called_once_with({"astro": "timeout"})
         self.assertEqual(result.errors, {"astro": "timeout"})
+
+    def test_main_runs_configured_collection_cycle(self):
+        with (
+            patch.dict(os.environ, {"POWER_READING_RUN_ONCE": "true"}, clear=True),
+            patch("power_reading.worker._configured_assets", return_value=["hng"]),
+            patch("power_reading.worker._install_signal_handlers"),
+            patch("power_reading.worker.ensure_schema") as ensure,
+            patch("power_reading.worker.run_cycle") as cycle,
+        ):
+            main()
+
+        ensure.assert_called_once_with()
+        cycle.assert_called_once_with(["hng"], 4, 120)
 
 
 class FusionSolarSelectionTests(unittest.TestCase):

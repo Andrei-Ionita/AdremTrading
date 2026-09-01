@@ -230,17 +230,27 @@ class OnDemandRoutingTests(unittest.TestCase):
             read_latest_interval_energy("hng", end=END)
         reader.assert_called_once()
 
-    @patch("power_reading.service.read_latest_interval_energy", return_value=(START, 0.31))
-    def test_hng_default_origin_reads_portal_on_demand(self, reader):
+    @patch("power_reading.database.get_interval_readings")
+    def test_hng_default_origin_reads_stored_samples(self, reader):
+        reader.return_value = [
+            Mock(timestamp_utc="2026-08-30T08:45:00+00:00", pv_mw=1.2),
+            Mock(timestamp_utc="2026-08-30T08:52:30+00:00", pv_mw=1.2),
+            Mock(timestamp_utc="2026-08-30T09:00:00+00:00", pv_mw=1.2),
+        ]
         origin, energy = get_latest_hng_forecast_origin(
             now=pd.Timestamp("2026-08-30 12:08", tz="Europe/Bucharest")
         )
         self.assertEqual(origin, pd.Timestamp("2026-08-30 12:00", tz="Europe/Bucharest"))
-        self.assertEqual(energy, 0.31)
+        self.assertAlmostEqual(energy, 0.3)
         self.assertEqual(reader.call_args.args[0], "hng")
 
-    @patch("power_reading.service.read_latest_interval_energy", return_value=(START, 0.22))
-    def test_portfolio_default_origin_uses_configured_portal_asset(self, reader):
+    @patch("power_reading.database.get_interval_readings")
+    def test_portfolio_default_origin_uses_stored_asset_samples(self, reader):
+        reader.return_value = [
+            Mock(timestamp_utc="2026-08-30T08:45:00+00:00", pv_mw=0.88),
+            Mock(timestamp_utc="2026-08-30T08:52:30+00:00", pv_mw=0.88),
+            Mock(timestamp_utc="2026-08-30T09:00:00+00:00", pv_mw=0.88),
+        ]
         origin, energy = get_latest_forecast_origin(
             ANTO_INTRADAY_CONFIG,
             now=pd.Timestamp("2026-08-30 12:08", tz="Europe/Bucharest"),
@@ -248,21 +258,6 @@ class OnDemandRoutingTests(unittest.TestCase):
         self.assertEqual(origin, pd.Timestamp("2026-08-30 12:00", tz="Europe/Bucharest"))
         self.assertEqual(energy, 0.22)
         self.assertEqual(reader.call_args.args[0], "anto")
-
-    @patch(
-        "power_reading.service.read_latest_interval_energy",
-        return_value=(START - timedelta(minutes=15), 0.22),
-    )
-    def test_portfolio_uses_delayed_source_interval_as_forecast_origin(self, reader):
-        origin, energy = get_latest_forecast_origin(
-            ANTO_INTRADAY_CONFIG,
-            now=pd.Timestamp("2026-08-30 12:08", tz="Europe/Bucharest"),
-        )
-
-        self.assertEqual(origin, pd.Timestamp("2026-08-30 11:45", tz="Europe/Bucharest"))
-        self.assertEqual(energy, 0.22)
-        self.assertEqual(reader.call_args.args[0], "anto")
-
 
 if __name__ == "__main__":
     unittest.main()

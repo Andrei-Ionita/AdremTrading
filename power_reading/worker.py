@@ -247,9 +247,32 @@ def main() -> None:
         level=(os.getenv("POWER_READING_LOG_LEVEL") or "INFO").upper(),
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
+    assets = _configured_assets()
+    interval_seconds = _positive_int("POWER_READING_INTERVAL_SECONDS", 180)
+    max_workers = _positive_int("POWER_READING_MAX_WORKERS", 4)
+    asset_timeout_seconds = _positive_int("POWER_READING_ASSET_TIMEOUT_SECONDS", 120)
+    run_once = _bool_env("POWER_READING_RUN_ONCE", False)
+
+    _install_signal_handlers()
+    ensure_schema()
     LOGGER.info(
-        "Background power collection is disabled; forecasts retrieve completed intervals on demand."
+        "Power reader started assets=%s interval_seconds=%s max_workers=%s asset_timeout_seconds=%s",
+        ",".join(assets),
+        interval_seconds,
+        max_workers,
+        asset_timeout_seconds,
     )
+
+    while not STOP_EVENT.is_set():
+        cycle_started = time.monotonic()
+        try:
+            run_cycle(assets, max_workers, asset_timeout_seconds)
+        except Exception:
+            LOGGER.exception("Power collection cycle failed before completion")
+        if run_once:
+            return
+        elapsed = time.monotonic() - cycle_started
+        STOP_EVENT.wait(max(1.0, interval_seconds - elapsed))
 
 
 def _configured_assets() -> list[str]:
