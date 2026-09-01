@@ -15,6 +15,7 @@ from power_reading.scrapers.fusionsolar_scraper import PowerSnapshot
 
 _POWER_RE = re.compile(r"^\s*(-?[0-9]+(?:[.,][0-9]+)?)\s*(MW|kW|W)\s*$", re.IGNORECASE)
 ISOLARCLOUD_CHART_TIMEZONE = ZoneInfo("Europe/Berlin")
+MAX_LIVE_INTERVAL_AGE = timedelta(minutes=20)
 
 
 class ISolarCloudReadOnlyError(RuntimeError):
@@ -61,19 +62,7 @@ class ISolarCloudScraper:
                 page.goto(self.target_url, wait_until="domcontentloaded")
                 self._accept_cookies(page)
                 self._login_if_required(page)
-                plant_link = self._find_plant_link(page)
-                row = plant_link.locator("xpath=ancestor::tr[1]")
-                table = row.locator(
-                    "xpath=ancestor::div[contains(concat(' ', normalize-space(@class), ' '), "
-                    "' el-table ')][1]"
-                )
-                headers = table.locator("thead th").all_inner_texts()
-                cells = row.locator("td").all_inner_texts()
-                power_kw, raw_value = extract_realtime_power_kw(
-                    headers,
-                    cells,
-                    self.plant_name,
-                )
+                power_kw, raw_value = self._read_realtime_power_kw(page)
                 return PowerSnapshot(
                     pv_kw=power_kw,
                     load_kw=None,
@@ -130,11 +119,37 @@ class ISolarCloudScraper:
                         timestamp = source_timestamp.astimezone(local_tz)
                         points[timestamp] = power_mw
                     x -= 3
-                return _integrate_isolar_interval(
-                    sorted(points.items()), local_start, local_end, self.plant_name
-                )
+                try:
+                    return _integrate_isolar_interval(
+                        sorted(points.items()), local_start, local_end, self.plant_name
+                    )
+                except ISolarCloudReadOnlyError as exc:
+                    if "missing a completed-interval boundary" not in str(exc):
+                        raise
+                    page.goto(self.target_url, wait_until="domcontentloaded")
+                    self._accept_cookies(page)
+                    self._login_if_required(page)
+                    power_kw, _ = self._read_realtime_power_kw(page)
+                    return _live_power_interval_estimate_mwh(
+                        power_kw,
+                        local_start,
+                        local_end,
+                        observed_at=datetime.now(tz=timezone.utc),
+                        plant_name=self.plant_name,
+                    )
             finally:
                 context.close()
+
+    def _read_realtime_power_kw(self, page) -> tuple[float, str]:
+        plant_link = self._find_plant_link(page)
+        row = plant_link.locator("xpath=ancestor::tr[1]")
+        table = row.locator(
+            "xpath=ancestor::div[contains(concat(' ', normalize-space(@class), ' '), "
+            "' el-table ')][1]"
+        )
+        headers = table.locator("thead th").all_inner_texts()
+        cells = row.locator("td").all_inner_texts()
+        return extract_realtime_power_kw(headers, cells, self.plant_name)
 
     def _validate_credentials(self) -> None:
         missing = []
@@ -337,3 +352,31 @@ def _integrate_isolar_interval(
             f"iSolarCloud {plant_name} interval energy is invalid."
         )
     return energy_mwh
+
+
+def _live_power_interval_estimate_mwh(
+    power_kw: float,
+    start: datetime,
+    end: datetime,
+    *,
+    observed_at: datetime,
+    plant_name: str,
+) -> float:
+    if any(value.tzinfo is None for value in (start, end, observed_at)):
+        raise ISolarCloudReadOnlyError(
+            f"iSolarCloud {plant_name} interval estimate requires timezone-aware timestamps."
+        )
+    if end - start != timedelta(minutes=15):
+        raise ISolarCloudReadOnlyError(
+            f"iSolarCloud {plant_name} interval estimate requires exactly 15 minutes."
+        )
+    age = observed_at.astimezone(timezone.utc) - end.astimezone(timezone.utc)
+    if age < timedelta(0) or age > MAX_LIVE_INTERVAL_AGE:
+        raise ISolarCloudReadOnlyError(
+            f"iSolarCloud {plant_name} cannot estimate an old interval from live power."
+        )
+    if not math.isfinite(power_kw) or power_kw < 0:
+        raise ISolarCloudReadOnlyError(
+            f"iSolarCloud {plant_name} live power is invalid."
+        )
+    return power_kw / 1000.0 * 0.25

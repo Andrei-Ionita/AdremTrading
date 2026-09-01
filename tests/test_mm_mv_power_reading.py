@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import unittest
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from power_reading.scrapers.isolarcloud_scraper import (
     ISolarCloudReadOnlyError,
+    _live_power_interval_estimate_mwh,
     extract_realtime_power_kw,
 )
 from power_reading.service import _ASSETS, available_assets, read_asset
@@ -57,6 +59,29 @@ class ISolarCloudParserTests(unittest.TestCase):
                 [header for header in HEADERS if header != "Real-time power"],
                 CELLS,
                 "Reghin",
+            )
+
+    def test_current_live_power_can_estimate_one_quarter_when_history_is_stale(self):
+        end = datetime(2026, 9, 1, 10, 0, tzinfo=timezone.utc)
+        energy = _live_power_interval_estimate_mwh(
+            2_450.0,
+            end - timedelta(minutes=15),
+            end,
+            observed_at=end + timedelta(minutes=10),
+            plant_name="Reghin",
+        )
+
+        self.assertEqual(energy, 0.6125)
+
+    def test_live_power_cannot_estimate_an_old_quarter(self):
+        end = datetime(2026, 9, 1, 10, 0, tzinfo=timezone.utc)
+        with self.assertRaisesRegex(ISolarCloudReadOnlyError, "old interval"):
+            _live_power_interval_estimate_mwh(
+                2_450.0,
+                end - timedelta(minutes=15),
+                end,
+                observed_at=end + timedelta(minutes=21),
+                plant_name="Reghin",
             )
 
 
