@@ -65,6 +65,25 @@ class ADCMonitoringTests(unittest.TestCase):
         self.assertEqual(scraper.username, "adc-user")
         self.assertEqual(scraper.password, "adc-password")
 
+    def test_incuba_uses_adc_plant_and_shared_adc_credentials(self):
+        spec = _ASSETS["incuba"]
+        environment = {
+            "ANTO_USERNAME": "adc-user",
+            "ANTO_PASSWORD": "adc-password",
+            "INCUBA_USERNAME": "old-fusionsolar-user",
+            "INCUBA_PASSWORD": "old-fusionsolar-password",
+        }
+        with patch.dict(os.environ, environment, clear=True), patch(
+            "power_reading.service._profile_dir",
+            return_value=Path(".playwright_profiles/incuba_adc"),
+        ):
+            scraper = _build_scraper(spec, headless=True)
+
+        self.assertEqual(type(scraper).__name__, "ADCMonitoringScraper")
+        self.assertEqual(scraper.plant_name, "CEF Incuba Reproduction")
+        self.assertEqual(scraper.username, "adc-user")
+        self.assertEqual(scraper.password, "adc-password")
+
     def test_start_fotovoltaice_uses_borcea_and_shared_adc_credentials(self):
         spec = _ASSETS["start_fotovoltaice"]
         environment = {"ANTO_USERNAME": "adc-user", "ANTO_PASSWORD": "adc-password"}

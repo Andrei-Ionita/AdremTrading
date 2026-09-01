@@ -47,7 +47,12 @@ class AssetSpec:
 _ASSETS = {
     "elnet": AssetSpec("elnet", "ELNET", DEFAULT_FUSIONSOLAR_URL, "Elnet Biomasa.GR"),
     "anto": AssetSpec("anto", "ANTO", "https://adc-monitoring.ro/", "CEF Anto"),
-    "incuba": AssetSpec("incuba", "INCUBA", DEFAULT_FUSIONSOLAR_URL, "Incuba Reproduction"),
+    "incuba": AssetSpec(
+        "incuba_adc",
+        "INCUBA_ADC",
+        "https://adc-monitoring.ro/",
+        "CEF Incuba Reproduction",
+    ),
     "motif": AssetSpec("motif", "MOTIF", DEFAULT_FUSIONSOLAR_URL, "Cai de vis"),
     "ferma_frumusica": AssetSpec(
         "ferma_frumusica", "FERMA_FRUMUSICA", "https://adc-monitoring.ro/", "CEF Ferma Frumusica"
@@ -239,7 +244,12 @@ def _build_scraper(spec: AssetSpec, *, headless: bool):
     plant_name = _env(f"{spec.env_prefix}_PLANT_NAME") or spec.default_plant_name
     profile_dir = _profile_dir(spec.asset_type)
 
-    if spec.asset_type in {"anto", "ferma_frumusica", "start_fotovoltaice"}:
+    if spec.asset_type in {
+        "anto",
+        "incuba_adc",
+        "ferma_frumusica",
+        "start_fotovoltaice",
+    }:
         from .scrapers.adc_monitoring_scraper import ADCMonitoringScraper
 
         return ADCMonitoringScraper(
@@ -345,9 +355,7 @@ def _build_scraper(spec: AssetSpec, *, headless: bool):
     from .scrapers.fusionsolar_scraper import FusionSolarScraper
 
     region = _env(f"{spec.env_prefix}_REGION_NAME")
-    if spec.asset_type == "incuba":
-        region = region or "region003"
-    elif spec.asset_type == "horeco":
+    if spec.asset_type == "horeco":
         region = region or "region004"
     return FusionSolarScraper(
         target_url=url,
@@ -365,14 +373,14 @@ def _credentials(spec: AssetSpec) -> tuple[str | None, str | None]:
     password = _env(f"{spec.env_prefix}_PASSWORD")
     if spec.asset_type == "astro_aurora":
         return username or _env("IMPERIAL_USERNAME"), password or _env("IMPERIAL_PASSWORD")
-    if spec.asset_type in {"elnet", "incuba"}:
+    if spec.asset_type == "elnet":
         return username or _env("FUSIONSOLAR_USERNAME"), password or _env("FUSIONSOLAR_PASSWORD")
     if spec.asset_type == "horeco":
         return (
             username or _env("INCUBA_USERNAME") or _env("FUSIONSOLAR_USERNAME"),
             password or _env("INCUBA_PASSWORD") or _env("FUSIONSOLAR_PASSWORD"),
         )
-    if spec.asset_type in {"ferma_frumusica", "start_fotovoltaice"}:
+    if spec.asset_type in {"incuba_adc", "ferma_frumusica", "start_fotovoltaice"}:
         return username or _env("ANTO_USERNAME"), password or _env("ANTO_PASSWORD")
     return username, password
 
@@ -381,7 +389,7 @@ def _url(spec: AssetSpec) -> str:
     url = _env(f"{spec.env_prefix}_URL")
     if spec.asset_type == "astro_aurora":
         url = url or _env("IMPERIAL_URL")
-    if spec.asset_type in {"elnet", "incuba", "motif", "horeco"}:
+    if spec.asset_type in {"elnet", "motif", "horeco"}:
         url = url or _env("FUSIONSOLAR_PORTAL_URL") or _env("FUSIONSOLAR_URL")
     return url or spec.default_url
 
@@ -399,7 +407,7 @@ def _to_mw(value: float | None, asset: str) -> float | None:
     numeric = float(value)
     if asset in {"imperial", "astro"}:
         return numeric
-    if asset in {"elnet", "incuba"} and numeric > 10_000:
+    if asset == "elnet" and numeric > 10_000:
         return numeric / 1_000_000.0
     return numeric / 1000.0
 
