@@ -102,6 +102,57 @@ class IntradayRefreshTests(unittest.TestCase):
         )
         self.assertEqual(errors, {})
 
+    def test_default_refresh_uses_bounded_portal_groups(self):
+        submitted_groups = []
+        configured_workers = []
+
+        class ImmediateFuture:
+            def __init__(self, value):
+                self.value = value
+
+            def result(self):
+                return self.value
+
+        class RecordingExecutor:
+            def __init__(self, max_workers):
+                configured_workers.append(max_workers)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                return False
+
+            def submit(self, runner, group):
+                submitted_groups.append(tuple(item[0] for item in group))
+                return ImmediateFuture(runner(group))
+
+        with (
+            patch("balancing.ThreadPoolExecutor", RecordingExecutor),
+            patch("balancing.run_portfolio_intraday_forecast", return_value="portfolio"),
+            patch("balancing.run_elnet_intraday_forecast", return_value="elnet"),
+            patch("balancing.run_horeco_intraday_forecast", return_value="horeco"),
+            patch("balancing.run_hng_intraday_forecast", return_value="hng"),
+            patch("balancing.run_incuba_intraday_forecast", return_value="incuba"),
+        ):
+            available, _, errors = refresh_intraday_corrections()
+
+        self.assertTrue(all(available.values()))
+        self.assertEqual(errors, {})
+        self.assertEqual(configured_workers, [3])
+        self.assertEqual(
+            submitted_groups,
+            [
+                ("astro", "imperial"),
+                ("elnet", "horeco", "incuba", "motif"),
+                ("anto", "ferma", "start_fotovoltaice"),
+                ("mm_mv", "anasun"),
+                ("hng",),
+                ("necaluxan",),
+                ("ulmeni",),
+            ],
+        )
+
     def test_ulmeni_correction_is_applied_to_portfolio_export(self):
         timestamps = pd.to_datetime(["2026-08-13 10:15", "2026-08-13 10:30"])
         dam = pd.DataFrame(

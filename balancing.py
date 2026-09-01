@@ -4,6 +4,7 @@ import numpy as np
 import json
 import requests
 import xlsxwriter
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 import os
 import openpyxl
@@ -665,7 +666,8 @@ def create_excel_file_with_all_forecasts_15min(
 
 
 def refresh_intraday_corrections(refreshers=None):
-	if refreshers is None:
+	use_portal_groups = refreshers is None
+	if use_portal_groups:
 		refreshers = (
 			("astro", "Astro", lambda: run_portfolio_intraday_forecast(ASTRO_INTRADAY_CONFIG), PortfolioIntradayError),
 			("imperial", "Imperial", lambda: run_portfolio_intraday_forecast(IMPERIAL_INTRADAY_CONFIG), PortfolioIntradayError),
@@ -685,13 +687,43 @@ def refresh_intraday_corrections(refreshers=None):
 	available = {key: False for key, _, _, _ in refreshers}
 	results = {}
 	errors = {}
-	for key, display_name, runner, expected_error in refreshers:
-		try:
-			results[key] = runner()
-		except expected_error as exc:
-			errors[display_name] = str(exc)
+
+	def run_group(group):
+		outcomes = []
+		for key, display_name, runner, expected_error in group:
+			try:
+				result = runner()
+			except expected_error as exc:
+				outcomes.append((key, display_name, None, str(exc)))
+			else:
+				outcomes.append((key, display_name, result, None))
+		return outcomes
+
+	if use_portal_groups:
+		by_key = {item[0]: item for item in refreshers}
+		group_keys = (
+			("astro", "imperial"),
+			("elnet", "horeco", "incuba", "motif"),
+			("anto", "ferma", "start_fotovoltaice"),
+			("mm_mv", "anasun"),
+			("hng",),
+			("necaluxan",),
+			("ulmeni",),
+		)
+		groups = tuple(tuple(by_key[key] for key in keys) for keys in group_keys)
+		with ThreadPoolExecutor(max_workers=3) as executor:
+			futures = [executor.submit(run_group, group) for group in groups]
+			group_outcomes = [future.result() for future in futures]
+		outcomes = [outcome for group in group_outcomes for outcome in group]
+	else:
+		outcomes = run_group(refreshers)
+
+	for key, display_name, result, error in outcomes:
+		if error is not None:
+			errors[display_name] = error
 		else:
 			available[key] = True
+			results[key] = result
 	return available, results, errors
 #=====================================================================BALANGING MARKET INTRADAY===================================================================================================
 
@@ -706,17 +738,6 @@ def render_balancing_market_intraday_page():
 	with col1:
 		# Forecasting the entire Intraday Portfolio at once
 		if st.button("Forecast Portfolio"):
-			astro_intraday_available = False
-			imperial_intraday_available = False
-			elnet_intraday_available = False
-			horeco_intraday_available = False
-			hng_intraday_available = False
-			incuba_intraday_available = False
-			anto_intraday_available = False
-			motif_intraday_available = False
-			ferma_intraday_available = False
-			necaluxan_intraday_available = False
-			ulmeni_intraday_available = False
 			# Forecasting Astro
 			# Updating the indisponibility, if any
 			result_Astro = render_indisponibility_db_Astro()
@@ -738,13 +759,6 @@ def render_balancing_market_intraday_page():
 			# access_token = upload_file_with_retries(file_path)
 			# check_file_sync(file_path, access_token)
 			st.dataframe(predicting_exporting_Astro_15min(interval_from, interval_to, limitation_percentage))
-			try:
-				df_astro_intraday = run_portfolio_intraday_forecast(ASTRO_INTRADAY_CONFIG)
-			except PortfolioIntradayError as exc:
-				st.warning(f"Astro correction skipped; DAM retained: {exc}")
-			else:
-				astro_intraday_available = True
-				st.dataframe(df_astro_intraday)
 			file_path = './Astro/Results_Production_Astro_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
 			# access_token = upload_file_with_retries(file_path)
@@ -771,15 +785,6 @@ def render_balancing_market_intraday_page():
 			# access_token = upload_file_with_retries(file_path)
 			# check_file_sync(file_path, access_token)
 			st.dataframe(predicting_exporting_Imperial_15min(interval_to, interval_from, limitation_percentage))
-			try:
-				df_imperial_intraday = run_portfolio_intraday_forecast(
-					IMPERIAL_INTRADAY_CONFIG
-				)
-			except PortfolioIntradayError as exc:
-				st.warning(f"Imperial correction skipped; DAM retained: {exc}")
-			else:
-				imperial_intraday_available = True
-				st.dataframe(df_imperial_intraday)
 			file_path = './Imperial/Results_Production_Imperial_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
 			# access_token = upload_file_with_retries(file_path)
@@ -858,15 +863,6 @@ def render_balancing_market_intraday_page():
 			# access_token = upload_file_with_retries(file_path)
 			# check_file_sync(file_path, access_token)
 			st.dataframe(predicting_exporting_SolarEnergy_15min(interval_to, interval_from, limitation_percentage))
-			try:
-				df_ulmeni_intraday = run_portfolio_intraday_forecast(
-					ULMENI_INTRADAY_CONFIG
-				)
-			except PortfolioIntradayError as exc:
-				st.warning(f"Solar Energy Ulmeni correction skipped; DAM retained: {exc}")
-			else:
-				ulmeni_intraday_available = True
-				st.dataframe(df_ulmeni_intraday)
 			file_path = './Solar Energy Ulmeni/Results_Production_SolarEnergy_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
 			# access_token = upload_file_with_retries(file_path)
@@ -893,13 +889,6 @@ def render_balancing_market_intraday_page():
 			# access_token = upload_file_with_retries(file_path)
 			# check_file_sync(file_path, access_token)
 			predicting_exporting_Elnet_15min(interval_to, interval_from, limitation_percentage)
-			try:
-				df_elnet_intraday = run_elnet_intraday_forecast()
-			except ElnetIntradayError as exc:
-				st.warning(f"Elnet correction skipped; DAM retained: {exc}")
-			else:
-				elnet_intraday_available = True
-				st.dataframe(df_elnet_intraday)
 			file_path = './Elnet/Results_Production_Elnet_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
 			# access_token = upload_file_with_retries(file_path)
@@ -926,13 +915,6 @@ def render_balancing_market_intraday_page():
 			# access_token = upload_file_with_retries(file_path)
 			# check_file_sync(file_path, access_token)
 			predicting_exporting_Horeco_15min(interval_to, interval_from, limitation_percentage)
-			try:
-				df_horeco_intraday = run_horeco_intraday_forecast()
-			except HorecoIntradayError as exc:
-				st.warning(f"Horeco correction skipped; DAM retained: {exc}")
-			else:
-				horeco_intraday_available = True
-				st.dataframe(df_horeco_intraday)
 			file_path = './Horeco/Results_Production_Horeco_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
 			# access_token = upload_file_with_retries(file_path)
@@ -1125,15 +1107,6 @@ def render_balancing_market_intraday_page():
 				limitation_percentage = 0
 			fetching_Necaluxan_data_15min()
 			st.dataframe(predicting_exporting_Necaluxan_15min(interval_to, interval_from, limitation_percentage))
-			try:
-				df_necaluxan_intraday = run_portfolio_intraday_forecast(
-					NECALUXAN_INTRADAY_CONFIG
-				)
-			except PortfolioIntradayError as exc:
-				st.warning(f"Necaluxan correction skipped; DAM retained: {exc}")
-			else:
-				necaluxan_intraday_available = True
-				st.dataframe(df_necaluxan_intraday)
 			file_path = './Necaluxan/Results_Production_Necaluxan_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
 			# access_token = upload_file_with_retries(file_path)
@@ -1154,13 +1127,6 @@ def render_balancing_market_intraday_page():
 				limitation_percentage = 0
 			fetching_Adrem_data_15min()
 			st.dataframe(predicting_exporting_Adrem_15min(interval_to, interval_from, limitation_percentage))
-			try:
-				df_incuba_intraday = run_incuba_intraday_forecast()
-			except IncubaIntradayError as exc:
-				st.warning(f"Incuba correction skipped; Adrem-derived baseline retained: {exc}")
-			else:
-				incuba_intraday_available = True
-				st.dataframe(df_incuba_intraday)
 			file_path = './Adrem/Results_Production_Adrem_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
 			# access_token = upload_file_with_retries(file_path)
@@ -1181,13 +1147,6 @@ def render_balancing_market_intraday_page():
 				limitation_percentage = 0
 			fetching_Anto_data_15min()
 			st.dataframe(predicting_exporting_Anto_15min(interval_to, interval_from, limitation_percentage))
-			try:
-				df_anto_intraday = run_portfolio_intraday_forecast(ANTO_INTRADAY_CONFIG)
-			except PortfolioIntradayError as exc:
-				st.warning(f"Anto correction skipped; DAM retained: {exc}")
-			else:
-				anto_intraday_available = True
-				st.dataframe(df_anto_intraday)
 			file_path = './Anto/Results_Production_Anto_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
 			# access_token = upload_file_with_retries(file_path)
@@ -1208,13 +1167,6 @@ def render_balancing_market_intraday_page():
 				limitation_percentage = 0
 			fetching_Motif_data_15min()
 			st.dataframe(predicting_exporting_Motif_15min(interval_to, interval_from, limitation_percentage))
-			try:
-				df_motif_intraday = run_portfolio_intraday_forecast(MOTIF_INTRADAY_CONFIG)
-			except PortfolioIntradayError as exc:
-				st.warning(f"Motif correction skipped; DAM retained: {exc}")
-			else:
-				motif_intraday_available = True
-				st.dataframe(df_motif_intraday)
 			file_path = './Motif/Results_Production_Motif_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
 			# access_token = upload_file_with_retries(file_path)
@@ -1235,13 +1187,6 @@ def render_balancing_market_intraday_page():
 				limitation_percentage = 0
 			fetching_Ferma_data_15min()
 			st.dataframe(predicting_exporting_Ferma_15min(interval_to, interval_from, limitation_percentage))
-			try:
-				df_ferma_intraday = run_portfolio_intraday_forecast(FERMA_INTRADAY_CONFIG)
-			except PortfolioIntradayError as exc:
-				st.warning(f"Ferma Frumusica correction skipped; DAM retained: {exc}")
-			else:
-				ferma_intraday_available = True
-				st.dataframe(df_ferma_intraday)
 			file_path = './Ferma/Results_Production_Ferma_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
 			# access_token = upload_file_with_retries(file_path)
@@ -1262,13 +1207,6 @@ def render_balancing_market_intraday_page():
 				limitation_percentage = 0
 			fetching_HNG_data_15min()
 			predicting_exporting_HNG_15min(interval_to, interval_from, limitation_percentage)
-			try:
-				df_hng_intraday = run_hng_intraday_forecast()
-			except HNGIntradayError as exc:
-				st.warning(f"HNG correction skipped; DAM retained: {exc}")
-			else:
-				hng_intraday_available = True
-				st.dataframe(df_hng_intraday)
 			file_path = './HNG/Results_Production_HNG_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
 			# access_token = upload_file_with_retries(file_path)
@@ -1279,7 +1217,9 @@ def render_balancing_market_intraday_page():
 			st.dataframe(predicting_exporting_AnaSun_15min(1, 24, 0))
 
 			# Refresh corrections after every DAM file is ready so the export uses the newest readings.
-			intraday_available, _, correction_errors = refresh_intraday_corrections()
+			intraday_available, correction_results, correction_errors = refresh_intraday_corrections()
+			for correction_result in correction_results.values():
+				st.dataframe(correction_result)
 			for display_name, error in correction_errors.items():
 				st.warning(f"{display_name} correction skipped; DAM retained: {error}")
 			create_excel_file_with_all_forecasts()
