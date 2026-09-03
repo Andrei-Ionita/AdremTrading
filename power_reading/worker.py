@@ -18,6 +18,12 @@ from .service import PowerReading, available_assets, read_asset
 
 LOGGER = logging.getLogger("power_reading.worker")
 STOP_EVENT = threading.Event()
+_SERIAL_COLLECTION_GROUPS = {
+    "anto": "adc_monitoring",
+    "incuba": "adc_monitoring",
+    "ferma_frumusica": "adc_monitoring",
+    "start_fotovoltaice": "adc_monitoring",
+}
 
 
 @dataclass(frozen=True)
@@ -109,7 +115,9 @@ def _collect_with_processes(
 
     while pending or active:
         while pending and len(active) < worker_limit and not STOP_EVENT.is_set():
-            asset = pending.pop(0)
+            asset = _pop_next_pending_asset(pending, active)
+            if asset is None:
+                break
             receive_connection, send_connection = context.Pipe(duplex=False)
             process = context.Process(
                 target=_read_asset_child,
@@ -176,6 +184,20 @@ def _collect_with_processes(
 
     readings.sort(key=lambda item: asset_list.index(item.asset))
     return CollectionResult(tuple(readings), errors)
+
+
+def _pop_next_pending_asset(
+    pending: list[str], active: dict[str, _AssetProcess]
+) -> str | None:
+    active_groups = {_collection_group(asset) for asset in active}
+    for index, asset in enumerate(pending):
+        if _collection_group(asset) not in active_groups:
+            return pending.pop(index)
+    return None
+
+
+def _collection_group(asset: str) -> str:
+    return _SERIAL_COLLECTION_GROUPS.get(asset, asset)
 
 
 def _read_asset_child(asset: str, connection) -> None:

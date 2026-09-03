@@ -17,7 +17,14 @@ from power_reading.scrapers.fusionsolar_scraper import (
     _extract_validated_overview_active_power_kw,
     _select_overview_pv_kw,
 )
-from power_reading.worker import CollectionResult, STOP_EVENT, collect_once, main, run_cycle
+from power_reading.worker import (
+    CollectionResult,
+    STOP_EVENT,
+    _pop_next_pending_asset,
+    collect_once,
+    main,
+    run_cycle,
+)
 
 
 class FakeCursor:
@@ -106,6 +113,15 @@ class WorkerTests(unittest.TestCase):
         result = collect_once(["incuba", "hng"], max_workers=2, reader=fake_reader)
         self.assertEqual([item.asset for item in result.readings], ["incuba"])
         self.assertIn("hng", result.errors)
+
+    def test_adc_assets_are_not_scheduled_concurrently(self):
+        pending = ["incuba", "hng", "ferma_frumusica"]
+        active = {"anto": object()}
+
+        selected = _pop_next_pending_asset(pending, active)
+
+        self.assertEqual(selected, "hng")
+        self.assertEqual(pending, ["incuba", "ferma_frumusica"])
 
     def test_collect_once_publishes_each_successful_reading(self):
         published = []

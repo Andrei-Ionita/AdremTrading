@@ -84,6 +84,24 @@ class ADCMonitoringTests(unittest.TestCase):
         self.assertEqual(scraper.username, "adc-user")
         self.assertEqual(scraper.password, "adc-password")
 
+    def test_adc_assets_share_one_browser_profile(self):
+        profiles = []
+        environment = {"ANTO_USERNAME": "adc-user", "ANTO_PASSWORD": "adc-password"}
+
+        def profile_dir(profile_key):
+            profiles.append(profile_key)
+            return Path(f".playwright_profiles/{profile_key}")
+
+        with patch.dict(os.environ, environment, clear=True), patch(
+            "power_reading.service._profile_dir", side_effect=profile_dir
+        ):
+            _build_scraper(_ASSETS["anto"], headless=True)
+            _build_scraper(_ASSETS["incuba"], headless=True)
+            _build_scraper(_ASSETS["ferma_frumusica"], headless=True)
+            _build_scraper(_ASSETS["start_fotovoltaice"], headless=True)
+
+        self.assertEqual(profiles, ["adc_monitoring"] * 4)
+
     def test_start_fotovoltaice_uses_borcea_and_shared_adc_credentials(self):
         spec = _ASSETS["start_fotovoltaice"]
         environment = {"ANTO_USERNAME": "adc-user", "ANTO_PASSWORD": "adc-password"}
