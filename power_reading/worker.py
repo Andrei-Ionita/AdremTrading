@@ -23,6 +23,8 @@ _SERIAL_COLLECTION_GROUPS = {
     "incuba": "adc_monitoring",
     "ferma_frumusica": "adc_monitoring",
     "start_fotovoltaice": "adc_monitoring",
+    "astro": "aurora",
+    "imperial": "aurora",
 }
 
 

@@ -242,12 +242,17 @@ def _build_scraper(spec: AssetSpec, *, headless: bool):
     username, password = _credentials(spec)
     url = _url(spec)
     plant_name = _env(f"{spec.env_prefix}_PLANT_NAME") or spec.default_plant_name
-    profile_key = "adc_monitoring" if spec.asset_type in {
+    if spec.asset_type in {
         "anto",
         "incuba_adc",
         "ferma_frumusica",
         "start_fotovoltaice",
-    } else spec.asset_type
+    }:
+        profile_key = "adc_monitoring"
+    elif spec.asset_type in {"imperial", "astro_aurora"}:
+        profile_key = "aurora"
+    else:
+        profile_key = spec.asset_type
     profile_dir = _profile_dir(profile_key)
 
     if spec.asset_type in {

@@ -41,6 +41,7 @@ class ImperialPowerReadingTests(unittest.TestCase):
         self.assertEqual(imperial.plant_name, "PV Jucu")
         self.assertEqual(imperial.secondary_plant_name, "Imperial 2")
         self.assertEqual(imperial.source_prefix, "imperial")
+        self.assertEqual(astro.user_data_dir, imperial.user_data_dir)
 
     def test_imperial_two_aliases_never_include_astro_luna(self):
         from power_reading.scrapers.imperial_scraper import _plant_aliases

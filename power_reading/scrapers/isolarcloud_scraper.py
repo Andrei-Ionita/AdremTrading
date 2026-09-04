@@ -181,6 +181,7 @@ class ISolarCloudScraper:
                     f"iSolarCloud exposed neither its login form nor plant list (url={page.url})."
                 ) from exc
         if "#/plantList" not in page.url:
+            self._raise_if_account_locked(page)
             if account.count() != 1 or password.count() != 1:
                 raise ISolarCloudReadOnlyError(
                     "The iSolarCloud login fields were not uniquely identified."
@@ -193,6 +194,8 @@ class ISolarCloudScraper:
                     f"Expected one iSolarCloud Login button, found {login.count()}."
                 )
             login.click()
+            page.wait_for_timeout(1_000)
+            self._raise_if_account_locked(page)
 
         try:
             page.wait_for_url(re.compile(r"#/plantList(?:$|[?/])"), timeout=self.browser_timeout_ms)
@@ -200,6 +203,24 @@ class ISolarCloudScraper:
             raise ISolarCloudReadOnlyError(
                 f"iSolarCloud login did not reach the plant list (url={page.url})."
             ) from exc
+
+    def _raise_if_account_locked(self, page) -> None:
+        try:
+            text = page.locator("body").first.inner_text(timeout=5_000)
+        except Exception:
+            return
+        match = re.search(
+            r"account has been locked due to multiple failed attempts"
+            r"(?:.*?unlock automatically in\s+(\d+)\s+minutes?)?",
+            text,
+            re.I | re.S,
+        )
+        if match:
+            remaining = f" for approximately {match.group(1)} minutes" if match.group(1) else ""
+            raise ISolarCloudReadOnlyError(
+                "iSolarCloud account is locked after failed login attempts; "
+                f"login submission was suppressed{remaining}."
+            )
 
     def _find_plant_link(self, page):
         page.get_by_text("Real-time power", exact=True).wait_for(state="visible")

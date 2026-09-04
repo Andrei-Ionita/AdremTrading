@@ -123,6 +123,15 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(selected, "hng")
         self.assertEqual(pending, ["incuba", "ferma_frumusica"])
 
+    def test_aurora_assets_are_not_scheduled_concurrently(self):
+        pending = ["imperial", "hng"]
+        active = {"astro": object()}
+
+        selected = _pop_next_pending_asset(pending, active)
+
+        self.assertEqual(selected, "hng")
+        self.assertEqual(pending, ["imperial"])
+
     def test_collect_once_publishes_each_successful_reading(self):
         published = []
 

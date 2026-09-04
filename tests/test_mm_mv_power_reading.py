@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from power_reading.scrapers.isolarcloud_scraper import (
     ISolarCloudReadOnlyError,
@@ -32,6 +32,22 @@ CELLS = [
 
 
 class ISolarCloudParserTests(unittest.TestCase):
+    def test_locked_account_is_detected_without_another_login_submission(self):
+        from power_reading.scrapers.isolarcloud_scraper import ISolarCloudScraper
+
+        scraper = ISolarCloudScraper("https://example.test")
+        page = MagicMock()
+        page.locator.return_value.first.inner_text.return_value = (
+            "Your account has been locked due to multiple failed attempts. "
+            "It will unlock automatically in 119 minutes."
+        )
+
+        with self.assertRaisesRegex(
+            ISolarCloudReadOnlyError,
+            "login submission was suppressed for approximately 119 minutes",
+        ):
+            scraper._raise_if_account_locked(page)
+
     def test_reads_only_reghin_realtime_power_column(self):
         power_kw, raw_value = extract_realtime_power_kw(HEADERS, CELLS, "Reghin")
         self.assertEqual(power_kw, 4_370.0)
