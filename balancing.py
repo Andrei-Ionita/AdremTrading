@@ -27,7 +27,7 @@ from pytz import timezone
 from ml import fetching_Imperial_data, fetching_Astro_data, predicting_exporting_Astro, predicting_exporting_Imperial, fetching_Imperial_data_15min, fetching_Astro_data_15min, predicting_exporting_Astro_15min, predicting_exporting_Imperial_15min, fetching_Kahraman_data, fetching_Kahraman_data_15min, predicting_exporting_Kahraman, predicting_exporting_Kahraman_15min, fetching_SunEnergy_data, fetching_SunEnergy_data_15min, predicting_exporting_SunEnergy, predicting_exporting_SunEnergy_15min, fetching_Dragosel_data, fetching_Dragosel_data_15min, predicting_exporting_Dragosel, predicting_exporting_Dragosel_15min, fetching_Sun_Grow_Lucia_data_15min, predicting_exporting_Sun_Grow_Lucia_15min
 from ml import uploading_onedrive_file, upload_file_with_retries, check_file_sync, predicting_exporting_SolarEnergy, predicting_exporting_SolarEnergy_15min, fetching_SolarEnergy_data, fetching_SolarEnergy_data_15min, fetching_Elnet_data, fetching_Elnet_data_15min, predicting_exporting_Elnet, predicting_exporting_Elnet_15min, fetching_Horeco_data, fetching_Horeco_data_15min, predicting_exporting_Horeco, predicting_exporting_Horeco_15min, fetching_3D_Steel_data, fetching_3D_Steel_data_15min, predicting_exporting_3D_Steel, predicting_exporting_3D_Steel_15min, fetching_GESS_data_15min, predicting_exporting_GESS_15min, predicting_exporting_NRG_15min, fetching_NRG_data_15min, fetching_Photovoltaic_Energy_Project_data_15min, predicting_exporting_Photovoltaic_Energy_Project_15min, predicting_exporting_Anto_15min
 from ml import fetching_MM_MV_data_15min, predicting_exporting_MM_MV_15min, fetching_Rosiori_data_15min, predicting_exporting_Rosiori_15min, fetching_Necaluxan_data_15min, predicting_exporting_Necaluxan_15min, fetching_Adrem_data_15min, predicting_exporting_Adrem_15min, fetching_Anto_data_15min, fetching_Motif_data_15min, predicting_exporting_Motif_15min, fetching_Ferma_data_15min, predicting_exporting_Ferma_15min, fetching_HNG_data_15min, predicting_exporting_HNG_15min
-from ml import fetching_AnaSun_data_15min, predicting_exporting_AnaSun_15min
+from ml import fetching_AnaSun_data_15min, predicting_exporting_AnaSun_15min, fetching_GCSP_data_15min, predicting_exporting_GCSP_15min
 from database import render_indisponibility_db_Kahraman, render_indisponibility_db_Astro, render_indisponibility_db_Imperial, render_indisponibility_db_SunEnergy, render_indisponibility_db_SolarEnergy, render_indisponibility_db_Elnet, render_indisponibility_db_Horeco, render_indisponibility_db_3D_Steel, render_indisponibility_db_Dragosel, render_indisponibility_db_GESS, render_indisponibility_db_NRG, render_indisponibility_db_Sun_Grow_Lucia, render_indisponibility_db_Photovoltaic_Energy_Project, render_indisponibility_db_MM_MV, render_indisponibility_db_Rosiori, render_indisponibility_db_Necaluxan, render_indisponibility_db_Adrem, render_indisponibility_db_Anto, render_indisponibility_db_Motif, render_indisponibility_db_Ferma, render_indisponibility_db_HNG				
 from data_fetching.entsoe_newapi_data import fetch_process_wind_notified, fetch_process_wind_actual_production, fetch_process_solar_notified, fetch_process_solar_actual_production
 from data_fetching.entsoe_newapi_data import fetch_consumption_forecast, fetch_actual_consumption, render_test_entsoe_newapi_functions
@@ -454,6 +454,7 @@ def create_excel_file_with_all_forecasts():
 	df_3D_Steel = pd.read_excel("./3D_Steel/Results_Production_3D_Steel_xgb.xlsx")
 	df_Dragosel = pd.read_excel("./Dragosel/Results_Production_Dragosel_xgb.xlsx")
 	df_AnaSun_15min = pd.read_excel("./AnaSun/Results_Production_AnaSun_xgb_15min.xlsx")
+	df_GCSP_15min = pd.read_excel("./GCSP/Results_Production_GCSP_xgb_15min.xlsx")
 	df_all = pd.read_excel("./Forecast_template.xlsx")
 
 	# Writing in the Excel file
@@ -483,6 +484,17 @@ def create_excel_file_with_all_forecasts():
 	)
 	anasun_hourly = anasun_data.groupby("Hourly_lookup")["Prediction"].sum()
 	df_all["Prediction_AnaSun"] = df_all["Lookup"].map(anasun_hourly)
+	gcsp_data = df_GCSP_15min[["Data", "Interval", "Prediction"]].copy()
+	gcsp_data["Data"] = pd.to_datetime(gcsp_data["Data"])
+	gcsp_data["Hourly_interval"] = (
+		(pd.to_numeric(gcsp_data["Interval"]) - 1) // 4 + 1
+	).astype(int)
+	gcsp_data["Hourly_lookup"] = (
+		gcsp_data["Data"].dt.strftime("%d.%m.%Y")
+		+ gcsp_data["Hourly_interval"].astype(str)
+	)
+	gcsp_hourly = gcsp_data.groupby("Hourly_lookup")["Prediction"].sum()
+	df_all["Prediction_GCSP"] = df_all["Lookup"].map(gcsp_hourly)
 	start_column = df_all.pop("Prediction_Start_Fotovoltaice")
 	df_all.insert(
 		df_all.columns.get_loc("Lookup"),
@@ -491,6 +503,8 @@ def create_excel_file_with_all_forecasts():
 	)
 	anasun_column = df_all.pop("Prediction_AnaSun")
 	df_all.insert(df_all.columns.get_loc("Lookup"), "Prediction_AnaSun", anasun_column)
+	gcsp_column = df_all.pop("Prediction_GCSP")
+	df_all.insert(df_all.columns.get_loc("Lookup"), "Prediction_GCSP", gcsp_column)
 
 	df_all.to_excel("./Forecast.xlsx", index=False)
 	return df_all
@@ -533,6 +547,7 @@ def create_excel_file_with_all_forecasts_15min(
 	df_Ferma = pd.read_excel("./Ferma/Results_Production_Ferma_xgb_15min.xlsx")
 	df_HNG = pd.read_excel("./HNG/Results_Production_HNG_xgb_15min.xlsx")
 	df_AnaSun = pd.read_excel("./AnaSun/Results_Production_AnaSun_xgb_15min.xlsx")
+	df_GCSP = pd.read_excel("./GCSP/Results_Production_GCSP_xgb_15min.xlsx")
 	df_all = pd.read_excel("./Forecast_template.xlsx")
 
 	# Writing in the Excel file
@@ -580,6 +595,7 @@ def create_excel_file_with_all_forecasts_15min(
 	df_all["Prediction_Ferma"] = df_Ferma["Prediction"]
 	df_all["Prediction_HNG"] = df_HNG["Prediction"]
 	df_all["Prediction_AnaSun"] = df_AnaSun["Prediction"]
+	df_all["Prediction_GCSP"] = df_GCSP["Prediction"]
 	if use_hng_intraday and HNG_INTRADAY_RESULTS_PATH.is_file():
 		df_HNG_intraday = pd.read_excel(HNG_INTRADAY_RESULTS_PATH)
 		if not df_HNG_intraday.empty:
@@ -660,6 +676,8 @@ def create_excel_file_with_all_forecasts_15min(
 	)
 	anasun_column = df_all.pop("Prediction_AnaSun")
 	df_all.insert(df_all.columns.get_loc("Lookup"), "Prediction_AnaSun", anasun_column)
+	gcsp_column = df_all.pop("Prediction_GCSP")
+	df_all.insert(df_all.columns.get_loc("Lookup"), "Prediction_GCSP", gcsp_column)
 
 	df_all.to_excel("./Forecast_15min.xlsx", index=False)
 	return df_all
@@ -1215,6 +1233,10 @@ def render_balancing_market_intraday_page():
 			# Forecasting AnaSun
 			fetching_AnaSun_data_15min()
 			st.dataframe(predicting_exporting_AnaSun_15min(1, 24, 0))
+
+			# Forecasting GCSP
+			fetching_GCSP_data_15min()
+			st.dataframe(predicting_exporting_GCSP_15min(1, 24, 0))
 
 			# Refresh corrections after every DAM file is ready so the export uses the newest readings.
 			intraday_available, correction_results, correction_errors = refresh_intraday_corrections()

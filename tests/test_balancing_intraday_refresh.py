@@ -20,6 +20,89 @@ from portfolio_intraday import (
 
 
 class IntradayRefreshTests(unittest.TestCase):
+    def test_gcsp_is_aggregated_into_hourly_portfolio_export(self):
+        hourly = pd.DataFrame(
+            {
+                "Data": pd.to_datetime(["2026-09-10", "2026-09-10"]),
+                "Interval": [10, 11],
+                "Prediction": [2.0, 1.5],
+                "Lookup": ["10.09.202610", "10.09.202611"],
+            }
+        )
+        quarter_hourly = pd.DataFrame(
+            {
+                "Data": pd.date_range("2026-09-10 09:00", periods=8, freq="15min"),
+                "Interval": range(37, 45),
+                "Prediction": [0.1, 0.2, 0.3, 0.4, 0.2, 0.2, 0.2, 0.2],
+            }
+        )
+
+        def read_excel(path, *args, **kwargs):
+            if str(path).endswith("Results_Production_GCSP_xgb_15min.xlsx"):
+                return quarter_hourly.copy()
+            if str(path).endswith("Forecast_template.xlsx"):
+                return pd.DataFrame(index=range(len(hourly)))
+            return hourly.copy()
+
+        with (
+            patch("balancing.pd.read_excel", side_effect=read_excel),
+            patch("balancing.pd.DataFrame.to_excel"),
+        ):
+            result = create_excel_file_with_all_forecasts()
+
+        self.assertEqual(result["Prediction_GCSP"].tolist(), [1.0, 0.8])
+        self.assertLess(
+            result.columns.get_loc("Prediction_GCSP"),
+            result.columns.get_loc("Lookup"),
+        )
+
+    def test_gcsp_is_included_in_15min_portfolio_export(self):
+        timestamps = pd.to_datetime(["2026-09-10 10:15", "2026-09-10 10:30"])
+        dam = pd.DataFrame(
+            {
+                "Data": timestamps,
+                "Interval": [42, 43],
+                "Prediction": [0.4, 0.3],
+                "Lookup": ["unused", "unused"],
+            }
+        )
+        gcsp = dam.assign(Prediction=[0.25, 0.2])
+
+        def read_excel(path, *args, **kwargs):
+            if str(path).endswith("Results_Production_GCSP_xgb_15min.xlsx"):
+                return gcsp.copy()
+            if str(path).endswith("Forecast_template.xlsx"):
+                return pd.DataFrame(index=range(len(dam)))
+            return dam.copy()
+
+        with (
+            patch("balancing.pd.read_excel", side_effect=read_excel),
+            patch("balancing.pd.DataFrame.to_excel"),
+            patch("pathlib.Path.is_file", return_value=False),
+        ):
+            result = create_excel_file_with_all_forecasts_15min(
+                use_astro_intraday=False,
+                use_imperial_intraday=False,
+                use_mm_mv_intraday=False,
+                use_elnet_intraday=False,
+                use_horeco_intraday=False,
+                use_hng_intraday=False,
+                use_incuba_intraday=False,
+                use_anto_intraday=False,
+                use_motif_intraday=False,
+                use_ferma_intraday=False,
+                use_necaluxan_intraday=False,
+                use_ulmeni_intraday=False,
+                use_start_fotovoltaice_intraday=False,
+                use_anasun_intraday=False,
+            )
+
+        self.assertEqual(result["Prediction_GCSP"].tolist(), [0.25, 0.2])
+        self.assertLess(
+            result.columns.get_loc("Prediction_GCSP"),
+            result.columns.get_loc("Lookup"),
+        )
+
     def test_anasun_is_aggregated_into_hourly_portfolio_export(self):
         hourly = pd.DataFrame(
             {
