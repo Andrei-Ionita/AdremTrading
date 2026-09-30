@@ -12,7 +12,6 @@ from elnet_intraday import (
     CORRECTION_HALF_LIFE_MINUTES,
     ELNET_DAM_FEATURES,
     ELNET_DAM_MODEL_PATH,
-    MIN_ACTUAL_TO_FORECAST_RATIO,
     ElnetIntradayBundle,
     ElnetIntradayInputError,
     build_elnet_intraday_features,
@@ -226,13 +225,14 @@ class ElnetProductionTests(unittest.TestCase):
 
 
 class ElnetCorrectionTests(unittest.TestCase):
-    def test_severe_downward_deviation_keeps_dam_forecast(self):
+    def test_severe_downward_deviation_is_corrected(self):
         result = predict_elnet_intraday(
             weather_for_origin(), ORIGIN, 0.49, bundle=fake_bundle()
         )
-        self.assertEqual(MIN_ACTUAL_TO_FORECAST_RATIO, 0.5)
-        self.assertTrue((result["Prediction_ID"] == result["Prediction_DAM"]).all())
-        self.assertTrue((result["Correction_weight"] == 0).all())
+        self.assertEqual(result["Prediction_ID"].iloc[0], 0.49)
+        self.assertEqual(result["Correction_weight"].iloc[0], 1.0)
+        self.assertLess(result["Correction"].iloc[0], 0)
+        self.assertTrue((result["Correction"] <= 0).all())
 
     def test_actual_residual_starts_full_and_has_two_hour_half_life(self):
         result = predict_elnet_intraday(
@@ -264,6 +264,7 @@ class ElnetCorrectionTests(unittest.TestCase):
             result_path = Path(directory) / "elnet_intraday.xlsx"
             weather_for_origin().to_csv(weather_path, index=False)
             result = run_elnet_intraday_forecast(
+                model_path=ELNET_DAM_MODEL_PATH,
                 now=ORIGIN,
                 readings_getter=lambda *args, **kwargs: production_readings(),
                 weather_path=weather_path,

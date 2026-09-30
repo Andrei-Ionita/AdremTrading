@@ -10,7 +10,8 @@ import pandas as pd
 
 
 APP_ROOT = Path(__file__).resolve().parent
-ELNET_DAM_MODEL_PATH = APP_ROOT / "Elnet" / "rs_xgb_elnet_prod_15min_0626.pkl"
+ELNET_DAM_MODEL_PATH = APP_ROOT / "Elnet" / "rs_xgb_elnet_prod_15min_0726.pkl"
+ELNET_DAM_RESULTS_PATH = APP_ROOT / "Elnet" / "Results_Production_Elnet_xgb_15min.xlsx"
 ELNET_WEATHER_PATH = APP_ROOT / "Elnet" / "Solcast" / "Bucsani_15min.csv"
 ELNET_INTRADAY_RESULTS_PATH = (
     APP_ROOT / "Elnet" / "Results_Production_Elnet_DAM_Corrected_Intraday_15min.xlsx"
@@ -19,7 +20,6 @@ ELNET_TIMEZONE = "Europe/Bucharest"
 MAX_SAMPLE_GAP = pd.Timedelta(minutes=7, seconds=30)
 CORRECTION_INITIAL_WEIGHT = 1.0
 CORRECTION_HALF_LIFE_MINUTES = 120.0
-MIN_ACTUAL_TO_FORECAST_RATIO = 0.5
 
 ELNET_DAM_FEATURES = (
     "Interval",
@@ -115,6 +115,8 @@ def calculate_elnet_interval_energy(
         if observed_at.tzinfo is None:
             raise ElnetIntradayInputError("An Elnet production timestamp has no timezone.")
         observed_at = observed_at.tz_convert(ELNET_TIMEZONE)
+        if observed_at < start:
+            continue
         power_mw = _finite_number(getattr(reading, "pv_mw", None), "Elnet power")
         if power_mw < 0:
             raise ElnetIntradayInputError("Elnet production cannot be negative.")
@@ -265,19 +267,12 @@ def predict_elnet_intraday(
         * (forecast_horizons.to_numpy(dtype=float) - 15.0)
         / CORRECTION_HALF_LIFE_MINUTES
     )
-    if (
-        reference_prediction > 0
-        and actual_energy < MIN_ACTUAL_TO_FORECAST_RATIO * reference_prediction
-    ):
-        correction_weights = np.zeros(len(targets), dtype=float)
-        corrections = np.zeros(len(targets), dtype=float)
-    else:
-        corrections = correction_weights * residual
+    corrections = correction_weights * residual
     predictions = np.maximum(dam_predictions + corrections, 0)
     if active_bundle.plant_max_output is not None:
         predictions = np.minimum(predictions, active_bundle.plant_max_output)
     predictions[dark_targets] = 0
-    corrections[dark_targets] = -dam_predictions[dark_targets]
+    corrections = predictions - dam_predictions
 
     return pd.DataFrame(
         {
@@ -302,10 +297,32 @@ def run_elnet_intraday_forecast(
     now: pd.Timestamp | None = None,
     readings_getter: Callable | None = None,
     latest_reading_getter: Callable | None = None,
-    model_path: str | Path = ELNET_DAM_MODEL_PATH,
+    model_path: str | Path | None = None,
     weather_path: str | Path = ELNET_WEATHER_PATH,
     result_path: str | Path = ELNET_INTRADAY_RESULTS_PATH,
+    dam_forecast_path: str | Path = ELNET_DAM_RESULTS_PATH,
 ) -> pd.DataFrame:
+    if model_path is None:
+        from dataclasses import replace
+        from portfolio_intraday import (
+            ELNET_INTRADAY_CONFIG, PortfolioIntradayError,
+            run_portfolio_intraday_forecast,
+        )
+
+        config = replace(
+            ELNET_INTRADAY_CONFIG,
+            dam_results_path=Path(dam_forecast_path),
+            weather_path=Path(weather_path),
+            intraday_results_path=Path(result_path),
+        )
+        try:
+            return run_portfolio_intraday_forecast(
+                config, now=now, readings_getter=readings_getter,
+                latest_reading_getter=latest_reading_getter,
+            )
+        except PortfolioIntradayError as exc:
+            raise ElnetIntradayInputError(str(exc)) from exc
+
     bundle = load_elnet_intraday_bundle(model_path)
     run_time = _local_timestamp(
         now if now is not None else pd.Timestamp.now(tz=ELNET_TIMEZONE)

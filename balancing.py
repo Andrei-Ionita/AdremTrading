@@ -5,6 +5,7 @@ import json
 import requests
 import xlsxwriter
 from concurrent.futures import ThreadPoolExecutor
+from portfolio_export import motif_in_portfolio
 from datetime import datetime, timedelta
 import os
 import openpyxl
@@ -443,71 +444,15 @@ def flows_crossborders(start_cet, end_cet):
 	return all_borders_physical_flows
 
 # Creating a single Excel file with all the forecasts
-def create_excel_file_with_all_forecasts():
-	df_Astro = pd.read_excel("./Astro/Results_Production_Astro_xgb.xlsx")
-	df_Imperial = pd.read_excel("./Imperial/Results_Production_Imperial_xgb.xlsx")
-	df_Kahraman = pd.read_excel("./Kahraman/Results_Production_Kahraman_xgb.xlsx")
-	df_SolarEnergy = pd.read_excel("./Solar Energy Ulmeni/Results_Production_SolarEnergy_xgb.xlsx")
-	df_SunEnergy = pd.read_excel("./PC SunEnergy/Results_Production_SunEnergy_xgb.xlsx")
-	df_Elnet = pd.read_excel("./Elnet/Results_Production_Elnet_xgb.xlsx")
-	df_Horeco = pd.read_excel("./Horeco/Results_Production_Horeco_xgb.xlsx")
-	df_3D_Steel = pd.read_excel("./3D_Steel/Results_Production_3D_Steel_xgb.xlsx")
-	df_Dragosel = pd.read_excel("./Dragosel/Results_Production_Dragosel_xgb.xlsx")
-	df_AnaSun_15min = pd.read_excel("./AnaSun/Results_Production_AnaSun_xgb_15min.xlsx")
-	df_GCSP_15min = pd.read_excel("./GCSP/Results_Production_GCSP_xgb_15min.xlsx")
-	df_all = pd.read_excel("./Forecast_template.xlsx")
+def create_excel_file_with_all_forecasts(quarter_hourly=None, **intraday_options):
+	from portfolio_export import aggregate_hourly_portfolio
 
-	# Writing in the Excel file
-	df_all["Data"] = df_Astro["Data"]
-	df_all["Interval"] = df_Astro["Interval"]
-	df_all["Prediction_Astro"] = df_Astro["Prediction"]
-	df_all["Prediction_Imperial"] = df_Imperial["Prediction"]
-	df_all["Prediction_Kahraman"] = df_Kahraman["Prediction"]
-	df_all["Prediction_SolEn_Ulmeni"] = df_SolarEnergy["Prediction"]
-	df_all["Prediction_PCSunEn"] = df_SunEnergy["Prediction"]
-	df_all["Prediction_Elnet"] = df_Elnet["Prediction"]
-	df_all["Prediction_Horeco"] = df_Horeco["Prediction"]
-	df_all["Prediction_3D_Steel"] = df_3D_Steel["Prediction"]
-	df_all["Prediction_Dragosel"] = df_Dragosel["Prediction"]
-	df_all["Prediction_Start_Fotovoltaice"] = (
-		df_SolarEnergy["Prediction"] * START_FOTOVOLTAICE_SCALE
-	)
-	df_all["Lookup"] = df_Astro["Lookup"]
-	anasun_data = df_AnaSun_15min[["Data", "Interval", "Prediction"]].copy()
-	anasun_data["Data"] = pd.to_datetime(anasun_data["Data"])
-	anasun_data["Hourly_interval"] = (
-		(pd.to_numeric(anasun_data["Interval"]) - 1) // 4 + 1
-	).astype(int)
-	anasun_data["Hourly_lookup"] = (
-		anasun_data["Data"].dt.strftime("%d.%m.%Y")
-		+ anasun_data["Hourly_interval"].astype(str)
-	)
-	anasun_hourly = anasun_data.groupby("Hourly_lookup")["Prediction"].sum()
-	df_all["Prediction_AnaSun"] = df_all["Lookup"].map(anasun_hourly)
-	gcsp_data = df_GCSP_15min[["Data", "Interval", "Prediction"]].copy()
-	gcsp_data["Data"] = pd.to_datetime(gcsp_data["Data"])
-	gcsp_data["Hourly_interval"] = (
-		(pd.to_numeric(gcsp_data["Interval"]) - 1) // 4 + 1
-	).astype(int)
-	gcsp_data["Hourly_lookup"] = (
-		gcsp_data["Data"].dt.strftime("%d.%m.%Y")
-		+ gcsp_data["Hourly_interval"].astype(str)
-	)
-	gcsp_hourly = gcsp_data.groupby("Hourly_lookup")["Prediction"].sum()
-	df_all["Prediction_GCSP"] = df_all["Lookup"].map(gcsp_hourly)
-	start_column = df_all.pop("Prediction_Start_Fotovoltaice")
-	df_all.insert(
-		df_all.columns.get_loc("Lookup"),
-		"Prediction_Start_Fotovoltaice",
-		start_column,
-	)
-	anasun_column = df_all.pop("Prediction_AnaSun")
-	df_all.insert(df_all.columns.get_loc("Lookup"), "Prediction_AnaSun", anasun_column)
-	gcsp_column = df_all.pop("Prediction_GCSP")
-	df_all.insert(df_all.columns.get_loc("Lookup"), "Prediction_GCSP", gcsp_column)
-
+	if quarter_hourly is None:
+		quarter_hourly = create_excel_file_with_all_forecasts_15min(**intraday_options)
+	df_all = aggregate_hourly_portfolio(quarter_hourly)
 	df_all.to_excel("./Forecast.xlsx", index=False)
 	return df_all
+
 
 def create_excel_file_with_all_forecasts_15min(
 	use_astro_intraday=True,
@@ -525,165 +470,49 @@ def create_excel_file_with_all_forecasts_15min(
 	use_start_fotovoltaice_intraday=True,
 	use_anasun_intraday=True,
 ):
-	df_Astro = pd.read_excel("./Astro/Results_Production_Astro_xgb_15min.xlsx")
-	df_Imperial = pd.read_excel("./Imperial/Results_Production_Imperial_xgb_15min.xlsx")
-	df_Kahraman = pd.read_excel("./Kahraman/Results_Production_Kahraman_xgb_15min.xlsx")
-	df_SolarEnergy = pd.read_excel("./Solar Energy Ulmeni/Results_Production_SolarEnergy_xgb_15min.xlsx")
-	df_SunEnergy = pd.read_excel("./PC SunEnergy/Results_Production_SunEnergy_xgb_15min.xlsx")
-	df_Elnet = pd.read_excel("./Elnet/Results_Production_Elnet_xgb_15min.xlsx")
-	df_Horeco = pd.read_excel("./Horeco/Results_Production_Horeco_xgb_15min.xlsx")
-	# df_3D_Steel = pd.read_excel("./3D_Steel/Results_Production_3D_Steel_xgb_15min.xlsx")
-	df_Dragosel = pd.read_excel("./Dragosel/Results_Production_Dragosel_xgb_15min.xlsx")
-	df_GESS = pd.read_excel("./GESS/Results_Production_GESS_xgb_15min.xlsx")
-	df_NRG = pd.read_excel("./NRG/Results_Production_NRG_xgb_15min.xlsx")
-	df_Sun_Grow_Lucia = pd.read_excel("./Sun_Grow_Lucia/Results_Production_Sun_Grow_Lucia_xgb_15min.xlsx")
-	df_Photovoltaic_Energy_Project = pd.read_excel("./Photovoltaic_Energy_Project/Results_Production_Photovoltaic_Energy_Project_xgb_15min.xlsx")
-	df_MM_MV = pd.read_excel("./MM_MV/Results_Production_MM_MV_xgb_15min.xlsx")
-	df_Rosiori = pd.read_excel("./Rosiori/Results_Production_Rosiori_xgb_15min.xlsx")
-	df_Necaluxan = pd.read_excel("./Necaluxan/Results_Production_Necaluxan_xgb_15min.xlsx")
-	df_Adrem = pd.read_excel("./Adrem/Results_Production_Adrem_xgb_15min.xlsx")
-	df_Anto = pd.read_excel("./Anto/Results_Production_Anto_xgb_15min.xlsx")
-	df_Motif = pd.read_excel("./Motif/Results_Production_Motif_xgb_15min.xlsx")
-	df_Ferma = pd.read_excel("./Ferma/Results_Production_Ferma_xgb_15min.xlsx")
-	df_HNG = pd.read_excel("./HNG/Results_Production_HNG_xgb_15min.xlsx")
-	df_AnaSun = pd.read_excel("./AnaSun/Results_Production_AnaSun_xgb_15min.xlsx")
-	df_GCSP = pd.read_excel("./GCSP/Results_Production_GCSP_xgb_15min.xlsx")
-	df_all = pd.read_excel("./Forecast_template.xlsx")
+	from portfolio_export import (
+		build_quarter_hourly_portfolio,
+		RENEWABLE_ENERGY_HOLDING_START,
+		RENEWABLE_ENERGY_HOLDING_RESULTS_PATH,
+	)
 
-	# Writing in the Excel file
-	df_all["Data"] = df_Astro["Data"]
-	df_all["Interval"] = df_Astro["Interval"]
-	df_all["Prediction_Astro"] = df_Astro["Prediction"]
-	df_all["Prediction_Imperial"] = df_Imperial["Prediction"]
-	df_all["Prediction_Kahraman"] = df_Kahraman["Prediction"]
-	df_all["Prediction_SolEn_Ulmeni"] = df_SolarEnergy["Prediction"]
-	df_all["Prediction_PCSunEn"] = df_SunEnergy["Prediction"]
-	df_all["Prediction_Elnet"] = df_Elnet["Prediction"]
-	if use_elnet_intraday and ELNET_INTRADAY_RESULTS_PATH.is_file():
-		df_Elnet_intraday = pd.read_excel(ELNET_INTRADAY_RESULTS_PATH)
-		if not df_Elnet_intraday.empty:
-			elnet_intraday_by_timestamp = (
-				df_Elnet_intraday.assign(Data=pd.to_datetime(df_Elnet_intraday["Data"]))
-				.drop_duplicates(subset="Data", keep="last")
-				.set_index("Data")["Prediction_ID"]
-			)
-			corrected_elnet = pd.to_datetime(df_all["Data"]).map(elnet_intraday_by_timestamp)
-			df_all["Prediction_Elnet"] = corrected_elnet.combine_first(df_all["Prediction_Elnet"])
-	df_all["Prediction_Horeco"] = df_Horeco["Prediction"]
-	if use_horeco_intraday and HORECO_INTRADAY_RESULTS_PATH.is_file():
-		df_Horeco_intraday = pd.read_excel(HORECO_INTRADAY_RESULTS_PATH)
-		if not df_Horeco_intraday.empty:
-			horeco_intraday_by_timestamp = (
-				df_Horeco_intraday.assign(Data=pd.to_datetime(df_Horeco_intraday["Data"]))
-				.drop_duplicates(subset="Data", keep="last")
-				.set_index("Data")["Prediction_ID"]
-			)
-			corrected_horeco = pd.to_datetime(df_all["Data"]).map(horeco_intraday_by_timestamp)
-			df_all["Prediction_Horeco"] = corrected_horeco.combine_first(df_all["Prediction_Horeco"])
-	# df_all["Prediction_3D_Steel"] = df_3D_Steel["Prediction"]
-	df_all["Prediction_Dragosel"] = df_Dragosel["Prediction"]
-	df_all["Prediction_GESS"] = df_GESS["Prediction"]
-	df_all["Prediction_NRG"] = df_NRG["Prediction"]
-	df_all["Prediction_Sun_Grow_Lucia"] = df_Sun_Grow_Lucia["Prediction"]
-	df_all["Prediction_Photovoltaic_Energy_Project"] = df_Photovoltaic_Energy_Project["Prediction"]
-	df_all["Prediction_MM_MV"] = df_MM_MV["Prediction"]
-	df_all["Prediction_Rosiori"] = df_Rosiori["Prediction"]
-	df_all["Prediction_Necaluxan"] = df_Necaluxan["Prediction"]
-	df_all["Prediction_Adrem"] = df_Adrem["Prediction"]
-	df_all["Prediction_Anto"] = df_Anto["Prediction"]
-	df_all["Prediction_Motif"] = df_Motif["Prediction"]
-	df_all["Prediction_Ferma"] = df_Ferma["Prediction"]
-	df_all["Prediction_HNG"] = df_HNG["Prediction"]
-	df_all["Prediction_AnaSun"] = df_AnaSun["Prediction"]
-	df_all["Prediction_GCSP"] = df_GCSP["Prediction"]
-	if use_hng_intraday and HNG_INTRADAY_RESULTS_PATH.is_file():
-		df_HNG_intraday = pd.read_excel(HNG_INTRADAY_RESULTS_PATH)
-		if not df_HNG_intraday.empty:
-			hng_intraday_by_timestamp = (
-				df_HNG_intraday.assign(Data=pd.to_datetime(df_HNG_intraday["Data"]))
-				.drop_duplicates(subset="Data", keep="last")
-				.set_index("Data")["Prediction_ID"]
-			)
-			corrected_hng = pd.to_datetime(df_all["Data"]).map(hng_intraday_by_timestamp)
-			df_all["Prediction_HNG"] = corrected_hng.combine_first(df_all["Prediction_HNG"])
-	portfolio_intraday_overlays = (
-		(use_astro_intraday, "Prediction_Astro", ASTRO_INTRADAY_CONFIG),
-		(use_imperial_intraday, "Prediction_Imperial", IMPERIAL_INTRADAY_CONFIG),
-		(use_mm_mv_intraday, "Prediction_MM_MV", MM_MV_INTRADAY_CONFIG),
-		(use_ulmeni_intraday, "Prediction_SolEn_Ulmeni", ULMENI_INTRADAY_CONFIG),
-		(use_anasun_intraday, "Prediction_AnaSun", ANASUN_INTRADAY_CONFIG),
-		(use_anto_intraday, "Prediction_Anto", ANTO_INTRADAY_CONFIG),
-		(use_motif_intraday, "Prediction_Motif", MOTIF_INTRADAY_CONFIG),
-		(use_ferma_intraday, "Prediction_Ferma", FERMA_INTRADAY_CONFIG),
-		(use_necaluxan_intraday, "Prediction_Necaluxan", NECALUXAN_INTRADAY_CONFIG),
-	)
-	for enabled, prediction_column, config in portfolio_intraday_overlays:
-		if enabled and config.intraday_results_path.is_file():
-			df_intraday = pd.read_excel(config.intraday_results_path)
-			if not df_intraday.empty:
-				intraday_by_timestamp = (
-					df_intraday.assign(Data=pd.to_datetime(df_intraday["Data"]))
-					.drop_duplicates(subset="Data", keep="last")
-					.set_index("Data")["Prediction_ID"]
-				)
-				corrected = pd.to_datetime(df_all["Data"]).map(intraday_by_timestamp)
-				df_all[prediction_column] = corrected.combine_first(
-					df_all[prediction_column]
-				)
-	df_all["Prediction_Incuba"] = df_Adrem["Prediction"] * ADREM_TO_INCUBA_SCALE
-	if use_incuba_intraday and INCUBA_INTRADAY_RESULTS_PATH.is_file():
-		df_Incuba_intraday = pd.read_excel(INCUBA_INTRADAY_RESULTS_PATH)
-		if not df_Incuba_intraday.empty:
-			incuba_intraday_by_timestamp = (
-				df_Incuba_intraday.assign(Data=pd.to_datetime(df_Incuba_intraday["Data"]))
-				.drop_duplicates(subset="Data", keep="last")
-				.set_index("Data")["Prediction_ID"]
-			)
-			corrected_incuba = pd.to_datetime(df_all["Data"]).map(incuba_intraday_by_timestamp)
-			df_all["Prediction_Incuba"] = corrected_incuba.combine_first(
-				df_all["Prediction_Incuba"]
-			)
-	df_all["Prediction_Start_Fotovoltaice"] = (
-		df_SolarEnergy["Prediction"] * START_FOTOVOLTAICE_SCALE
-	)
-	if (
-		use_start_fotovoltaice_intraday
-		and START_FOTOVOLTAICE_INTRADAY_CONFIG.intraday_results_path.is_file()
-	):
-		df_start_intraday = pd.read_excel(
-			START_FOTOVOLTAICE_INTRADAY_CONFIG.intraday_results_path
-		)
-		if not df_start_intraday.empty:
-			start_intraday_by_timestamp = (
-				df_start_intraday.assign(Data=pd.to_datetime(df_start_intraday["Data"]))
-				.drop_duplicates(subset="Data", keep="last")
-				.set_index("Data")["Prediction_ID"]
-			)
-			corrected_start = pd.to_datetime(df_all["Data"]).map(
-				start_intraday_by_timestamp
-			)
-			df_all["Prediction_Start_Fotovoltaice"] = corrected_start.combine_first(
-				df_all["Prediction_Start_Fotovoltaice"]
-			)
-	df_all["Lookup"] = df_Astro["Lookup"]
-	incuba_column = df_all.pop("Prediction_Incuba")
-	df_all.insert(df_all.columns.get_loc("Lookup"), "Prediction_Incuba", incuba_column)
-	start_column = df_all.pop("Prediction_Start_Fotovoltaice")
-	df_all.insert(
-		df_all.columns.get_loc("Lookup"),
-		"Prediction_Start_Fotovoltaice",
-		start_column,
-	)
-	anasun_column = df_all.pop("Prediction_AnaSun")
-	df_all.insert(df_all.columns.get_loc("Lookup"), "Prediction_AnaSun", anasun_column)
-	gcsp_column = df_all.pop("Prediction_GCSP")
-	df_all.insert(df_all.columns.get_loc("Lookup"), "Prediction_GCSP", gcsp_column)
-
+	df_all = build_quarter_hourly_portfolio({
+		"astro": use_astro_intraday,
+		"imperial": use_imperial_intraday,
+		"mm_mv": use_mm_mv_intraday,
+		"elnet": use_elnet_intraday,
+		"horeco": use_horeco_intraday,
+		"hng": use_hng_intraday,
+		"incuba": use_incuba_intraday,
+		"anto": use_anto_intraday,
+		"motif": use_motif_intraday,
+		"ferma": use_ferma_intraday,
+		"necaluxan": use_necaluxan_intraday,
+		"ulmeni": use_ulmeni_intraday,
+		"start_fotovoltaice": use_start_fotovoltaice_intraday,
+		"anasun": use_anasun_intraday,
+	})
+	if "Prediction_Renewable_Energy_Holding" in df_all:
+		renewable = df_all.loc[
+			df_all["Data"] >= RENEWABLE_ENERGY_HOLDING_START,
+			["Data", "Interval", "Prediction_Renewable_Energy_Holding", "Lookup"],
+		].rename(columns={"Prediction_Renewable_Energy_Holding": "Prediction"})
+		RENEWABLE_ENERGY_HOLDING_RESULTS_PATH.parent.mkdir(parents=True, exist_ok=True)
+		renewable.to_excel(RENEWABLE_ENERGY_HOLDING_RESULTS_PATH, index=False)
 	df_all.to_excel("./Forecast_15min.xlsx", index=False)
 	return df_all
 
 
-def refresh_intraday_corrections(refreshers=None):
+def forecast_motif_for_portfolio(now=None):
+	if not motif_in_portfolio(now):
+		return None
+	limitation = render_indisponibility_db_Motif()
+	interval_from, interval_to, percentage = limitation if limitation[0] is not None else (1, 24, 0)
+	fetching_Motif_data_15min()
+	return predicting_exporting_Motif_15min(interval_to, interval_from, percentage)
+
+
+def refresh_intraday_corrections(refreshers=None, *, now=None):
 	use_portal_groups = refreshers is None
 	if use_portal_groups:
 		refreshers = (
@@ -703,6 +532,8 @@ def refresh_intraday_corrections(refreshers=None):
 			("anasun", "AnaSun", lambda: run_portfolio_intraday_forecast(ANASUN_INTRADAY_CONFIG), PortfolioIntradayError),
 		)
 	available = {key: False for key, _, _, _ in refreshers}
+	if use_portal_groups and not motif_in_portfolio(now):
+		refreshers = tuple(item for item in refreshers if item[0] != "motif")
 	results = {}
 	errors = {}
 
@@ -728,7 +559,7 @@ def refresh_intraday_corrections(refreshers=None):
 			("necaluxan",),
 			("ulmeni",),
 		)
-		groups = tuple(tuple(by_key[key] for key in keys) for keys in group_keys)
+		groups = tuple(tuple(by_key[key] for key in keys if key in by_key) for keys in group_keys)
 		with ThreadPoolExecutor(max_workers=3) as executor:
 			futures = [executor.submit(run_group, group) for group in groups]
 			group_outcomes = [future.result() for future in futures]
@@ -1170,25 +1001,11 @@ def render_balancing_market_intraday_page():
 			# access_token = upload_file_with_retries(file_path)
 			# check_file_sync(file_path, access_token)
 
-			# Forecasting Motif
-			# Updating the indisponibility, if any
-			result_Motif = render_indisponibility_db_Motif()
-			if result_Motif[0] is not None:
-				interval_from, interval_to, limitation_percentage = result_Motif
-			else:
-				# Handle the case where no data is found
-				# st.text("No indisponibility found for tomorrow")
-				# Fallback logic: Add your fallback actions here
-				# st.write("Running fallback logic because no indisponibility data is found.")
-				interval_from = 1
-				interval_to = 24
-				limitation_percentage = 0
-			fetching_Motif_data_15min()
-			st.dataframe(predicting_exporting_Motif_15min(interval_to, interval_from, limitation_percentage))
-			file_path = './Motif/Results_Production_Motif_xgb_15min.xlsx'
-			# uploading_onedrive_file(file_path, access_token)
-			# access_token = upload_file_with_retries(file_path)
-			# check_file_sync(file_path, access_token)
+			# Motif leaves the portfolio on October 1; its replacement is derived
+			# from Elnet in the timestamp-aligned export.
+			motif_forecast = forecast_motif_for_portfolio()
+			if motif_forecast is not None:
+				st.dataframe(motif_forecast)
 
 			# Forecasting Ferma
 			# Updating the indisponibility, if any
@@ -1244,8 +1061,7 @@ def render_balancing_market_intraday_page():
 				st.dataframe(correction_result)
 			for display_name, error in correction_errors.items():
 				st.warning(f"{display_name} correction skipped; DAM retained: {error}")
-			create_excel_file_with_all_forecasts()
-			create_excel_file_with_all_forecasts_15min(
+			quarter_hourly = create_excel_file_with_all_forecasts_15min(
 				use_astro_intraday=intraday_available["astro"],
 				use_imperial_intraday=intraday_available["imperial"],
 				use_mm_mv_intraday=intraday_available["mm_mv"],
@@ -1261,14 +1077,14 @@ def render_balancing_market_intraday_page():
 				use_start_fotovoltaice_intraday=intraday_available["start_fotovoltaice"],
 				use_anasun_intraday=intraday_available["anasun"],
 			)
+			create_excel_file_with_all_forecasts(quarter_hourly)
 
 	with col2:
 		if st.button("Create Excel File with all the forecasts"):
 			intraday_available, _, correction_errors = refresh_intraday_corrections()
 			for display_name, error in correction_errors.items():
 				st.warning(f"{display_name} correction skipped; DAM retained: {error}")
-			create_excel_file_with_all_forecasts()
-			create_excel_file_with_all_forecasts_15min(
+			quarter_hourly = create_excel_file_with_all_forecasts_15min(
 				use_astro_intraday=intraday_available["astro"],
 				use_imperial_intraday=intraday_available["imperial"],
 				use_mm_mv_intraday=intraday_available["mm_mv"],
@@ -1284,6 +1100,7 @@ def render_balancing_market_intraday_page():
 				use_start_fotovoltaice_intraday=intraday_available["start_fotovoltaice"],
 				use_anasun_intraday=intraday_available["anasun"],
 			)
+			create_excel_file_with_all_forecasts(quarter_hourly)
 			file_path = './Forecast.xlsx'
 			with open(file_path, "rb") as f:
 				excel_data = f.read()

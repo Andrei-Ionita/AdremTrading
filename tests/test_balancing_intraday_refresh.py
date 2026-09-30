@@ -8,6 +8,7 @@ import pandas as pd
 from balancing import (
     create_excel_file_with_all_forecasts,
     create_excel_file_with_all_forecasts_15min,
+    forecast_motif_for_portfolio,
     refresh_intraday_corrections,
 )
 from portfolio_intraday import (
@@ -20,41 +21,74 @@ from portfolio_intraday import (
 
 
 class IntradayRefreshTests(unittest.TestCase):
-    def test_gcsp_is_aggregated_into_hourly_portfolio_export(self):
-        hourly = pd.DataFrame(
-            {
-                "Data": pd.to_datetime(["2026-09-10", "2026-09-10"]),
-                "Interval": [10, 11],
-                "Prediction": [2.0, 1.5],
-                "Lookup": ["10.09.202610", "10.09.202611"],
-            }
-        )
-        quarter_hourly = pd.DataFrame(
-            {
-                "Data": pd.date_range("2026-09-10 09:00", periods=8, freq="15min"),
-                "Interval": range(37, 45),
-                "Prediction": [0.1, 0.2, 0.3, 0.4, 0.2, 0.2, 0.2, 0.2],
-            }
-        )
+    def test_motif_generation_stops_on_october_first(self):
+        with (
+            patch('balancing.render_indisponibility_db_Motif', return_value=(None, None, None)) as limits,
+            patch('balancing.fetching_Motif_data_15min') as fetch,
+            patch('balancing.predicting_exporting_Motif_15min', return_value='forecast') as predict,
+        ):
+            self.assertIsNone(forecast_motif_for_portfolio(now='2026-10-01'))
+            limits.assert_not_called()
+            fetch.assert_not_called()
+            predict.assert_not_called()
+            self.assertEqual(forecast_motif_for_portfolio(now='2026-09-30'), 'forecast')
+            limits.assert_called_once()
+            fetch.assert_called_once()
+            predict.assert_called_once_with(24, 1, 0)
 
-        def read_excel(path, *args, **kwargs):
-            if str(path).endswith("Results_Production_GCSP_xgb_15min.xlsx"):
-                return quarter_hourly.copy()
-            if str(path).endswith("Forecast_template.xlsx"):
-                return pd.DataFrame(index=range(len(hourly)))
-            return hourly.copy()
+    def test_motif_correction_stops_on_october_first(self):
+        with (
+            patch('balancing.run_portfolio_intraday_forecast', return_value='portfolio') as run,
+            patch('balancing.run_elnet_intraday_forecast', return_value='elnet'),
+            patch('balancing.run_horeco_intraday_forecast', return_value='horeco'),
+            patch('balancing.run_hng_intraday_forecast', return_value='hng'),
+            patch('balancing.run_incuba_intraday_forecast', return_value='incuba'),
+        ):
+            available, results, errors = refresh_intraday_corrections(now='2026-10-01')
+        self.assertFalse(available['motif'])
+        self.assertNotIn('motif', results)
+        self.assertEqual(errors, {})
+        self.assertEqual(sum(available.values()), 13)
+        self.assertNotIn('motif', [call.args[0].asset_key for call in run.call_args_list])
+
+    def test_renewable_workbook_uses_only_active_delivery_dates(self):
+        from portfolio_export import RENEWABLE_ENERGY_HOLDING_RESULTS_PATH
+
+        frame = pd.DataFrame({
+            'Data': pd.to_datetime(['2026-09-30 23:45', '2026-10-01 00:00']),
+            'Interval': [96, 1],
+            'Prediction_Renewable_Energy_Holding': [0, 0.237],
+            'Lookup': ['30.09.202696', '01.10.20261'],
+        })
+        written = {}
+
+        def capture(data, path, **kwargs):
+            written[str(path)] = data.copy()
 
         with (
-            patch("balancing.pd.read_excel", side_effect=read_excel),
-            patch("balancing.pd.DataFrame.to_excel"),
+            patch('portfolio_export.build_quarter_hourly_portfolio', return_value=frame),
+            patch('pathlib.Path.mkdir'),
+            patch.object(pd.DataFrame, 'to_excel', capture),
         ):
-            result = create_excel_file_with_all_forecasts()
+            result = create_excel_file_with_all_forecasts_15min()
+        pd.testing.assert_frame_equal(result, frame)
+        self.assertIn('./Forecast_15min.xlsx', written)
+        renewable = written[str(RENEWABLE_ENERGY_HOLDING_RESULTS_PATH)]
+        self.assertEqual(renewable.Data.tolist(), [pd.Timestamp('2026-10-01')])
+        self.assertEqual(renewable.Prediction.tolist(), [0.237])
+        self.assertEqual(renewable.columns.tolist(), ['Data', 'Interval', 'Prediction', 'Lookup'])
 
+    def test_gcsp_is_aggregated_into_hourly_portfolio_export(self):
+        quarters = pd.DataFrame({
+            "Data": pd.date_range("2026-09-28 09:00", periods=8, freq="15min"),
+            "Interval": range(37, 45),
+            "Prediction_GCSP": [0.1, 0.2, 0.3, 0.4, 0.2, 0.2, 0.2, 0.2],
+        })
+        with patch("balancing.pd.DataFrame.to_excel"):
+            result = create_excel_file_with_all_forecasts(quarters)
         self.assertEqual(result["Prediction_GCSP"].tolist(), [1.0, 0.8])
-        self.assertLess(
-            result.columns.get_loc("Prediction_GCSP"),
-            result.columns.get_loc("Lookup"),
-        )
+        self.assertEqual(result["Interval"].tolist(), [10, 11])
+        self.assertLess(result.columns.get_loc("Prediction_GCSP"), result.columns.get_loc("Lookup"))
 
     def test_gcsp_is_included_in_15min_portfolio_export(self):
         timestamps = pd.to_datetime(["2026-09-10 10:15", "2026-09-10 10:30"])
@@ -104,40 +138,16 @@ class IntradayRefreshTests(unittest.TestCase):
         )
 
     def test_anasun_is_aggregated_into_hourly_portfolio_export(self):
-        hourly = pd.DataFrame(
-            {
-                "Data": pd.to_datetime(["2026-08-19", "2026-08-19"]),
-                "Interval": [10, 11],
-                "Prediction": [2.0, 1.5],
-                "Lookup": ["19.08.202610", "19.08.202611"],
-            }
-        )
-        quarter_hourly = pd.DataFrame(
-            {
-                "Data": pd.date_range("2026-08-19 09:00", periods=8, freq="15min"),
-                "Interval": range(37, 45),
-                "Prediction": [0.1, 0.2, 0.3, 0.4, 0.2, 0.2, 0.2, 0.2],
-            }
-        )
-
-        def read_excel(path, *args, **kwargs):
-            if str(path).endswith("Results_Production_AnaSun_xgb_15min.xlsx"):
-                return quarter_hourly.copy()
-            if str(path).endswith("Forecast_template.xlsx"):
-                return pd.DataFrame(index=range(len(hourly)))
-            return hourly.copy()
-
-        with (
-            patch("balancing.pd.read_excel", side_effect=read_excel),
-            patch("balancing.pd.DataFrame.to_excel"),
-        ):
-            result = create_excel_file_with_all_forecasts()
-
+        quarters = pd.DataFrame({
+            "Data": pd.date_range("2026-09-28 09:00", periods=8, freq="15min"),
+            "Interval": range(37, 45),
+            "Prediction_AnaSun": [0.1, 0.2, 0.3, 0.4, 0.2, 0.2, 0.2, 0.2],
+        })
+        with patch("balancing.pd.DataFrame.to_excel"):
+            result = create_excel_file_with_all_forecasts(quarters)
         self.assertEqual(result["Prediction_AnaSun"].tolist(), [1.0, 0.8])
-        self.assertLess(
-            result.columns.get_loc("Prediction_AnaSun"),
-            result.columns.get_loc("Lookup"),
-        )
+        self.assertEqual(result["Interval"].tolist(), [10, 11])
+        self.assertLess(result.columns.get_loc("Prediction_AnaSun"), result.columns.get_loc("Lookup"))
 
     def test_failed_refresh_is_disabled_for_the_export(self):
         def fail():
@@ -162,7 +172,7 @@ class IntradayRefreshTests(unittest.TestCase):
             patch("balancing.run_hng_intraday_forecast", return_value="hng"),
             patch("balancing.run_incuba_intraday_forecast", return_value="incuba"),
         ):
-            available, _, errors = refresh_intraday_corrections()
+            available, _, errors = refresh_intraday_corrections(now='2026-09-29')
 
         self.assertEqual(
             set(available),
@@ -218,7 +228,7 @@ class IntradayRefreshTests(unittest.TestCase):
             patch("balancing.run_hng_intraday_forecast", return_value="hng"),
             patch("balancing.run_incuba_intraday_forecast", return_value="incuba"),
         ):
-            available, _, errors = refresh_intraday_corrections()
+            available, _, errors = refresh_intraday_corrections(now='2026-09-29')
 
         self.assertTrue(all(available.values()))
         self.assertEqual(errors, {})

@@ -13,7 +13,6 @@ from horeco_intraday import (
     HORECO_BASELINE_FEATURES,
     HORECO_DAM_MODEL_PATH,
     HORECO_MAX_INTERVAL_ENERGY_MWH,
-    MIN_ACTUAL_TO_FORECAST_RATIO,
     HorecoBaselineModel,
     HorecoIntradayInputError,
     build_horeco_baseline_features,
@@ -184,13 +183,14 @@ class HorecoProductionTests(unittest.TestCase):
 
 
 class HorecoCorrectionTests(unittest.TestCase):
-    def test_severe_downward_deviation_keeps_dam_forecast(self):
+    def test_severe_downward_deviation_is_corrected(self):
         result = predict_horeco_intraday(
             weather_for_origin(), ORIGIN, 0.124, baseline_model=fake_model()
         )
-        self.assertEqual(MIN_ACTUAL_TO_FORECAST_RATIO, 0.5)
-        self.assertTrue((result["Prediction_ID"] == result["Prediction_DAM"]).all())
-        self.assertTrue((result["Correction_weight"] == 0).all())
+        self.assertEqual(result["Prediction_ID"].iloc[0], 0.124)
+        self.assertEqual(result["Correction_weight"].iloc[0], 1.0)
+        self.assertLess(result["Correction"].iloc[0], 0)
+        self.assertTrue((result["Correction"] <= 0).all())
 
     def test_actual_residual_starts_full_and_has_two_hour_half_life(self):
         result = predict_horeco_intraday(

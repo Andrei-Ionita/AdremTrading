@@ -24,10 +24,20 @@ profiles are written below `POWER_READING_PROFILE_DIR` (default:
 `.playwright_profiles`). SNK uses a private IP and requires Railway network access
 to that endpoint; Windows-only SCADA window capture is not available on Railway.
 
-## Forecast-time interval retrieval
+## Production Collection and Correction
 
-Production corrections retrieve one completed 15-minute interval only when a
-forecast is triggered:
+The `power-reader` Railway service runs `python -m power_reading.worker` and
+stores live readings in PostgreSQL. Its default collection interval is 180
+seconds. The web service reads the latest completed 15-minute interval from
+that database when a forecast correction is requested. Missing or insufficient
+samples retain the base forecast and produce a warning.
+
+Corrections anchor the next forecast to the completed interval's measured
+energy, in either direction, with a two-hour decay half-life. Elnet, Horeco and
+HNG use their generated base forecast files. The 15-minute portfolio is joined
+by timestamp, and the hourly download sums four complete corrected quarters.
+
+The source-specific interval API is also available for diagnostics:
 
 ```python
 from power_reading import read_interval_energy
@@ -35,14 +45,14 @@ from power_reading import read_interval_energy
 energy_mwh = read_interval_energy("hng", start=interval_start, end=interval_end)
 ```
 
-The background worker entry point is disabled and is not a Railway process.
-Completed intervals are cached for 15 minutes to avoid reopening a portal when
-the same forecast workflow requests the same asset more than once.
+Direct portal intervals are cached for 15 minutes. This API is separate from
+the production correction path that integrates stored worker samples.
 
 `read_asset()` remains available as a manual diagnostic for a current power
 snapshot. It is not used to calculate production energy for forecast correction.
 
-ADC assets intentionally estimate the quarter from the equal-weight mean of the
-portal's current `15M AVG` and live power. Ulmeni has no historical source, so its
-quarter estimate intentionally uses the current validated WinCC power for the
-full 0.25-hour interval.
+For direct interval diagnostics, ADC combines the portal's `15M AVG` and live
+power; Ulmeni uses its validated WinCC power for the 0.25-hour estimate. In the
+production path, both use stored samples from the completed interval. Ulmeni's
+grid-meter imports count as zero exported production; stale readings are never
+carried forward to replace a missing interval.

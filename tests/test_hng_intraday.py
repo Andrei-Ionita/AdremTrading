@@ -13,7 +13,6 @@ from hng_intraday import (
     CORRECTION_HALF_LIFE_MINUTES,
     HNG_DAM_FEATURES,
     HNG_DAM_MODEL_PATH,
-    MIN_ACTUAL_TO_FORECAST_RATIO,
     HNGIntradayBundle,
     HNGIntradayInputError,
     build_hng_intraday_features,
@@ -92,7 +91,7 @@ def production_readings(
 class BundleTests(unittest.TestCase):
     def test_original_dam_model_loads_for_intraday_correction(self):
         self.assertTrue(Path(HNG_DAM_MODEL_PATH).is_file())
-        self.assertEqual(Path(HNG_DAM_MODEL_PATH).name, "rs_xgb_hng_prod_15min_0626.pkl")
+        self.assertEqual(Path(HNG_DAM_MODEL_PATH).name, "rs_xgb_hng_prod_15min_0826.pkl")
         bundle = load_hng_intraday_bundle()
         self.assertEqual(bundle.asset, "HNG")
         self.assertEqual(bundle.market, "Intraday")
@@ -119,6 +118,7 @@ class BundleTests(unittest.TestCase):
             result_path = Path(directory) / "hng_id.xlsx"
             weather_for_origin().to_csv(weather_path, index=False)
             result = run_hng_intraday_forecast(
+                model_path=HNG_DAM_MODEL_PATH,
                 now=ORIGIN,
                 readings_getter=lambda *args, **kwargs: production_readings(),
                 weather_path=weather_path,
@@ -294,13 +294,14 @@ class OriginTests(unittest.TestCase):
 
 
 class PredictionConstraintTests(unittest.TestCase):
-    def test_severe_downward_deviation_keeps_dam_forecast(self):
+    def test_severe_downward_deviation_is_corrected(self):
         result = predict_hng_intraday(
             weather_for_origin(), ORIGIN, 0.49, bundle=fake_bundle(model=ConstantModel(1.0))
         )
-        self.assertEqual(MIN_ACTUAL_TO_FORECAST_RATIO, 0.5)
-        self.assertTrue((result["Prediction_ID"] == result["Prediction_DAM"]).all())
-        self.assertTrue((result["Correction_weight"] == 0).all())
+        self.assertEqual(result["Prediction_ID"].iloc[0], 0.49)
+        self.assertEqual(result["Correction_weight"].iloc[0], 1.0)
+        self.assertLess(result["Correction"].iloc[0], 0)
+        self.assertTrue((result["Correction"] <= 0).all())
 
     def test_actual_residual_is_strong_first_and_decays_with_two_hour_half_life(self):
         result = predict_hng_intraday(

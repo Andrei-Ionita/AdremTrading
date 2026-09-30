@@ -10,7 +10,8 @@ import pandas as pd
 
 
 APP_ROOT = Path(__file__).resolve().parent
-HNG_DAM_MODEL_PATH = APP_ROOT / "HNG" / "rs_xgb_hng_prod_15min_0626.pkl"
+HNG_DAM_MODEL_PATH = APP_ROOT / "HNG" / "rs_xgb_hng_prod_15min_0826.pkl"
+HNG_DAM_RESULTS_PATH = APP_ROOT / "HNG" / "Results_Production_HNG_xgb_15min.xlsx"
 HNG_ID_WEATHER_PATH = APP_ROOT / "HNG" / "Solcast" / "Mures_15min.csv"
 HNG_INTRADAY_RESULTS_PATH = (
     APP_ROOT / "HNG" / "Results_Production_HNG_DAM_Corrected_Intraday_15min.xlsx"
@@ -19,7 +20,6 @@ HNG_TIMEZONE = "Europe/Bucharest"
 MAX_SAMPLE_GAP = pd.Timedelta(minutes=7, seconds=30)
 CORRECTION_INITIAL_WEIGHT = 1.0
 CORRECTION_HALF_LIFE_MINUTES = 120.0
-MIN_ACTUAL_TO_FORECAST_RATIO = 0.5
 
 HNG_DAM_FEATURES = (
     "Interval",
@@ -172,6 +172,8 @@ def calculate_hng_interval_energy(
         if observed_at.tzinfo is None:
             raise HNGIntradayInputError("An HNG production timestamp has no timezone.")
         observed_at = observed_at.tz_convert(HNG_TIMEZONE)
+        if observed_at < start:
+            continue
         power_mw = _finite_number(getattr(reading, "pv_mw", None), "HNG power")
         if power_mw < 0:
             raise HNGIntradayInputError("HNG production cannot be negative.")
@@ -314,19 +316,12 @@ def predict_hng_intraday(
         * (forecast_horizons.to_numpy(dtype=float) - 15.0)
         / CORRECTION_HALF_LIFE_MINUTES
     )
-    if (
-        reference_prediction > 0
-        and actual_energy < MIN_ACTUAL_TO_FORECAST_RATIO * reference_prediction
-    ):
-        correction_weights = np.zeros(len(targets), dtype=float)
-        corrections = np.zeros(len(targets), dtype=float)
-    else:
-        corrections = correction_weights * residual
+    corrections = correction_weights * residual
     predictions = np.maximum(dam_predictions + corrections, 0)
     if active_bundle.plant_max_output is not None:
         predictions = np.minimum(predictions, active_bundle.plant_max_output)
     predictions[dark_targets] = 0
-    corrections[dark_targets] = -dam_predictions[dark_targets]
+    corrections = predictions - dam_predictions
 
     return pd.DataFrame(
         {
@@ -351,10 +346,32 @@ def run_hng_intraday_forecast(
     now: pd.Timestamp | None = None,
     readings_getter: Callable | None = None,
     latest_reading_getter: Callable | None = None,
-    model_path: str | Path = HNG_DAM_MODEL_PATH,
+    model_path: str | Path | None = None,
     weather_path: str | Path = HNG_ID_WEATHER_PATH,
     result_path: str | Path = HNG_INTRADAY_RESULTS_PATH,
+    dam_forecast_path: str | Path = HNG_DAM_RESULTS_PATH,
 ) -> pd.DataFrame:
+    if model_path is None:
+        from dataclasses import replace
+        from portfolio_intraday import (
+            HNG_INTRADAY_CONFIG, PortfolioIntradayError,
+            run_portfolio_intraday_forecast,
+        )
+
+        config = replace(
+            HNG_INTRADAY_CONFIG,
+            dam_results_path=Path(dam_forecast_path),
+            weather_path=Path(weather_path),
+            intraday_results_path=Path(result_path),
+        )
+        try:
+            return run_portfolio_intraday_forecast(
+                config, now=now, readings_getter=readings_getter,
+                latest_reading_getter=latest_reading_getter,
+            )
+        except PortfolioIntradayError as exc:
+            raise HNGIntradayInputError(str(exc)) from exc
+
     bundle = load_hng_intraday_bundle(model_path)
     run_time = _local_timestamp(
         now if now is not None else pd.Timestamp.now(tz=HNG_TIMEZONE)

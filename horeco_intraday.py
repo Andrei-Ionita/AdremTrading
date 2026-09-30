@@ -10,7 +10,8 @@ import pandas as pd
 
 
 APP_ROOT = Path(__file__).resolve().parent
-HORECO_DAM_MODEL_PATH = APP_ROOT / "Horeco" / "rs_xgb_horeco_prod_15min_0426.pkl"
+HORECO_DAM_MODEL_PATH = APP_ROOT / "Horeco" / "rs_xgb_horeco_prod_15min_0826.pkl"
+HORECO_DAM_RESULTS_PATH = APP_ROOT / "Horeco" / "Results_Production_Horeco_xgb_15min.xlsx"
 HORECO_WEATHER_PATH = APP_ROOT / "Horeco" / "Solcast" / "Buzau_15min.csv"
 HORECO_INTRADAY_RESULTS_PATH = (
     APP_ROOT / "Horeco" / "Results_Production_Horeco_DAM_Corrected_Intraday_15min.xlsx"
@@ -25,7 +26,6 @@ HORECO_MAX_INTERVAL_ENERGY_MWH = 2.275 * FORECAST_INTERVAL_HOURS
 MAX_SAMPLE_GAP = pd.Timedelta(minutes=7, seconds=30)
 CORRECTION_INITIAL_WEIGHT = 1.0
 CORRECTION_HALF_LIFE_MINUTES = 120.0
-MIN_ACTUAL_TO_FORECAST_RATIO = 0.5
 
 HORECO_BASELINE_FEATURES = (
     "Interval",
@@ -110,6 +110,8 @@ def calculate_horeco_interval_energy(
         if observed_at.tzinfo is None:
             raise HorecoIntradayInputError("A Horeco production timestamp has no timezone.")
         observed_at = observed_at.tz_convert(HORECO_TIMEZONE)
+        if observed_at < start:
+            continue
         power_mw = _finite_number(getattr(reading, "pv_mw", None), "Horeco power")
         if power_mw < 0:
             raise HorecoIntradayInputError("Horeco production cannot be negative.")
@@ -277,21 +279,14 @@ def predict_horeco_intraday(
         * (horizons.to_numpy(dtype=float) - 15.0)
         / CORRECTION_HALF_LIFE_MINUTES
     )
-    if (
-        reference_prediction > 0
-        and actual_energy < MIN_ACTUAL_TO_FORECAST_RATIO * reference_prediction
-    ):
-        correction_weights = np.zeros(len(targets), dtype=float)
-        corrections = np.zeros(len(targets), dtype=float)
-    else:
-        corrections = correction_weights * residual
+    corrections = correction_weights * residual
     predictions = np.clip(
         baseline + corrections,
         0,
         active_model.plant_max_output,
     )
     predictions[dark_targets] = 0
-    corrections[dark_targets] = -baseline[dark_targets]
+    corrections = predictions - baseline
 
     return pd.DataFrame(
         {
@@ -316,10 +311,32 @@ def run_horeco_intraday_forecast(
     now: pd.Timestamp | None = None,
     readings_getter: Callable | None = None,
     latest_reading_getter: Callable | None = None,
-    model_path: str | Path = HORECO_DAM_MODEL_PATH,
+    model_path: str | Path | None = None,
     weather_path: str | Path = HORECO_WEATHER_PATH,
     result_path: str | Path = HORECO_INTRADAY_RESULTS_PATH,
+    dam_forecast_path: str | Path = HORECO_DAM_RESULTS_PATH,
 ) -> pd.DataFrame:
+    if model_path is None:
+        from dataclasses import replace
+        from portfolio_intraday import (
+            HORECO_INTRADAY_CONFIG, PortfolioIntradayError,
+            run_portfolio_intraday_forecast,
+        )
+
+        config = replace(
+            HORECO_INTRADAY_CONFIG,
+            dam_results_path=Path(dam_forecast_path),
+            weather_path=Path(weather_path),
+            intraday_results_path=Path(result_path),
+        )
+        try:
+            return run_portfolio_intraday_forecast(
+                config, now=now, readings_getter=readings_getter,
+                latest_reading_getter=latest_reading_getter,
+            )
+        except PortfolioIntradayError as exc:
+            raise HorecoIntradayInputError(str(exc)) from exc
+
     baseline_model = load_horeco_baseline_model(model_path)
     run_time = _local_timestamp(
         now if now is not None else pd.Timestamp.now(tz=HORECO_TIMEZONE)

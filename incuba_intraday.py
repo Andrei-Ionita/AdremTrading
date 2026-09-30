@@ -19,7 +19,6 @@ INCUBA_MAX_INTERVAL_ENERGY_MWH = 0.998 * 0.25
 MAX_SAMPLE_GAP = pd.Timedelta(minutes=7, seconds=30)
 CORRECTION_INITIAL_WEIGHT = 1.0
 CORRECTION_HALF_LIFE_MINUTES = 120.0
-MIN_ACTUAL_TO_FORECAST_RATIO = 0.5
 
 
 class IncubaIntradayError(RuntimeError):
@@ -50,6 +49,8 @@ def calculate_incuba_interval_energy(
         if observed_at.tzinfo is None:
             raise IncubaIntradayInputError("An Incuba production timestamp has no timezone.")
         observed_at = observed_at.tz_convert(INCUBA_TIMEZONE)
+        if observed_at < start:
+            continue
         power_mw = _finite_number(getattr(reading, "pv_mw", None), "Incuba power")
         if power_mw < 0:
             raise IncubaIntradayInputError("Incuba production cannot be negative.")
@@ -162,14 +163,7 @@ def predict_incuba_intraday(
         * (forecast_horizons.to_numpy(dtype=float) - 15.0)
         / CORRECTION_HALF_LIFE_MINUTES
     )
-    if (
-        reference_prediction > 0
-        and actual_energy < MIN_ACTUAL_TO_FORECAST_RATIO * reference_prediction
-    ):
-        correction_weights = np.zeros(len(targets), dtype=float)
-        corrections = np.zeros(len(targets), dtype=float)
-    else:
-        corrections = correction_weights * residual
+    corrections = correction_weights * residual
     predictions = np.clip(
         dam_predictions + corrections,
         0,
@@ -177,7 +171,7 @@ def predict_incuba_intraday(
     )
     dark_targets = radiation <= 0
     predictions[dark_targets] = 0
-    corrections[dark_targets] = -dam_predictions[dark_targets]
+    corrections = predictions - dam_predictions
 
     if not np.isfinite(predictions).all():
         raise IncubaIntradayInputError(
