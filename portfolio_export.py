@@ -15,13 +15,6 @@ RENEWABLE_ENERGY_HOLDING_RESULTS_PATH = (
 )
 
 
-def motif_in_portfolio(now=None):
-    stamp = pd.Timestamp.now(tz="Europe/Bucharest") if now is None else pd.Timestamp(now)
-    if stamp.tzinfo is not None:
-        stamp = stamp.tz_convert("Europe/Bucharest").tz_localize(None)
-    return stamp < RENEWABLE_ENERGY_HOLDING_START
-
-
 # Column suffix, directory, production filename suffix, Solcast location.
 ASSET_FILES = (
     ("Astro", "Astro", "Astro", "Luna"),
@@ -41,7 +34,6 @@ ASSET_FILES = (
     ("Necaluxan", "Necaluxan", "Necaluxan", "Salcioara"),
     ("Adrem", "Adrem", "Adrem", "Apold"),
     ("Anto", "Anto", "Anto", "Uileacu"),
-    ("Motif", "Motif", "Motif", "Varfu_Campului"),
     ("Ferma", "Ferma", "Ferma", "Axintele"),
     ("HNG", "HNG", "HNG", "Mures"),
     ("AnaSun", "AnaSun", "AnaSun", "Ulmi"),
@@ -57,7 +49,6 @@ CORRECTIONS = {
     "hng": ("HNG", intraday.HNG_INTRADAY_CONFIG.intraday_results_path),
     "incuba": ("Incuba", INCUBA_INTRADAY_RESULTS_PATH),
     "anto": ("Anto", intraday.ANTO_INTRADAY_CONFIG.intraday_results_path),
-    "motif": ("Motif", intraday.MOTIF_INTRADAY_CONFIG.intraday_results_path),
     "ferma": ("Ferma", intraday.FERMA_INTRADAY_CONFIG.intraday_results_path),
     "necaluxan": ("Necaluxan", intraday.NECALUXAN_INTRADAY_CONFIG.intraday_results_path),
     "ulmeni": ("SolEn_Ulmeni", intraday.ULMENI_INTRADAY_CONFIG.intraday_results_path),
@@ -109,8 +100,6 @@ def build_quarter_hourly_portfolio(enabled_corrections):
     baselines = {}
     weather_paths = {}
     for suffix, directory, filename, location in ASSET_FILES:
-        if suffix == "Motif":
-            continue
         path = Path(directory) / f"Results_Production_{filename}_xgb_15min.xlsx"
         frame = pd.read_excel(path)
         series = _series(frame, "Prediction", suffix)
@@ -121,16 +110,6 @@ def build_quarter_hourly_portfolio(enabled_corrections):
 
     start = max(series.index.min() for series in baselines.values())
     end = min(series.index.max() for series in baselines.values())
-    motif = None
-    if start < RENEWABLE_ENERGY_HOLDING_START:
-        motif = _series(pd.read_excel(Path("Motif") / "Results_Production_Motif_xgb_15min.xlsx"),
-                        "Prediction", "Motif")
-        motif = motif.loc[motif.index < RENEWABLE_ENERGY_HOLDING_START]
-        if motif.empty:
-            raise ValueError("Motif has no base forecast rows before October 1.")
-        start = max(start, motif.index.min())
-        if end < RENEWABLE_ENERGY_HOLDING_START:
-            end = min(end, motif.index.max())
     if start > end:
         raise ValueError("Asset forecasts have no common delivery horizon. Refresh the portfolio forecasts.")
     targets = pd.date_range(start, end, freq="15min")
@@ -138,13 +117,6 @@ def build_quarter_hourly_portfolio(enabled_corrections):
     for suffix, series in baselines.items():
         result[f"Prediction_{suffix}"] = _align_baseline(series, targets, weather_paths[suffix], suffix)
     before_switch = targets < RENEWABLE_ENERGY_HOLDING_START
-    if before_switch.any():
-        # Motif cannot shorten the October horizon or remain a file dependency
-        # once all delivery intervals belong to the replacement asset.
-        result["Prediction_Motif"] = 0.0
-        result.loc[before_switch, "Prediction_Motif"] = _align_baseline(
-            motif, targets[before_switch], Path("Motif/Solcast/Varfu_Campului_15min.csv"), "Motif"
-        )
     if (~before_switch).any():
         result["Prediction_Renewable_Energy_Holding"] = (
             result["Prediction_Elnet"] * RENEWABLE_ENERGY_HOLDING_SCALE
@@ -163,17 +135,11 @@ def build_quarter_hourly_portfolio(enabled_corrections):
             continue
         values = _series(corrected, "Prediction_ID", suffix).reindex(targets)
         result[column] = values.combine_first(result[column])
-        if asset == "motif":
-            result.loc[~before_switch, column] = 0.0
 
-    # Keep the replacement in Motif's former position. A crossing horizon has
-    # both columns, with zero for each asset outside its membership dates.
-    position = result.columns.get_loc("Prediction_Anto") + 1
-    for column in ("Prediction_Motif", "Prediction_Renewable_Energy_Holding"):
-        if column in result:
-            values = result.pop(column)
-            result.insert(position, column, values)
-            position += 1
+    column = "Prediction_Renewable_Energy_Holding"
+    if column in result:
+        values = result.pop(column)
+        result.insert(result.columns.get_loc("Prediction_Anto") + 1, column, values)
 
     # Preserve the established order of derived/new assets before Lookup.
     for suffix in ("Incuba", "Start_Fotovoltaice", "AnaSun", "GCSP"):

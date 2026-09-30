@@ -8,7 +8,7 @@ import pandas as pd
 
 from portfolio_export import (
     ASSET_FILES, CORRECTIONS, RENEWABLE_ENERGY_HOLDING_SCALE,
-    aggregate_hourly_portfolio, build_quarter_hourly_portfolio, motif_in_portfolio,
+    aggregate_hourly_portfolio, build_quarter_hourly_portfolio,
 )
 from incuba_intraday import ADREM_TO_INCUBA_SCALE
 from portfolio_intraday import START_FOTOVOLTAICE_SCALE
@@ -48,8 +48,9 @@ class PortfolioExportTests(unittest.TestCase):
         self.assertFalse(result.isna().any().any())
         self.assertEqual(result['Lookup'].iloc[0], '28.09.202651')
 
-    def test_all_14_corrections_reach_both_excel_downloads(self):
-        self.assertEqual(len(CORRECTIONS), 14)
+    def test_all_13_active_corrections_reach_both_excel_downloads(self):
+        self.assertEqual(len(CORRECTIONS), 13)
+        self.assertNotIn('motif', CORRECTIONS)
         corrected_times = self.times[(self.times >= '2026-09-28 12:45') & (self.times < '2026-09-29')]
         for i, (_, path) in enumerate(CORRECTIONS.values()):
             self.frames[str(path.resolve())] = pd.DataFrame({
@@ -134,22 +135,22 @@ class PortfolioExportTests(unittest.TestCase):
         for path in self.frames:
             self.frames[path] = forecast(self.times)
 
-    def test_september_membership_is_unchanged(self):
+    def test_motif_is_excluded_even_from_september_delivery_dates(self):
         result = self.build()
-        self.assertIn('Prediction_Motif', result)
+        self.assertNotIn('Prediction_Motif', result)
+        self.assertNotIn('Prediction_Motif', aggregate_hourly_portfolio(result))
         self.assertNotIn('Prediction_Renewable_Energy_Holding', result)
-        self.assertEqual(len(result.filter(like='Prediction_').columns), 24)
+        self.assertEqual(len(result.filter(like='Prediction_').columns), 23)
 
-    def test_september_still_uses_motif_common_horizon(self):
+    def test_stale_motif_forecasts_do_not_affect_portfolio(self):
         path = str(Path('Motif/Results_Production_Motif_xgb_15min.xlsx').resolve())
         self.frames[path] = forecast(self.times[1:-1], 0.3)
-        result = self.build()
-        self.assertEqual(result.Data.tolist(), self.times[1:-1].tolist())
-        np.testing.assert_allclose(result.Prediction_Motif, 0.3)
+        result = self.build({'motif': True})
+        self.assertEqual(result.Data.tolist(), self.times.tolist())
+        self.assertNotIn('Prediction_Motif', result)
 
     def test_october_uses_elnet_proxy_without_reading_motif_or_new_asset_files(self):
         self.set_horizon(pd.date_range('2026-10-01 10:00', periods=8, freq='15min'))
-        del self.frames[str(Path('Motif/Results_Production_Motif_xgb_15min.xlsx').resolve())]
         elnet_path = str(Path('Elnet/Results_Production_Elnet_xgb_15min.xlsx').resolve())
         self.frames[elnet_path] = forecast(self.times, np.arange(8) * 0.05).iloc[::-1]
         result = self.build({'motif': True})
@@ -170,20 +171,17 @@ class PortfolioExportTests(unittest.TestCase):
 
     def test_crossing_horizon_switches_at_bucharest_midnight(self):
         self.set_horizon(pd.date_range('2026-09-30 23:00', periods=8, freq='15min'))
-        # The retired asset needs no forecast for October.
-        motif_path = str(Path('Motif/Results_Production_Motif_xgb_15min.xlsx').resolve())
-        self.frames[motif_path] = forecast(self.times[:4], 0.7)
-        _, correction_path = CORRECTIONS['motif']
+        correction_path = Path('Motif/Results_Production_Motif_DAM_Corrected_Intraday_15min.xlsx')
         self.frames[str(correction_path.resolve())] = pd.DataFrame({
             'Data': self.times, 'Prediction_ID': 0.4,
         })
         result = self.build({'motif': True})
         self.assertEqual(result.Data.tolist(), self.times.tolist())
-        np.testing.assert_allclose(result.Prediction_Motif, [0.4] * 4 + [0] * 4)
+        self.assertNotIn('Prediction_Motif', result)
         np.testing.assert_allclose(result.Prediction_Renewable_Energy_Holding,
                                    [0] * 4 + [0.25 * RENEWABLE_ENERGY_HOLDING_SCALE] * 4)
         hourly = aggregate_hourly_portfolio(result)
-        np.testing.assert_allclose(hourly.Prediction_Motif, [1.6, 0])
+        self.assertNotIn('Prediction_Motif', hourly)
         np.testing.assert_allclose(hourly.Prediction_Renewable_Energy_Holding,
                                    [0, RENEWABLE_ENERGY_HOLDING_SCALE])
 
@@ -197,9 +195,6 @@ class PortfolioExportTests(unittest.TestCase):
                                    0.25 * RENEWABLE_ENERGY_HOLDING_SCALE)
 
     def test_switch_uses_bucharest_not_utc_calendar_date(self):
-        self.assertTrue(motif_in_portfolio('2026-09-30 20:59:59+00:00'))
-        self.assertFalse(motif_in_portfolio('2026-09-30 21:00:00+00:00'))
-        self.assertFalse(motif_in_portfolio('2026-10-01 00:00'))
         self.set_horizon(pd.date_range('2026-09-30 21:00Z', periods=4, freq='15min'))
         result = self.build()
         self.assertNotIn('Prediction_Motif', result)

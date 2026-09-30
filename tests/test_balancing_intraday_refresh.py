@@ -8,7 +8,6 @@ import pandas as pd
 from balancing import (
     create_excel_file_with_all_forecasts,
     create_excel_file_with_all_forecasts_15min,
-    forecast_motif_for_portfolio,
     refresh_intraday_corrections,
 )
 from portfolio_intraday import (
@@ -21,22 +20,12 @@ from portfolio_intraday import (
 
 
 class IntradayRefreshTests(unittest.TestCase):
-    def test_motif_generation_stops_on_october_first(self):
-        with (
-            patch('balancing.render_indisponibility_db_Motif', return_value=(None, None, None)) as limits,
-            patch('balancing.fetching_Motif_data_15min') as fetch,
-            patch('balancing.predicting_exporting_Motif_15min', return_value='forecast') as predict,
-        ):
-            self.assertIsNone(forecast_motif_for_portfolio(now='2026-10-01'))
-            limits.assert_not_called()
-            fetch.assert_not_called()
-            predict.assert_not_called()
-            self.assertEqual(forecast_motif_for_portfolio(now='2026-09-30'), 'forecast')
-            limits.assert_called_once()
-            fetch.assert_called_once()
-            predict.assert_called_once_with(24, 1, 0)
+    def test_motif_is_not_a_portfolio_dependency(self):
+        import balancing
 
-    def test_motif_correction_stops_on_october_first(self):
+        self.assertFalse(any('motif' in name.lower() for name in vars(balancing)))
+
+    def test_motif_correction_is_not_scheduled(self):
         with (
             patch('balancing.run_portfolio_intraday_forecast', return_value='portfolio') as run,
             patch('balancing.run_elnet_intraday_forecast', return_value='elnet'),
@@ -44,8 +33,8 @@ class IntradayRefreshTests(unittest.TestCase):
             patch('balancing.run_hng_intraday_forecast', return_value='hng'),
             patch('balancing.run_incuba_intraday_forecast', return_value='incuba'),
         ):
-            available, results, errors = refresh_intraday_corrections(now='2026-10-01')
-        self.assertFalse(available['motif'])
+            available, results, errors = refresh_intraday_corrections()
+        self.assertNotIn('motif', available)
         self.assertNotIn('motif', results)
         self.assertEqual(errors, {})
         self.assertEqual(sum(available.values()), 13)
@@ -123,7 +112,6 @@ class IntradayRefreshTests(unittest.TestCase):
                 use_hng_intraday=False,
                 use_incuba_intraday=False,
                 use_anto_intraday=False,
-                use_motif_intraday=False,
                 use_ferma_intraday=False,
                 use_necaluxan_intraday=False,
                 use_ulmeni_intraday=False,
@@ -172,7 +160,7 @@ class IntradayRefreshTests(unittest.TestCase):
             patch("balancing.run_hng_intraday_forecast", return_value="hng"),
             patch("balancing.run_incuba_intraday_forecast", return_value="incuba"),
         ):
-            available, _, errors = refresh_intraday_corrections(now='2026-09-29')
+            available, _, errors = refresh_intraday_corrections()
 
         self.assertEqual(
             set(available),
@@ -185,7 +173,6 @@ class IntradayRefreshTests(unittest.TestCase):
                 "hng",
                 "incuba",
                 "anto",
-                "motif",
                 "ferma",
                 "necaluxan",
                 "ulmeni",
@@ -228,7 +215,7 @@ class IntradayRefreshTests(unittest.TestCase):
             patch("balancing.run_hng_intraday_forecast", return_value="hng"),
             patch("balancing.run_incuba_intraday_forecast", return_value="incuba"),
         ):
-            available, _, errors = refresh_intraday_corrections(now='2026-09-29')
+            available, _, errors = refresh_intraday_corrections()
 
         self.assertTrue(all(available.values()))
         self.assertEqual(errors, {})
@@ -237,7 +224,7 @@ class IntradayRefreshTests(unittest.TestCase):
             submitted_groups,
             [
                 ("astro", "imperial"),
-                ("elnet", "horeco", "incuba", "motif"),
+                ("elnet", "horeco", "incuba"),
                 ("anto", "ferma", "start_fotovoltaice"),
                 ("mm_mv", "anasun"),
                 ("hng",),
@@ -284,7 +271,6 @@ class IntradayRefreshTests(unittest.TestCase):
                 use_hng_intraday=False,
                 use_incuba_intraday=False,
                 use_anto_intraday=False,
-                use_motif_intraday=False,
                 use_ferma_intraday=False,
                 use_necaluxan_intraday=False,
                 use_ulmeni_intraday=True,
@@ -329,7 +315,6 @@ class IntradayRefreshTests(unittest.TestCase):
                 use_hng_intraday=False,
                 use_incuba_intraday=False,
                 use_anto_intraday=False,
-                use_motif_intraday=False,
                 use_ferma_intraday=False,
                 use_necaluxan_intraday=False,
                 use_ulmeni_intraday=False,
@@ -376,7 +361,6 @@ class IntradayRefreshTests(unittest.TestCase):
                 use_hng_intraday=False,
                 use_incuba_intraday=False,
                 use_anto_intraday=False,
-                use_motif_intraday=False,
                 use_ferma_intraday=False,
                 use_necaluxan_intraday=False,
                 use_ulmeni_intraday=False,
@@ -433,7 +417,6 @@ class IntradayRefreshTests(unittest.TestCase):
                 use_hng_intraday=False,
                 use_incuba_intraday=False,
                 use_anto_intraday=False,
-                use_motif_intraday=False,
                 use_ferma_intraday=False,
                 use_necaluxan_intraday=False,
                 use_ulmeni_intraday=False,

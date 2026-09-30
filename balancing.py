@@ -5,7 +5,6 @@ import json
 import requests
 import xlsxwriter
 from concurrent.futures import ThreadPoolExecutor
-from portfolio_export import motif_in_portfolio
 from datetime import datetime, timedelta
 import os
 import openpyxl
@@ -27,9 +26,9 @@ from pytz import timezone
 # Importing from other pages
 from ml import fetching_Imperial_data, fetching_Astro_data, predicting_exporting_Astro, predicting_exporting_Imperial, fetching_Imperial_data_15min, fetching_Astro_data_15min, predicting_exporting_Astro_15min, predicting_exporting_Imperial_15min, fetching_Kahraman_data, fetching_Kahraman_data_15min, predicting_exporting_Kahraman, predicting_exporting_Kahraman_15min, fetching_SunEnergy_data, fetching_SunEnergy_data_15min, predicting_exporting_SunEnergy, predicting_exporting_SunEnergy_15min, fetching_Dragosel_data, fetching_Dragosel_data_15min, predicting_exporting_Dragosel, predicting_exporting_Dragosel_15min, fetching_Sun_Grow_Lucia_data_15min, predicting_exporting_Sun_Grow_Lucia_15min
 from ml import uploading_onedrive_file, upload_file_with_retries, check_file_sync, predicting_exporting_SolarEnergy, predicting_exporting_SolarEnergy_15min, fetching_SolarEnergy_data, fetching_SolarEnergy_data_15min, fetching_Elnet_data, fetching_Elnet_data_15min, predicting_exporting_Elnet, predicting_exporting_Elnet_15min, fetching_Horeco_data, fetching_Horeco_data_15min, predicting_exporting_Horeco, predicting_exporting_Horeco_15min, fetching_3D_Steel_data, fetching_3D_Steel_data_15min, predicting_exporting_3D_Steel, predicting_exporting_3D_Steel_15min, fetching_GESS_data_15min, predicting_exporting_GESS_15min, predicting_exporting_NRG_15min, fetching_NRG_data_15min, fetching_Photovoltaic_Energy_Project_data_15min, predicting_exporting_Photovoltaic_Energy_Project_15min, predicting_exporting_Anto_15min
-from ml import fetching_MM_MV_data_15min, predicting_exporting_MM_MV_15min, fetching_Rosiori_data_15min, predicting_exporting_Rosiori_15min, fetching_Necaluxan_data_15min, predicting_exporting_Necaluxan_15min, fetching_Adrem_data_15min, predicting_exporting_Adrem_15min, fetching_Anto_data_15min, fetching_Motif_data_15min, predicting_exporting_Motif_15min, fetching_Ferma_data_15min, predicting_exporting_Ferma_15min, fetching_HNG_data_15min, predicting_exporting_HNG_15min
+from ml import fetching_MM_MV_data_15min, predicting_exporting_MM_MV_15min, fetching_Rosiori_data_15min, predicting_exporting_Rosiori_15min, fetching_Necaluxan_data_15min, predicting_exporting_Necaluxan_15min, fetching_Adrem_data_15min, predicting_exporting_Adrem_15min, fetching_Anto_data_15min, fetching_Ferma_data_15min, predicting_exporting_Ferma_15min, fetching_HNG_data_15min, predicting_exporting_HNG_15min
 from ml import fetching_AnaSun_data_15min, predicting_exporting_AnaSun_15min, fetching_GCSP_data_15min, predicting_exporting_GCSP_15min
-from database import render_indisponibility_db_Kahraman, render_indisponibility_db_Astro, render_indisponibility_db_Imperial, render_indisponibility_db_SunEnergy, render_indisponibility_db_SolarEnergy, render_indisponibility_db_Elnet, render_indisponibility_db_Horeco, render_indisponibility_db_3D_Steel, render_indisponibility_db_Dragosel, render_indisponibility_db_GESS, render_indisponibility_db_NRG, render_indisponibility_db_Sun_Grow_Lucia, render_indisponibility_db_Photovoltaic_Energy_Project, render_indisponibility_db_MM_MV, render_indisponibility_db_Rosiori, render_indisponibility_db_Necaluxan, render_indisponibility_db_Adrem, render_indisponibility_db_Anto, render_indisponibility_db_Motif, render_indisponibility_db_Ferma, render_indisponibility_db_HNG				
+from database import render_indisponibility_db_Kahraman, render_indisponibility_db_Astro, render_indisponibility_db_Imperial, render_indisponibility_db_SunEnergy, render_indisponibility_db_SolarEnergy, render_indisponibility_db_Elnet, render_indisponibility_db_Horeco, render_indisponibility_db_3D_Steel, render_indisponibility_db_Dragosel, render_indisponibility_db_GESS, render_indisponibility_db_NRG, render_indisponibility_db_Sun_Grow_Lucia, render_indisponibility_db_Photovoltaic_Energy_Project, render_indisponibility_db_MM_MV, render_indisponibility_db_Rosiori, render_indisponibility_db_Necaluxan, render_indisponibility_db_Adrem, render_indisponibility_db_Anto, render_indisponibility_db_Ferma, render_indisponibility_db_HNG
 from data_fetching.entsoe_newapi_data import fetch_process_wind_notified, fetch_process_wind_actual_production, fetch_process_solar_notified, fetch_process_solar_actual_production
 from data_fetching.entsoe_newapi_data import fetch_consumption_forecast, fetch_actual_consumption, render_test_entsoe_newapi_functions
 from data_fetching.entsoe_newapi_data import fetch_process_hydro_water_reservoir_actual_production, fetch_process_hydro_river_actual_production, fetch_volue_hydro_data, align_and_combine_hydro_data
@@ -58,7 +57,6 @@ from portfolio_intraday import (
 	FERMA_INTRADAY_CONFIG,
 	IMPERIAL_INTRADAY_CONFIG,
 	MM_MV_INTRADAY_CONFIG,
-	MOTIF_INTRADAY_CONFIG,
 	NECALUXAN_INTRADAY_CONFIG,
 	START_FOTOVOLTAICE_INTRADAY_CONFIG,
 	START_FOTOVOLTAICE_SCALE,
@@ -463,7 +461,6 @@ def create_excel_file_with_all_forecasts_15min(
 	use_hng_intraday=True,
 	use_incuba_intraday=True,
 	use_anto_intraday=True,
-	use_motif_intraday=True,
 	use_ferma_intraday=True,
 	use_necaluxan_intraday=True,
 	use_ulmeni_intraday=True,
@@ -485,7 +482,6 @@ def create_excel_file_with_all_forecasts_15min(
 		"hng": use_hng_intraday,
 		"incuba": use_incuba_intraday,
 		"anto": use_anto_intraday,
-		"motif": use_motif_intraday,
 		"ferma": use_ferma_intraday,
 		"necaluxan": use_necaluxan_intraday,
 		"ulmeni": use_ulmeni_intraday,
@@ -503,16 +499,7 @@ def create_excel_file_with_all_forecasts_15min(
 	return df_all
 
 
-def forecast_motif_for_portfolio(now=None):
-	if not motif_in_portfolio(now):
-		return None
-	limitation = render_indisponibility_db_Motif()
-	interval_from, interval_to, percentage = limitation if limitation[0] is not None else (1, 24, 0)
-	fetching_Motif_data_15min()
-	return predicting_exporting_Motif_15min(interval_to, interval_from, percentage)
-
-
-def refresh_intraday_corrections(refreshers=None, *, now=None):
+def refresh_intraday_corrections(refreshers=None):
 	use_portal_groups = refreshers is None
 	if use_portal_groups:
 		refreshers = (
@@ -524,7 +511,6 @@ def refresh_intraday_corrections(refreshers=None, *, now=None):
 			("hng", "HNG", run_hng_intraday_forecast, HNGIntradayError),
 			("incuba", "Incuba", run_incuba_intraday_forecast, IncubaIntradayError),
 			("anto", "Anto", lambda: run_portfolio_intraday_forecast(ANTO_INTRADAY_CONFIG), PortfolioIntradayError),
-			("motif", "Motif", lambda: run_portfolio_intraday_forecast(MOTIF_INTRADAY_CONFIG), PortfolioIntradayError),
 			("ferma", "Ferma Frumusica", lambda: run_portfolio_intraday_forecast(FERMA_INTRADAY_CONFIG), PortfolioIntradayError),
 			("necaluxan", "Necaluxan", lambda: run_portfolio_intraday_forecast(NECALUXAN_INTRADAY_CONFIG), PortfolioIntradayError),
 			("ulmeni", "Solar Energy Ulmeni", lambda: run_portfolio_intraday_forecast(ULMENI_INTRADAY_CONFIG), PortfolioIntradayError),
@@ -532,8 +518,6 @@ def refresh_intraday_corrections(refreshers=None, *, now=None):
 			("anasun", "AnaSun", lambda: run_portfolio_intraday_forecast(ANASUN_INTRADAY_CONFIG), PortfolioIntradayError),
 		)
 	available = {key: False for key, _, _, _ in refreshers}
-	if use_portal_groups and not motif_in_portfolio(now):
-		refreshers = tuple(item for item in refreshers if item[0] != "motif")
 	results = {}
 	errors = {}
 
@@ -552,7 +536,7 @@ def refresh_intraday_corrections(refreshers=None, *, now=None):
 		by_key = {item[0]: item for item in refreshers}
 		group_keys = (
 			("astro", "imperial"),
-			("elnet", "horeco", "incuba", "motif"),
+			("elnet", "horeco", "incuba"),
 			("anto", "ferma", "start_fotovoltaice"),
 			("mm_mv", "anasun"),
 			("hng",),
@@ -999,12 +983,6 @@ def render_balancing_market_intraday_page():
 			# access_token = upload_file_with_retries(file_path)
 			# check_file_sync(file_path, access_token)
 
-			# Motif leaves the portfolio on October 1; its replacement is derived
-			# from Elnet in the timestamp-aligned export.
-			motif_forecast = forecast_motif_for_portfolio()
-			if motif_forecast is not None:
-				st.dataframe(motif_forecast)
-
 			# Forecasting Ferma
 			# Updating the indisponibility, if any
 			result_Ferma = render_indisponibility_db_Ferma()
@@ -1068,7 +1046,6 @@ def render_balancing_market_intraday_page():
 				use_hng_intraday=intraday_available["hng"],
 				use_incuba_intraday=intraday_available["incuba"],
 				use_anto_intraday=intraday_available["anto"],
-				use_motif_intraday=intraday_available["motif"],
 				use_ferma_intraday=intraday_available["ferma"],
 				use_necaluxan_intraday=intraday_available["necaluxan"],
 				use_ulmeni_intraday=intraday_available["ulmeni"],
@@ -1091,7 +1068,6 @@ def render_balancing_market_intraday_page():
 				use_hng_intraday=intraday_available["hng"],
 				use_incuba_intraday=intraday_available["incuba"],
 				use_anto_intraday=intraday_available["anto"],
-				use_motif_intraday=intraday_available["motif"],
 				use_ferma_intraday=intraday_available["ferma"],
 				use_necaluxan_intraday=intraday_available["necaluxan"],
 				use_ulmeni_intraday=intraday_available["ulmeni"],

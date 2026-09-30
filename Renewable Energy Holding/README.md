@@ -1,9 +1,10 @@
 # Renewable Energy Holding
 
 Portfolio membership starts with the delivery interval beginning October 1,
-2026, 00:00 Europe/Bucharest. Motif remains included for earlier delivery
-intervals only. Forecasts spanning that boundary contain both columns, with
-zero outside each asset's membership dates; October-only forecasts omit Motif.
+2026, 00:00 Europe/Bucharest. Motif is no longer part of the portfolio and is
+excluded from all newly generated exports, including earlier delivery dates.
+For forecasts spanning October 1, Renewable Energy Holding is zero before
+its membership starts.
 
 The 15-minute forecast is Elnet's uncorrected model forecast multiplied by
 `2.37 / 2.7` (approximately `0.877777778`). No separate model or weather request
@@ -17,6 +18,6 @@ Hourly energy is the sum of the corresponding four quarter-hour values.
 The existing input and Solcast files are preserved but are not required by
 the proxy forecast.
 
-Motif's portfolio model/weather requests and correction refresh stop on October 1.
+Motif's portfolio model/weather requests and correction refresh are removed.
 Its historical files, standalone forecasting tools, and power-reader configuration
-are unchanged. These changes are local only; nothing has been pushed or deployed.
+are unchanged.
