@@ -584,9 +584,12 @@ def render_balancing_market_intraday_page():
 	st.write("")
 	st.subheader("Intraday Forecast", divider="blue")
 	col1, col2= st.columns([3, 1])
+	# Render both actions before any forecast or export can interrupt the page.
+	forecast_requested = col1.button("Forecast Portfolio")
+	export_requested = col2.button("Create Excel File with all the forecasts")
 	with col1:
 		# Forecasting the entire Intraday Portfolio at once
-		if st.button("Forecast Portfolio"):
+		if forecast_requested:
 			# Forecasting Astro
 			# Updating the indisponibility, if any
 			result_Astro = render_indisponibility_db_Astro()
@@ -730,13 +733,8 @@ def render_balancing_market_intraday_page():
 				interval_from = 1
 				interval_to = 24
 				limitation_percentage = 0
-			fetching_Elnet_data()
 			fetching_Elnet_data_15min()
-			df = predicting_exporting_Elnet(interval_from, interval_to, limitation_percentage)
-			file_path = './Elnet/Results_Production_Elnet_xgb.xlsx'
-			# uploading_onedrive_file(file_path, access_token)
-			# access_token = upload_file_with_retries(file_path)
-			# check_file_sync(file_path, access_token)
+			# Hourly portfolio values come from corrected quarters, not a separate model.
 			predicting_exporting_Elnet_15min(interval_to, interval_from, limitation_percentage)
 			file_path = './Elnet/Results_Production_Elnet_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
@@ -1080,7 +1078,7 @@ def render_balancing_market_intraday_page():
 			create_excel_file_with_all_forecasts(quarter_hourly)
 
 	with col2:
-		if st.button("Create Excel File with all the forecasts"):
+		if export_requested:
 			intraday_available, _, correction_errors = refresh_intraday_corrections()
 			for display_name, error in correction_errors.items():
 				st.warning(f"{display_name} correction skipped; DAM retained: {error}")

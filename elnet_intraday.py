@@ -10,7 +10,7 @@ import pandas as pd
 
 
 APP_ROOT = Path(__file__).resolve().parent
-ELNET_DAM_MODEL_PATH = APP_ROOT / "Elnet" / "rs_xgb_elnet_prod_15min_0726.pkl"
+ELNET_DAM_MODEL_PATH = APP_ROOT / "Elnet" / "rs_xgb_elnet_prod_15min_0826.pkl"
 ELNET_DAM_RESULTS_PATH = APP_ROOT / "Elnet" / "Results_Production_Elnet_xgb_15min.xlsx"
 ELNET_WEATHER_PATH = APP_ROOT / "Elnet" / "Solcast" / "Bucsani_15min.csv"
 ELNET_INTRADAY_RESULTS_PATH = (
