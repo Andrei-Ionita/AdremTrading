@@ -21,22 +21,32 @@ def dashboard_app(failure_stage=None):
             raise ValueError('Test export failure')
         return frame
 
+    def predict_quarters(name):
+        def predict(*args, **kwargs):
+            st.session_state.setdefault('predictions', []).append(name)
+            return frame
+        return predict
+
     with ExitStack() as stack:
         # Exercise the real page without portals, model inference, or file writes.
         for name in vars(balancing):
             if name.startswith('render_indisponibility_db_'):
                 stack.enter_context(patch.object(balancing, name, return_value=(None, None, None)))
             elif name.startswith('fetching_'):
-                stack.enter_context(patch.object(balancing, name, return_value=None))
+                if name.endswith('_15min'):
+                    stack.enter_context(patch.object(balancing, name, return_value=None))
+                else:
+                    stack.enter_context(patch.object(balancing, name,
+                        side_effect=AssertionError(f'Legacy hourly weather must not be fetched: {name}')))
             elif name.startswith('predicting_exporting_'):
-                stack.enter_context(patch.object(balancing, name, return_value=frame))
+                if name.endswith('_15min'):
+                    stack.enter_context(patch.object(balancing, name, side_effect=predict_quarters(name)))
+                else:
+                    stack.enter_context(patch.object(balancing, name,
+                        side_effect=AssertionError(f'Legacy hourly model must not be loaded: {name}')))
         if failure_stage == 'forecast':
-            stack.enter_context(patch.object(balancing, 'fetching_Astro_data',
+            stack.enter_context(patch.object(balancing, 'fetching_Astro_data_15min',
                                              side_effect=ValueError('Test forecast failure')))
-        stack.enter_context(patch.object(balancing, 'fetching_Elnet_data',
-                                         side_effect=AssertionError('Legacy hourly weather must not be fetched')))
-        stack.enter_context(patch.object(balancing, 'predicting_exporting_Elnet',
-                                         side_effect=AssertionError('Removed Elnet hourly model must not be loaded')))
         stack.enter_context(patch.object(balancing, 'refresh_intraday_corrections', return_value=(flags, {}, {})))
         stack.enter_context(patch.object(balancing, 'create_excel_file_with_all_forecasts_15min', side_effect=export_quarters))
         stack.enter_context(patch.object(balancing, 'create_excel_file_with_all_forecasts', return_value=frame))
@@ -60,6 +70,20 @@ class DashboardControlsTests(unittest.TestCase):
         self.assertFalse(app.exception)
         self.assertEqual(app.session_state['exports'], 1)
         self.assert_controls_visible(app)
+
+    def test_entire_portfolio_uses_only_quarter_hour_models(self):
+        app = AppTest.from_function(dashboard_app, default_timeout=30).run()
+        app.button[0].click().run()
+        self.assertFalse(app.exception)
+        expected_assets = (
+            'Astro', 'Imperial', 'Kahraman', 'SunEnergy', 'SolarEnergy', 'Elnet',
+            'Horeco', 'Dragosel', 'GESS', 'NRG', 'Sun_Grow_Lucia',
+            'Photovoltaic_Energy_Project', 'MM_MV', 'Rosiori', 'Necaluxan',
+            'Adrem', 'Anto', 'Ferma', 'HNG', 'AnaSun', 'GCSP',
+        )
+        self.assertEqual(app.session_state['predictions'],
+                         [f'predicting_exporting_{asset}_15min' for asset in expected_assets])
+        self.assertEqual(app.session_state['exports'], 1)
 
     def test_controls_remain_visible_if_forecast_or_automatic_export_fails(self):
         for stage in ('forecast', 'export'):

@@ -587,13 +587,7 @@ def render_balancing_market_intraday_page():
 				interval_from = 1
 				interval_to = 24
 				limitation_percentage = 0
-			fetching_Astro_data()
 			fetching_Astro_data_15min()
-			df = predicting_exporting_Astro(interval_from, interval_to, limitation_percentage)
-			file_path = './Astro/Results_Production_Astro_xgb.xlsx'
-			# uploading_onedrive_file(file_path, access_token)
-			# access_token = upload_file_with_retries(file_path)
-			# check_file_sync(file_path, access_token)
 			st.dataframe(predicting_exporting_Astro_15min(interval_from, interval_to, limitation_percentage))
 			file_path = './Astro/Results_Production_Astro_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
@@ -613,13 +607,7 @@ def render_balancing_market_intraday_page():
 				interval_from = 1
 				interval_to = 24
 				limitation_percentage = 0
-			fetching_Imperial_data()
 			fetching_Imperial_data_15min()
-			df = predicting_exporting_Imperial(interval_from, interval_to, limitation_percentage)
-			file_path = './Imperial/Results_Production_Imperial_xgb.xlsx'
-			# uploading_onedrive_file(file_path, access_token)
-			# access_token = upload_file_with_retries(file_path)
-			# check_file_sync(file_path, access_token)
 			st.dataframe(predicting_exporting_Imperial_15min(interval_to, interval_from, limitation_percentage))
 			file_path = './Imperial/Results_Production_Imperial_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
@@ -639,13 +627,7 @@ def render_balancing_market_intraday_page():
 				interval_from = 1
 				interval_to = 24
 				limitation_percentage = 0
-			fetching_Kahraman_data()
 			fetching_Kahraman_data_15min()
-			df = predicting_exporting_Kahraman(interval_from, interval_to, limitation_percentage)
-			file_path = './Kahraman/Production/Results_Production_Kahraman_xgb.xlsx'
-			# uploading_onedrive_file(file_path, access_token)
-			# access_token = upload_file_with_retries(file_path)
-			# check_file_sync(file_path, access_token)
 			st.dataframe(predicting_exporting_Kahraman_15min(interval_to, interval_from, limitation_percentage))
 			file_path = './Kahraman/Production/Results_Production_Kahraman_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
@@ -665,13 +647,7 @@ def render_balancing_market_intraday_page():
 				interval_from = 1
 				interval_to = 24
 				limitation_percentage = 0
-			fetching_SunEnergy_data()
 			fetching_SunEnergy_data_15min()
-			df = predicting_exporting_SunEnergy(interval_from, interval_to, limitation_percentage)
-			file_path = './SunEnergy/Production/Results_Production_SunEnergy_xgb.xlsx'
-			# uploading_onedrive_file(file_path, access_token)
-			# access_token = upload_file_with_retries(file_path)
-			# check_file_sync(file_path, access_token)
 			st.dataframe(predicting_exporting_SunEnergy_15min(interval_to, interval_from, limitation_percentage))
 			file_path = './SunEnergy/Production/Results_Production_SunEnergy_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
@@ -691,13 +667,7 @@ def render_balancing_market_intraday_page():
 				interval_from = 1
 				interval_to = 24
 				limitation_percentage = 0
-			fetching_SolarEnergy_data()
 			fetching_SolarEnergy_data_15min()
-			df = predicting_exporting_SolarEnergy(interval_from, interval_to, limitation_percentage)
-			file_path = './Solar Energy Ulmeni/Results_Production_SolarEnergy_xgb.xlsx'
-			# uploading_onedrive_file(file_path, access_token)
-			# access_token = upload_file_with_retries(file_path)
-			# check_file_sync(file_path, access_token)
 			st.dataframe(predicting_exporting_SolarEnergy_15min(interval_to, interval_from, limitation_percentage))
 			file_path = './Solar Energy Ulmeni/Results_Production_SolarEnergy_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
@@ -738,13 +708,7 @@ def render_balancing_market_intraday_page():
 				interval_from = 1
 				interval_to = 24
 				limitation_percentage = 0
-			fetching_Horeco_data()
 			fetching_Horeco_data_15min()
-			df = predicting_exporting_Horeco(interval_from, interval_to, limitation_percentage)
-			file_path = './Horeco/Results_Production_Horeco_xgb.xlsx'
-			# uploading_onedrive_file(file_path, access_token)
-			# access_token = upload_file_with_retries(file_path)
-			# check_file_sync(file_path, access_token)
 			predicting_exporting_Horeco_15min(interval_to, interval_from, limitation_percentage)
 			file_path = './Horeco/Results_Production_Horeco_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
@@ -790,13 +754,7 @@ def render_balancing_market_intraday_page():
 				interval_from = 1
 				interval_to = 24
 				limitation_percentage = 0
-			fetching_Dragosel_data()
 			fetching_Dragosel_data_15min()
-			df = predicting_exporting_Dragosel(interval_from, interval_to, limitation_percentage)
-			file_path = './Dragosel/Results_Production_Dragosel_xgb.xlsx'
-			# uploading_onedrive_file(file_path, access_token)
-			# access_token = upload_file_with_retries(file_path)
-			# check_file_sync(file_path, access_token)
 			st.dataframe(predicting_exporting_Dragosel_15min(interval_to, interval_from, limitation_percentage))
 			file_path = './Dragosel/Results_Production_Dragosel_xgb_15min.xlsx'
 			# uploading_onedrive_file(file_path, access_token)
