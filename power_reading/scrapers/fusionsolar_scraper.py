@@ -3,6 +3,7 @@
 import math
 import json
 import re
+import secrets
 import tempfile
 import unicodedata
 from dataclasses import dataclass, asdict
@@ -289,17 +290,23 @@ class FusionSolarScraper:
             finally:
                 context.close()
 
-    def _open_session(self, context, page) -> None:
-        state = self.session_store.load() if self.session_store else None
+    def _open_session(self, context, page, *, restore_session: bool = True) -> None:
+        state = self.session_store.load() if self.session_store and restore_session else None
         if state:
             context.add_cookies(state["storage_state"]["cookies"])
             origins = json.dumps(state["storage_state"]["origins"])
+            marker = json.dumps("fusion-restore-" + secrets.token_hex(16))
             context.add_init_script("""(() => {
                 const saved = %s;
+                const marker = %s;
+                if (sessionStorage.getItem(marker)) return;
                 const origin = saved.find(item => item.origin === location.origin);
-                if (origin) for (const item of origin.localStorage || [])
-                    localStorage.setItem(item.name, item.value);
-            })();""" % origins)
+                if (origin) {
+                    sessionStorage.setItem(marker, '1');
+                    for (const item of origin.localStorage || [])
+                        localStorage.setItem(item.name, item.value);
+                }
+            })();""" % (origins, marker))
         entry_url = self.target_url
         if state:
             # The SSO entry point initializes portal permissions; opening cloud.html

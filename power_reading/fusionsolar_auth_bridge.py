@@ -54,7 +54,7 @@ class VerificationBridge:
         self.page = self.context.new_page()
         self.page.set_default_timeout(15000)
         try:
-            self.scraper._open_session(self.context, self.page)
+            self.scraper._open_session(self.context, self.page, restore_session=False)
             return self.complete_asset()
         except FusionSolarVerificationRequired:
             if self.scraper.region_name:

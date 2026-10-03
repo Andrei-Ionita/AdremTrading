@@ -70,6 +70,22 @@ class FusionSolarSessionTests(unittest.TestCase):
         context.add_cookies.assert_called_once_with(STATE['storage_state']['cookies'])
         store.save.assert_called_once_with(STATE)
         login.assert_called_once_with(page)
+        script = context.add_init_script.call_args.args[0]
+        self.assertIn('if (sessionStorage.getItem(marker)) return;', script)
+        self.assertLess(script.index('sessionStorage.setItem'), script.index('localStorage.setItem'))
+
+    def test_interactive_reauthentication_does_not_import_stale_state(self):
+        store = Mock()
+        page = Mock(url=URL)
+        context = Mock()
+        context.storage_state.return_value = STATE['storage_state']
+        scraper = FusionSolarScraper(URL, session_store=store)
+        with patch.object(scraper, '_maybe_login'), patch.object(scraper, '_wait_for_plant_list'):
+            scraper._open_session(context, page, restore_session=False)
+        store.load.assert_not_called()
+        context.add_cookies.assert_not_called()
+        context.add_init_script.assert_not_called()
+        store.save.assert_called_once_with(STATE)
 
     def test_unauthenticated_session_is_not_persisted(self):
         store = Mock()
