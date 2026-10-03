@@ -12,6 +12,9 @@ URL = 'https://eu5.fusionsolar.huawei.com/uniportal/pvmswebsite/assets/build/clo
 STATE = {'url': URL, 'storage_state': {'cookies': [
     {'name': 'session', 'value': 'private-session-value', 'domain': '.fusionsolar.huawei.com', 'path': '/'}
 ], 'origins': []}}
+SESSION = {'origin': 'https://eu5.fusionsolar.huawei.com',
+           'items': [{'name': 'auth-state', 'value': 'private-tab-state'}]}
+FULL_STATE = {**STATE, 'session_storage': [SESSION]}
 
 
 class FusionSolarSessionTests(unittest.TestCase):
@@ -60,6 +63,7 @@ class FusionSolarSessionTests(unittest.TestCase):
         store = Mock()
         store.load.return_value = STATE
         page = Mock(url=URL)
+        page.evaluate.return_value = SESSION
         context = Mock()
         context.storage_state.return_value = STATE['storage_state']
         scraper = FusionSolarScraper('https://eu3.fusionsolar.huawei.com/unisso/login.action', session_store=store)
@@ -68,7 +72,7 @@ class FusionSolarSessionTests(unittest.TestCase):
         page.goto.assert_called_once_with(
             'https://eu5.fusionsolar.huawei.com/unisso/login.action', wait_until='domcontentloaded')
         context.add_cookies.assert_called_once_with(STATE['storage_state']['cookies'])
-        store.save.assert_called_once_with(STATE)
+        store.save.assert_called_once_with(FULL_STATE)
         login.assert_called_once_with(page)
         script = context.add_init_script.call_args.args[0]
         self.assertIn('if (sessionStorage.getItem(marker)) return;', script)
@@ -77,6 +81,7 @@ class FusionSolarSessionTests(unittest.TestCase):
     def test_interactive_reauthentication_does_not_import_stale_state(self):
         store = Mock()
         page = Mock(url=URL)
+        page.evaluate.return_value = SESSION
         context = Mock()
         context.storage_state.return_value = STATE['storage_state']
         scraper = FusionSolarScraper(URL, session_store=store)
@@ -85,7 +90,33 @@ class FusionSolarSessionTests(unittest.TestCase):
         store.load.assert_not_called()
         context.add_cookies.assert_not_called()
         context.add_init_script.assert_not_called()
-        store.save.assert_called_once_with(STATE)
+        store.save.assert_called_once_with(FULL_STATE)
+
+    def test_complete_browser_state_restores_tab_auth_before_opening_plant(self):
+        store = Mock()
+        store.load.return_value = FULL_STATE
+        page = Mock(url=URL)
+        page.evaluate.return_value = SESSION
+        context = Mock()
+        context.storage_state.return_value = STATE['storage_state']
+        scraper = FusionSolarScraper('https://eu3.fusionsolar.huawei.com/unisso/login.action', session_store=store)
+        with patch.object(scraper, '_maybe_login'), patch.object(scraper, '_wait_for_plant_list'):
+            scraper._open_session(context, page)
+        page.goto.assert_called_once_with(URL, wait_until='domcontentloaded')
+        script = context.add_init_script.call_args.args[0]
+        self.assertIn('private-tab-state', script)
+        self.assertIn('sessionStorage.setItem(item.name, item.value)', script)
+        store.save.assert_called_once_with(FULL_STATE)
+
+    def test_tab_auth_is_encrypted_and_origin_restricted(self):
+        store = self.store()
+        value = store.encode(FULL_STATE)
+        self.assertNotIn('private-tab-state', value)
+        self.assertEqual(store.decode(value), FULL_STATE)
+        bad = copy.deepcopy(FULL_STATE)
+        bad['session_storage'][0]['origin'] = 'https://attacker.test'
+        with self.assertRaises(ValueError):
+            store.encode(bad)
 
     def test_unauthenticated_session_is_not_persisted(self):
         store = Mock()

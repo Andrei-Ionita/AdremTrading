@@ -27,9 +27,10 @@ to that endpoint; Windows-only SCADA window capture is not available on Railway.
 ## FusionSolar Session Recovery
 
 Elnet and Horeco reuse authenticated browser state before attempting a login.
-Saved cookies pass through the authenticated regional SSO entry point to
-initialize portal permissions. State is saved only after the requested plant
-list becomes ready, not merely when the browser changes its URL.
+Browser state includes cookies, local storage, and tab-level session storage.
+Complete snapshots reopen the authenticated plant directly; older snapshots
+without tab state use the regional SSO entry point. State is saved only after
+the requested plant list or overview is ready, not merely after a URL change.
 State is encrypted with Fernet using an account-bound Scrypt key derived from
 the existing portal credentials, and stored in `fusion_solar_sessions` in the
 configured PostgreSQL database. Without a database it is stored encrypted in

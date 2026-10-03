@@ -295,20 +295,27 @@ class FusionSolarScraper:
         if state:
             context.add_cookies(state["storage_state"]["cookies"])
             origins = json.dumps(state["storage_state"]["origins"])
+            sessions = json.dumps(state.get("session_storage", []))
             marker = json.dumps("fusion-restore-" + secrets.token_hex(16))
             context.add_init_script("""(() => {
                 const saved = %s;
+                const sessions = %s;
                 const marker = %s;
                 if (sessionStorage.getItem(marker)) return;
                 const origin = saved.find(item => item.origin === location.origin);
-                if (origin) {
+                const session = sessions.find(item => item.origin === location.origin);
+                if (origin || session) {
                     sessionStorage.setItem(marker, '1');
-                    for (const item of origin.localStorage || [])
+                    for (const item of (origin && origin.localStorage) || [])
                         localStorage.setItem(item.name, item.value);
+                    for (const item of (session && session.items) || [])
+                        sessionStorage.setItem(item.name, item.value);
                 }
-            })();""" % (origins, marker))
+            })();""" % (origins, sessions, marker))
         entry_url = self.target_url
-        if state:
+        if state and "session_storage" in state:
+            entry_url = state["url"]
+        elif state:
             # The SSO entry point initializes portal permissions; opening cloud.html
             # directly can redirect to the public portal with an HTTP 503.
             saved = urlsplit(state["url"])
@@ -330,7 +337,12 @@ class FusionSolarScraper:
         url = urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", parsed.fragment))
         if not self.session_store or not is_portal_url(url):
             raise FusionSolarAuthenticationError("Cannot save an unauthenticated FusionSolar session.")
-        self.session_store.save({"url": url, "storage_state": context.storage_state()})
+        session = page.evaluate("""() => ({origin: location.origin,
+            items: Object.keys(sessionStorage).filter(name => !name.startsWith('fusion-restore-'))
+                .map(name => ({name, value: sessionStorage.getItem(name)}))
+        })""")
+        self.session_store.save({"url": url, "storage_state": context.storage_state(),
+                                 "session_storage": [session]})
 
     def _force_table_current_power(self) -> bool:
         plant_name = (self.plant_name or "").strip().lower()

@@ -65,10 +65,19 @@ class FusionSolarSessionStore:
             domain = cookie["domain"].lstrip(".")
             if domain != "fusionsolar.huawei.com" and not domain.endswith(".fusionsolar.huawei.com"):
                 raise ValueError("Unexpected cookie domain in FusionSolar session.")
-        for origin in storage["origins"]:
+        sessions = state.get("session_storage", [])
+        if not isinstance(sessions, list):
+            raise ValueError("Invalid FusionSolar tab state.")
+        for origin in storage["origins"] + sessions:
             parsed = urlsplit(origin["origin"])
             if parsed.scheme != "https" or not (parsed.hostname or "").endswith(".fusionsolar.huawei.com"):
                 raise ValueError("Unexpected origin in FusionSolar session.")
+        for session in sessions:
+            if not isinstance(session.get("items"), list) or any(
+                not isinstance(item.get("name"), str) or not isinstance(item.get("value"), str)
+                for item in session["items"]
+            ):
+                raise ValueError("Invalid FusionSolar tab storage values.")
 
     def _uses_database(self) -> bool:
         from .database import get_database_url
