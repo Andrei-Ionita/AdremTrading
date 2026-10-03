@@ -106,9 +106,9 @@ class FusionSolarScraper:
         # An expired persistent session can leave login stuck without an error.
         # Retry once in isolation; never delete or overwrite the saved profile.
         with tempfile.TemporaryDirectory(prefix="fusionsolar-login-") as directory:
-            return self._scrape_once(Path(directory))
+            return self._scrape_once(Path(directory), restore_session=False)
 
-    def _scrape_once(self, user_data_dir: Path) -> PowerSnapshot:
+    def _scrape_once(self, user_data_dir: Path, *, restore_session: bool = True) -> PowerSnapshot:
         user_data_dir.mkdir(parents=True, exist_ok=True)
 
         with sync_playwright() as p:
@@ -130,7 +130,7 @@ class FusionSolarScraper:
                 context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
                 page = context.new_page()
                 page.set_default_timeout(self.browser_timeout_ms)
-                self._open_session(context, page)
+                self._open_session(context, page, restore_session=restore_session)
                 if self._uses_validated_overview_active_power():
                     self._open_plant_if_needed(page)
                     validated_power = self._read_validated_overview_active_power(page)
@@ -291,6 +291,7 @@ class FusionSolarScraper:
                 context.close()
 
     def _open_session(self, context, page, *, restore_session: bool = True) -> None:
+        from power_reading.fusionsolar_session import restore_portal_url
         state = self.session_store.load() if self.session_store and restore_session else None
         if state:
             context.add_cookies(state["storage_state"]["cookies"])
@@ -313,15 +314,11 @@ class FusionSolarScraper:
                 }
             })();""" % (origins, sessions, marker))
         entry_url = self.target_url
-        if state and "session_storage" in state:
-            entry_url = state["url"]
-        elif state:
-            # The SSO entry point initializes portal permissions; opening cloud.html
-            # directly can redirect to the public portal with an HTTP 503.
-            saved = urlsplit(state["url"])
-            configured = urlsplit(self.target_url)
-            entry_url = urlunsplit((saved.scheme, saved.netloc, "/unisso/login.action",
-                                   configured.query, ""))
+        if state:
+            entry_url = restore_portal_url(state["url"], self.target_url, self.region_name)
+            if not urlsplit(entry_url).query:
+                saved = urlsplit(entry_url)
+                entry_url = urlunsplit((saved.scheme, saved.netloc, "/unisso/login.action", "", ""))
         page.goto(entry_url, wait_until="domcontentloaded")
         if self.use_saved_session_only:
             self._wait_for_authenticated_page(page)
@@ -332,10 +329,12 @@ class FusionSolarScraper:
             self.save_session(context, page)
 
     def save_session(self, context, page) -> None:
-        from power_reading.fusionsolar_session import is_portal_url
-        parsed = urlsplit(page.url)
-        url = urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", parsed.fragment))
-        if not self.session_store or not is_portal_url(url):
+        from power_reading.fusionsolar_session import session_portal_url
+        try:
+            url = session_portal_url(page.url)
+        except ValueError:
+            raise FusionSolarAuthenticationError("Cannot save an unauthenticated FusionSolar session.") from None
+        if not self.session_store:
             raise FusionSolarAuthenticationError("Cannot save an unauthenticated FusionSolar session.")
         session = page.evaluate("""() => ({origin: location.origin,
             items: Object.keys(sessionStorage).filter(name => !name.startsWith('fusion-restore-'))
@@ -526,7 +525,7 @@ class FusionSolarScraper:
             }
             """, arg=plant_name, timeout=15_000)
         except PlaywrightTimeoutError:
-            if "login.action" in page.url.lower():
+            if "login.action" in page.url.lower() or "/pvmswebsite/" not in urlsplit(page.url).path:
                 raise FusionSolarAuthenticationError(
                     "FusionSolar session expired while loading the plant list."
                 ) from None

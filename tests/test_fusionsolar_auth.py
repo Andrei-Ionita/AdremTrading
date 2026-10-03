@@ -23,11 +23,12 @@ class FusionSolarAuthenticationTests(unittest.TestCase):
         snapshot = PowerSnapshot(0.0, None, None, '2026-10-02T10:00:00Z', 'test', '')
         profiles = []
 
-        def read(profile):
+        def read(profile, *, restore_session=True):
             profiles.append(profile)
             if len(profiles) == 1:
                 raise FusionSolarAuthenticationError('login stuck')
             self.assertTrue(profile.is_dir())
+            self.assertFalse(restore_session)
             return snapshot
 
         with patch.object(scraper, '_scrape_once', side_effect=read):
@@ -148,9 +149,20 @@ class FusionSolarAuthenticationTests(unittest.TestCase):
         self.assertEqual(page.wait_for_function.call_args.kwargs['arg'], 'elnet biomasa.gr')
 
     def test_missing_plant_row_fails_explicitly(self):
-        page = Mock(url='https://example.test/cloud.html#/home/list')
+        page = Mock(url='https://example.test/uniportal/pvmswebsite/cloud.html#/home/list')
         page.wait_for_function.side_effect = PlaywrightTimeoutError('private details')
         with self.assertRaisesRegex(RuntimeError, 'requested plant row'):
+            self.scraper(plant_name='CEF HORECO Costesti')._wait_for_plant_list(page)
+
+    def test_public_portal_redirect_is_an_auth_failure_not_missing_plant(self):
+        page = Mock(url='https://eu5.fusionsolar.huawei.com/uniportal/pvmswebsite/cloud.html#/home/list')
+
+        def redirected(*args, **kwargs):
+            page.url = 'https://eu5.fusionsolar.huawei.com/uniportal/portal'
+            raise PlaywrightTimeoutError('private details')
+
+        page.wait_for_function.side_effect = redirected
+        with self.assertRaises(FusionSolarAuthenticationError):
             self.scraper(plant_name='CEF HORECO Costesti')._wait_for_plant_list(page)
 
     def test_login_without_verification_clicks_button(self):

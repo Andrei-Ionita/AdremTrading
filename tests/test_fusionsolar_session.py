@@ -4,7 +4,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
-from power_reading.fusionsolar_session import FusionSolarSessionStore, is_portal_url
+from power_reading.fusionsolar_session import (
+    FusionSolarSessionStore, is_portal_url, restore_portal_url, session_portal_url,
+)
 from power_reading.scrapers.fusionsolar_scraper import FusionSolarScraper
 
 
@@ -15,6 +17,7 @@ STATE = {'url': URL, 'storage_state': {'cookies': [
 SESSION = {'origin': 'https://eu5.fusionsolar.huawei.com',
            'items': [{'name': 'auth-state', 'value': 'private-tab-state'}]}
 FULL_STATE = {**STATE, 'session_storage': [SESSION]}
+ROUTED_URL = URL.replace('#', '?app-id=smartpvms&instance-id=smartpvms&zone-id=region004#')
 
 
 class FusionSolarSessionTests(unittest.TestCase):
@@ -34,6 +37,40 @@ class FusionSolarSessionTests(unittest.TestCase):
 
     def test_corrupt_payload_requires_new_login(self):
         self.assertIsNone(self.store().decode('not a session'))
+
+    def test_legacy_empty_query_does_not_use_python310_strict_parser(self):
+        with patch('power_reading.fusionsolar_session.parse_qsl', side_effect=ValueError('bad query field')) as parse:
+            self.assertTrue(is_portal_url(URL))
+        parse.assert_not_called()
+
+    def test_routing_survives_encrypted_round_trip(self):
+        state = {**FULL_STATE, 'url': ROUTED_URL}
+        self.assertEqual(self.store().decode(self.store().encode(state)), state)
+
+    def test_only_application_routing_is_saved_not_login_tokens(self):
+        with_token = ROUTED_URL.replace('#', '&ticket=private-login-token#')
+        self.assertEqual(session_portal_url(with_token), ROUTED_URL)
+        self.assertFalse(is_portal_url(with_token))
+        with self.assertRaises(ValueError):
+            self.store().encode({**STATE, 'url': with_token})
+
+    def test_malformed_or_duplicate_routing_is_rejected(self):
+        for query in ('app-id=smartpvms&app-id=other', 'app-id=', 'zone-id=%2F%2Fevil.test',
+                      'app-id', 'instance-id=' + 'x' * 81):
+            self.assertFalse(is_portal_url(URL.replace('#', '?' + query + '#')))
+        self.assertFalse(is_portal_url(URL.replace('eu5.', 'eu5.:bad@')))
+
+    def test_legacy_elnet_snapshot_uses_configured_routing(self):
+        self.assertEqual(restore_portal_url(URL, ROUTED_URL, None), ROUTED_URL)
+
+    def test_legacy_horeco_snapshot_uses_explicit_region_not_another_host(self):
+        self.assertEqual(restore_portal_url(
+            URL, 'https://eu5.fusionsolar.huawei.com/unisso/login.action', 'region004'), ROUTED_URL)
+        foreign_route = ROUTED_URL.replace('eu5.', 'eu3.')
+        self.assertEqual(restore_portal_url(URL, foreign_route, None), URL)
+
+    def test_saved_authenticated_region_takes_precedence_over_login_default(self):
+        self.assertEqual(restore_portal_url(ROUTED_URL, URL, 'region003'), ROUTED_URL)
 
     def test_untrusted_destination_is_rejected(self):
         for url in ('https://attacker.test/uniportal/pvmswebsite/cloud.html#/home/list',
@@ -94,19 +131,33 @@ class FusionSolarSessionTests(unittest.TestCase):
 
     def test_complete_browser_state_restores_tab_auth_before_opening_plant(self):
         store = Mock()
-        store.load.return_value = FULL_STATE
-        page = Mock(url=URL)
+        routed_state = {**FULL_STATE, 'url': ROUTED_URL}
+        store.load.return_value = routed_state
+        page = Mock(url=ROUTED_URL)
         page.evaluate.return_value = SESSION
         context = Mock()
         context.storage_state.return_value = STATE['storage_state']
         scraper = FusionSolarScraper('https://eu3.fusionsolar.huawei.com/unisso/login.action', session_store=store)
         with patch.object(scraper, '_maybe_login'), patch.object(scraper, '_wait_for_plant_list'):
             scraper._open_session(context, page)
-        page.goto.assert_called_once_with(URL, wait_until='domcontentloaded')
+        page.goto.assert_called_once_with(ROUTED_URL, wait_until='domcontentloaded')
         script = context.add_init_script.call_args.args[0]
         self.assertIn('private-tab-state', script)
         self.assertIn('sessionStorage.setItem(item.name, item.value)', script)
-        store.save.assert_called_once_with(FULL_STATE)
+        store.save.assert_called_once_with(routed_state)
+
+    def test_legacy_snapshot_is_migrated_before_navigation_and_persisted(self):
+        store = Mock()
+        store.load.return_value = FULL_STATE
+        page = Mock(url=ROUTED_URL)
+        page.evaluate.return_value = SESSION
+        context = Mock()
+        context.storage_state.return_value = STATE['storage_state']
+        scraper = FusionSolarScraper(ROUTED_URL, session_store=store)
+        with patch.object(scraper, '_maybe_login'), patch.object(scraper, '_wait_for_plant_list'):
+            scraper._open_session(context, page)
+        page.goto.assert_called_once_with(ROUTED_URL, wait_until='domcontentloaded')
+        store.save.assert_called_once_with({**FULL_STATE, 'url': ROUTED_URL})
 
     def test_tab_auth_is_encrypted_and_origin_restricted(self):
         store = self.store()
