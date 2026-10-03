@@ -502,12 +502,16 @@ class FusionSolarScraper:
 
     def _wait_for_plant_list(self, page) -> None:
         plant_name = (self.plant_name or "").strip().lower()
-        if "#/home/" not in page.url or not plant_name:
+        if not plant_name or not any(route in page.url for route in ("#/home/", "#/view/station/")):
             return
         try:
-            page.wait_for_function("""(plant) =>
-                Array.from(document.querySelectorAll('table tbody tr')).some(row =>
-                    (row.textContent || '').toLowerCase().includes(plant))
+            page.wait_for_function("""(plant) => {
+                const text = (document.body.innerText || '').toLowerCase();
+                const overview = location.hash.startsWith('#/view/station/') &&
+                    text.includes(plant) && text.includes('active power');
+                return overview || Array.from(document.querySelectorAll('table tbody tr')).some(row =>
+                    (row.textContent || '').toLowerCase().includes(plant));
+            }
             """, arg=plant_name, timeout=15_000)
         except PlaywrightTimeoutError:
             if "login.action" in page.url.lower():

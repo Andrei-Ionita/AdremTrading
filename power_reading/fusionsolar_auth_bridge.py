@@ -92,6 +92,7 @@ class VerificationBridge:
         return self.complete_asset()
 
     def complete_asset(self):
+        self.scraper._wait_for_authenticated_page(self.page)
         self.scraper._wait_for_plant_list(self.page)
         self.scraper.save_session(self.context, self.page)
         self.completed.append(self.asset)
@@ -112,6 +113,8 @@ def main():
                         response = bridge.submit(str(request.get('code', '')))
                     elif command == 'status':
                         response = bridge.status()
+                    elif command == 'resume':
+                        response = bridge.complete_asset() if bridge.asset else bridge.status()
                     elif command == 'stop':
                         break
                     else:

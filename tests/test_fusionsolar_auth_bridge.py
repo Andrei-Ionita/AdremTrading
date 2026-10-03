@@ -66,6 +66,16 @@ class FusionSolarBridgeTests(unittest.TestCase):
         self.assertIn('RuntimeError', output.getvalue())
         self.assertNotIn('secret-password', output.getvalue())
 
+    def test_resume_rechecks_login_without_submitting_verification_again(self):
+        bridge = Mock(asset='elnet', completed=[])
+        bridge.complete_asset.return_value = {'asset': 'horeco', 'status': 'verification_required'}
+        with patch('power_reading.fusionsolar_auth_bridge.sync_playwright', MagicMock()), patch(
+            'power_reading.fusionsolar_auth_bridge.VerificationBridge', return_value=bridge
+        ), patch('sys.stdin', io.StringIO('{"command":"resume"}\n{"command":"stop"}\n')), patch('sys.stdout', io.StringIO()):
+            main()
+        bridge.complete_asset.assert_called_once_with()
+        bridge.submit.assert_not_called()
+
 
 if __name__ == '__main__':
     unittest.main()

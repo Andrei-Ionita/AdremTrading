@@ -24,16 +24,19 @@ button{background:#087f8c;color:white;cursor:pointer}#error{color:#b32222;min-he
 <p id="done"></p><img id="image" hidden alt="FusionSolar verification challenge">
 <form id="form" hidden><label for="code">Verification code</label><input id="code" autocomplete="off" maxlength="16" required>
 <button type="submit">Verify</button></form><p id="error"></p>
+<button id="resume" hidden type="button">Check completed login</button>
 <script>const csrf=CSRF_VALUE;let busy=false;
 async function update(command,code){if(busy)return;busy=true;document.querySelector('button').disabled=true;
 try{const r=await fetch('/action',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF':csrf},body:JSON.stringify({command,code})});
 const d=await r.json();document.querySelector('#asset').textContent=d.asset?d.asset.toUpperCase():d.status==='complete'?'Both accounts authenticated':'Reader status';
 document.querySelector('#done').textContent=(d.completed||[]).map(x=>x.toUpperCase()+' authenticated').join(' | ');
 document.querySelector('#error').textContent=d.error||'';document.querySelector('#image').hidden=!d.image;
+document.querySelector('#resume').hidden=d.status!=='error';
 if(d.image)document.querySelector('#image').src='data:image/png;base64,'+d.image;
 document.querySelector('#form').hidden=d.status!=='verification_required';document.querySelector('#code').value='';document.querySelector('#code').focus();
 }catch(e){document.querySelector('#error').textContent='Connection to the reader failed.'}finally{busy=false;document.querySelector('button').disabled=false}}
-document.querySelector('#form').onsubmit=e=>{e.preventDefault();update('submit',document.querySelector('#code').value)};update('start');</script></body></html>"""
+document.querySelector('#form').onsubmit=e=>{e.preventDefault();update('submit',document.querySelector('#code').value)};
+document.querySelector('#resume').onclick=()=>update('resume');update('start');</script></body></html>"""
 
 
 VERIFY_SOURCE = """
@@ -148,7 +151,7 @@ def main():
                     if not 0 < size <= 2048:
                         raise ValueError()
                     request = json.loads(self.rfile.read(size))
-                    if request.get('command') not in ('start', 'submit', 'status'):
+                    if request.get('command') not in ('start', 'submit', 'status', 'resume'):
                         raise ValueError()
                     with lock:
                         process.stdin.write(json.dumps(request)+'\n')

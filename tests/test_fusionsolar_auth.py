@@ -139,10 +139,13 @@ class FusionSolarAuthenticationTests(unittest.TestCase):
         self.assertEqual(page.wait_for_function.call_args.kwargs['arg'], 'cef horeco costesti')
         self.assertEqual(page.wait_for_function.call_args.kwargs['timeout'], 15000)
 
-    def test_overview_does_not_wait_for_a_plant_list(self):
+    def test_overview_wait_accepts_requested_station_instead_of_requiring_table(self):
         page = Mock(url='https://example.test/cloud.html#/view/station/NE=123/overview')
         self.scraper(plant_name='Elnet Biomasa.GR')._wait_for_plant_list(page)
-        page.wait_for_function.assert_not_called()
+        script = page.wait_for_function.call_args.args[0]
+        self.assertIn("location.hash.startsWith('#/view/station/')", script)
+        self.assertIn("text.includes(plant) && text.includes('active power')", script)
+        self.assertEqual(page.wait_for_function.call_args.kwargs['arg'], 'elnet biomasa.gr')
 
     def test_missing_plant_row_fails_explicitly(self):
         page = Mock(url='https://example.test/cloud.html#/home/list')
