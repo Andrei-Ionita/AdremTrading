@@ -1,13 +1,16 @@
 ﻿from __future__ import annotations
 
 import math
+import json
 import re
+import tempfile
 import unicodedata
 from dataclasses import dataclass, asdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 from zoneinfo import ZoneInfo
+from urllib.parse import urlsplit, urlunsplit
 
 from playwright.sync_api import BrowserContext, TimeoutError as PlaywrightTimeoutError, sync_playwright
 cv2 = None
@@ -60,6 +63,14 @@ class PowerSnapshot:
     raw_excerpt: str
 
 
+class FusionSolarAuthenticationError(RuntimeError):
+    """The browser never reached the authenticated FusionSolar application."""
+
+
+class FusionSolarVerificationRequired(RuntimeError):
+    """Interactive verification must be completed before automatic reads resume."""
+
+
 class FusionSolarScraper:
     def __init__(
         self,
@@ -72,6 +83,7 @@ class FusionSolarScraper:
         user_data_dir: str = ".playwright_profile",
         browser_timeout_ms: int = 45_000,
         headless: bool = False,
+        session_store=None,
     ) -> None:
         self.target_url = target_url
         self.username = username
@@ -82,13 +94,25 @@ class FusionSolarScraper:
         self.user_data_dir = Path(user_data_dir)
         self.browser_timeout_ms = browser_timeout_ms
         self.headless = headless
+        self.session_store = session_store
 
     def scrape_once(self) -> PowerSnapshot:
-        self.user_data_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            return self._scrape_once(self.user_data_dir)
+        except FusionSolarAuthenticationError:
+            if self.use_saved_session_only or not (self.username and self.password):
+                raise
+        # An expired persistent session can leave login stuck without an error.
+        # Retry once in isolation; never delete or overwrite the saved profile.
+        with tempfile.TemporaryDirectory(prefix="fusionsolar-login-") as directory:
+            return self._scrape_once(Path(directory))
+
+    def _scrape_once(self, user_data_dir: Path) -> PowerSnapshot:
+        user_data_dir.mkdir(parents=True, exist_ok=True)
 
         with sync_playwright() as p:
             context: BrowserContext = p.chromium.launch_persistent_context(
-                user_data_dir=str(self.user_data_dir.resolve()),
+                user_data_dir=str(user_data_dir.resolve()),
                 headless=self.headless,
                 viewport={"width": 1920, "height": 1200},
                 user_agent=(
@@ -105,10 +129,7 @@ class FusionSolarScraper:
                 context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
                 page = context.new_page()
                 page.set_default_timeout(self.browser_timeout_ms)
-                page.goto(self.target_url, wait_until="domcontentloaded")
-                if not self.use_saved_session_only:
-                    self._maybe_login(page)
-
+                self._open_session(context, page)
                 if self._uses_validated_overview_active_power():
                     self._open_plant_if_needed(page)
                     validated_power = self._read_validated_overview_active_power(page)
@@ -256,9 +277,7 @@ class FusionSolarScraper:
                         responses.append(payload)
 
                 page.on("response", capture)
-                page.goto(self.target_url, wait_until="domcontentloaded")
-                if not self.use_saved_session_only:
-                    self._maybe_login(page)
+                self._open_session(context, page)
                 self._open_plant_if_needed(page)
                 for _ in range(20):
                     if responses:
@@ -269,6 +288,42 @@ class FusionSolarScraper:
                 return _fusionsolar_interval_energy_mwh(responses[-1], start, end)
             finally:
                 context.close()
+
+    def _open_session(self, context, page) -> None:
+        state = self.session_store.load() if self.session_store else None
+        if state:
+            context.add_cookies(state["storage_state"]["cookies"])
+            origins = json.dumps(state["storage_state"]["origins"])
+            context.add_init_script("""(() => {
+                const saved = %s;
+                const origin = saved.find(item => item.origin === location.origin);
+                if (origin) for (const item of origin.localStorage || [])
+                    localStorage.setItem(item.name, item.value);
+            })();""" % origins)
+        entry_url = self.target_url
+        if state:
+            # The SSO entry point initializes portal permissions; opening cloud.html
+            # directly can redirect to the public portal with an HTTP 503.
+            saved = urlsplit(state["url"])
+            configured = urlsplit(self.target_url)
+            entry_url = urlunsplit((saved.scheme, saved.netloc, "/unisso/login.action",
+                                   configured.query, ""))
+        page.goto(entry_url, wait_until="domcontentloaded")
+        if self.use_saved_session_only:
+            self._wait_for_authenticated_page(page)
+        else:
+            self._maybe_login(page)
+        self._wait_for_plant_list(page)
+        if self.session_store:
+            self.save_session(context, page)
+
+    def save_session(self, context, page) -> None:
+        from power_reading.fusionsolar_session import is_portal_url
+        parsed = urlsplit(page.url)
+        url = urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", parsed.fragment))
+        if not self.session_store or not is_portal_url(url):
+            raise FusionSolarAuthenticationError("Cannot save an unauthenticated FusionSolar session.")
+        self.session_store.save({"url": url, "storage_state": context.storage_state()})
 
     def _force_table_current_power(self) -> bool:
         plant_name = (self.plant_name or "").strip().lower()
@@ -368,17 +423,30 @@ class FusionSolarScraper:
             pass
 
     def _maybe_login(self, page) -> None:
+        try:
+            page.wait_for_function("""() => {
+                const username = document.querySelector('#username');
+                return (username && username.getClientRects().length > 0) ||
+                    (location.pathname.includes('/pvmswebsite/') &&
+                     /^#\\/(home|view\\/station)\\//.test(location.hash));
+            }""", timeout=15_000)
+        except PlaywrightTimeoutError:
+            raise FusionSolarAuthenticationError(
+                "FusionSolar login/application page did not become ready."
+            ) from None
         username_input = page.locator("#username")
         password_input = page.locator("#value")
         login_btn = page.locator(".loginBtn")
 
         on_login_page = "login.action" in page.url.lower() or username_input.count() > 0
         if not on_login_page:
+            self._wait_for_authenticated_page(page)
             return
 
         if not (self.username and self.password):
-            return
+            raise FusionSolarAuthenticationError("FusionSolar login credentials are missing.")
 
+        self._raise_if_verification_required(page)
         username_input.first.fill(self.username)
         password_input.first.fill(self.password)
         region_name = (self.region_name or "").strip()
@@ -400,14 +468,49 @@ class FusionSolarScraper:
                 if page.get_by_text("Select a region and log in again", exact=False).count() > 0:
                     raise RuntimeError(f"Failed to select region '{region_name}' on FusionSolar login.")
 
-        try:
-            page.wait_for_url(re.compile(r".*/view/station/.*"), timeout=25_000)
-        except PlaywrightTimeoutError:
-            pass
-
+        self._wait_for_authenticated_page(page)
         page.wait_for_timeout(3_000)
 
+    def _wait_for_authenticated_page(self, page) -> None:
+        try:
+            page.wait_for_function("""() => {
+                const username = document.querySelector('#username');
+                return location.pathname.includes('/pvmswebsite/') &&
+                    /^#\\/(home|view\\/station)\\//.test(location.hash) &&
+                    !(username && username.getClientRects().length > 0);
+            }""", timeout=25_000)
+        except PlaywrightTimeoutError:
+            self._raise_if_verification_required(page)
+            # Never include portal URLs, form values, or session tokens in errors.
+            raise FusionSolarAuthenticationError(
+                "FusionSolar login did not reach the authenticated plant portal."
+            ) from None
+
+    def _raise_if_verification_required(self, page) -> None:
+        if page.locator("#verificationCode:visible, #twoFactorCode:visible").count() > 0:
+            raise FusionSolarVerificationRequired(
+                "FusionSolar requires interactive verification (CAPTCHA or verification code). "
+                "Complete verification in the reader's browser session before collection can resume."
+            )
+
+    def _wait_for_plant_list(self, page) -> None:
+        plant_name = (self.plant_name or "").strip().lower()
+        if "#/home/" not in page.url or not plant_name:
+            return
+        try:
+            page.wait_for_function("""(plant) =>
+                Array.from(document.querySelectorAll('table tbody tr')).some(row =>
+                    (row.textContent || '').toLowerCase().includes(plant))
+            """, arg=plant_name, timeout=15_000)
+        except PlaywrightTimeoutError:
+            if "login.action" in page.url.lower():
+                raise FusionSolarAuthenticationError(
+                    "FusionSolar session expired while loading the plant list."
+                ) from None
+            raise RuntimeError("FusionSolar requested plant row did not become ready.") from None
+
     def _click_login(self, page, login_btn, password_input) -> None:
+        self._raise_if_verification_required(page)
         if login_btn.count() > 0:
             login_btn.first.click()
         else:
@@ -416,6 +519,7 @@ class FusionSolarScraper:
             page.wait_for_load_state("networkidle", timeout=8_000)
         except PlaywrightTimeoutError:
             pass
+        self._raise_if_verification_required(page)
 
     def _select_region_on_login(self, page) -> bool:
         region_name = (self.region_name or "").strip()

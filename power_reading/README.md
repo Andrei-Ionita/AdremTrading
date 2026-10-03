@@ -24,6 +24,36 @@ profiles are written below `POWER_READING_PROFILE_DIR` (default:
 `.playwright_profiles`). SNK uses a private IP and requires Railway network access
 to that endpoint; Windows-only SCADA window capture is not available on Railway.
 
+## FusionSolar Session Recovery
+
+Elnet and Horeco reuse authenticated browser state before attempting a login.
+Saved cookies pass through the authenticated regional SSO entry point to
+initialize portal permissions. State is saved only after the requested plant
+list becomes ready, not merely when the browser changes its URL.
+State is encrypted with Fernet using an account-bound Scrypt key derived from
+the existing portal credentials, and stored in `fusion_solar_sessions` in the
+configured PostgreSQL database. Without a database it is stored encrypted in
+the asset's ignored browser-profile directory. Password rotation invalidates
+the saved state. No portal credentials or session tokens belong in Git or logs.
+
+When FusionSolar requires CAPTCHA or a verification code, collection fails
+explicitly without trying to bypass the challenge. An operator can authenticate
+the Railway reader using the loopback-only, SSH-protected recovery page:
+
+```powershell
+python -B scripts/fusionsolar_reauthenticate.py --ssh-target <reader-service-instance>@ssh.railway.com
+```
+
+Add `--verify-only` to test both saved sessions in fresh browsers without
+submitting credentials. This reports only power, timestamp, and safe status fields.
+
+The helper uses existing credentials inside Railway, masks them in the page,
+and requires the operator to enter the verification code. It temporarily
+registers an SSH key and revokes it when finished. It does not deploy code or
+write production power samples. After authentication, verify at least one full
+completed quarter of regular reader samples before claiming correction is
+restored. Missing samples still retain the unadjusted forecast.
+
 ## Production Collection and Correction
 
 The `power-reader` Railway service runs `python -m power_reading.worker` and

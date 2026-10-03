@@ -364,6 +364,7 @@ def _build_scraper(spec: AssetSpec, *, headless: bool):
         )
 
     from .scrapers.fusionsolar_scraper import FusionSolarScraper
+    from .fusionsolar_session import FusionSolarSessionStore
 
     region = _env(f"{spec.env_prefix}_REGION_NAME")
     if spec.asset_type == "horeco":
@@ -376,6 +377,8 @@ def _build_scraper(spec: AssetSpec, *, headless: bool):
         region_name=region,
         user_data_dir=str(profile_dir),
         headless=headless,
+        session_store=(FusionSolarSessionStore(spec.asset_type, username, password, profile_dir)
+                       if spec.asset_type in {"elnet", "horeco"} and username and password else None),
     )
 
 

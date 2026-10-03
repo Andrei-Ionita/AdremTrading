@@ -9,6 +9,12 @@ from .service import PowerReading
 
 
 SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS fusion_solar_sessions (
+    asset VARCHAR(64) PRIMARY KEY,
+    encrypted_state TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS power_readings (
     id BIGSERIAL PRIMARY KEY,
     asset VARCHAR(64) NOT NULL,
