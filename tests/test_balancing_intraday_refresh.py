@@ -15,6 +15,8 @@ from portfolio_intraday import (
     MM_MV_INTRADAY_CONFIG,
     START_FOTOVOLTAICE_INTRADAY_CONFIG,
     START_FOTOVOLTAICE_SCALE,
+    RENEWABLE_ENERGY_HOLDING_INTRADAY_CONFIG,
+    PortfolioIntradayInputError,
     ULMENI_INTRADAY_CONFIG,
 )
 
@@ -37,7 +39,7 @@ class IntradayRefreshTests(unittest.TestCase):
         self.assertNotIn('motif', available)
         self.assertNotIn('motif', results)
         self.assertEqual(errors, {})
-        self.assertEqual(sum(available.values()), 13)
+        self.assertEqual(sum(available.values()), 14)
         self.assertNotIn('motif', [call.args[0].asset_key for call in run.call_args_list])
 
     def test_renewable_workbook_uses_only_active_delivery_dates(self):
@@ -152,6 +154,25 @@ class IntradayRefreshTests(unittest.TestCase):
         self.assertEqual(results, {"working": "fresh"})
         self.assertEqual(errors, {"Failed": "missing fresh reading"})
 
+    def test_missing_renewable_production_disables_only_its_correction(self):
+        def run(config):
+            if config == RENEWABLE_ENERGY_HOLDING_INTRADAY_CONFIG:
+                raise PortfolioIntradayInputError('No current Renewable Energy Holding samples')
+            return 'fresh'
+
+        with (
+            patch('balancing.run_portfolio_intraday_forecast', side_effect=run),
+            patch('balancing.run_elnet_intraday_forecast', return_value='elnet'),
+            patch('balancing.run_horeco_intraday_forecast', return_value='horeco'),
+            patch('balancing.run_hng_intraday_forecast', return_value='hng'),
+            patch('balancing.run_incuba_intraday_forecast', return_value='incuba'),
+        ):
+            available, results, errors = refresh_intraday_corrections()
+        self.assertFalse(available['renewable_energy_holding'])
+        self.assertTrue(available['elnet'])
+        self.assertNotIn('renewable_energy_holding', results)
+        self.assertEqual(set(errors), {'Renewable Energy Holding'})
+
     def test_default_refresh_includes_astro(self):
         with (
             patch("balancing.run_portfolio_intraday_forecast", return_value="portfolio"),
@@ -178,6 +199,7 @@ class IntradayRefreshTests(unittest.TestCase):
                 "ulmeni",
                 "start_fotovoltaice",
                 "anasun",
+                "renewable_energy_holding",
             },
         )
         self.assertEqual(errors, {})
@@ -224,7 +246,7 @@ class IntradayRefreshTests(unittest.TestCase):
             submitted_groups,
             [
                 ("astro", "imperial"),
-                ("elnet", "horeco", "incuba"),
+                ("elnet", "horeco", "incuba", "renewable_energy_holding"),
                 ("anto", "ferma", "start_fotovoltaice"),
                 ("mm_mv", "anasun"),
                 ("hng",),

@@ -46,6 +46,10 @@ class AssetSpec:
 
 _ASSETS = {
     "elnet": AssetSpec("elnet", "ELNET", DEFAULT_FUSIONSOLAR_URL, "Elnet Biomasa.GR"),
+    "renewable_energy_holding": AssetSpec(
+        "renewable_energy_holding", "RENEWABLE_ENERGY_HOLDING", DEFAULT_FUSIONSOLAR_URL,
+        "Renewable Energy Holding Parc Popesti",
+    ),
     "anto": AssetSpec("anto", "ANTO", "https://adc-monitoring.ro/", "CEF Anto"),
     "incuba": AssetSpec(
         "incuba_adc",
@@ -367,7 +371,7 @@ def _build_scraper(spec: AssetSpec, *, headless: bool):
     from .fusionsolar_session import FusionSolarSessionStore
 
     region = _env(f"{spec.env_prefix}_REGION_NAME")
-    if spec.asset_type == "horeco":
+    if spec.asset_type in {"horeco", "renewable_energy_holding"}:
         region = region or "region004"
     return FusionSolarScraper(
         target_url=url,
@@ -378,7 +382,8 @@ def _build_scraper(spec: AssetSpec, *, headless: bool):
         user_data_dir=str(profile_dir),
         headless=headless,
         session_store=(FusionSolarSessionStore(spec.asset_type, username, password, profile_dir)
-                       if spec.asset_type in {"elnet", "horeco"} and username and password else None),
+                       if spec.asset_type in {"elnet", "horeco", "renewable_energy_holding"} and username and password else None),
+        require_pv_output_power=spec.asset_type == "renewable_energy_holding",
     )
 
 

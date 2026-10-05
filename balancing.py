@@ -52,6 +52,7 @@ from incuba_intraday import (
 )
 from portfolio_intraday import (
 	ANASUN_INTRADAY_CONFIG,
+	RENEWABLE_ENERGY_HOLDING_INTRADAY_CONFIG,
 	ANTO_INTRADAY_CONFIG,
 	ASTRO_INTRADAY_CONFIG,
 	FERMA_INTRADAY_CONFIG,
@@ -466,6 +467,7 @@ def create_excel_file_with_all_forecasts_15min(
 	use_ulmeni_intraday=True,
 	use_start_fotovoltaice_intraday=True,
 	use_anasun_intraday=True,
+	use_renewable_energy_holding_intraday=True,
 ):
 	from portfolio_export import (
 		build_quarter_hourly_portfolio,
@@ -487,6 +489,7 @@ def create_excel_file_with_all_forecasts_15min(
 		"ulmeni": use_ulmeni_intraday,
 		"start_fotovoltaice": use_start_fotovoltaice_intraday,
 		"anasun": use_anasun_intraday,
+		"renewable_energy_holding": use_renewable_energy_holding_intraday,
 	})
 	if "Prediction_Renewable_Energy_Holding" in df_all:
 		renewable = df_all.loc[
@@ -516,6 +519,7 @@ def refresh_intraday_corrections(refreshers=None):
 			("ulmeni", "Solar Energy Ulmeni", lambda: run_portfolio_intraday_forecast(ULMENI_INTRADAY_CONFIG), PortfolioIntradayError),
 			("start_fotovoltaice", "Start Fotovoltaice", lambda: run_portfolio_intraday_forecast(START_FOTOVOLTAICE_INTRADAY_CONFIG), PortfolioIntradayError),
 			("anasun", "AnaSun", lambda: run_portfolio_intraday_forecast(ANASUN_INTRADAY_CONFIG), PortfolioIntradayError),
+			("renewable_energy_holding", "Renewable Energy Holding", lambda: run_portfolio_intraday_forecast(RENEWABLE_ENERGY_HOLDING_INTRADAY_CONFIG), PortfolioIntradayError),
 		)
 	available = {key: False for key, _, _, _ in refreshers}
 	results = {}
@@ -536,7 +540,7 @@ def refresh_intraday_corrections(refreshers=None):
 		by_key = {item[0]: item for item in refreshers}
 		group_keys = (
 			("astro", "imperial"),
-			("elnet", "horeco", "incuba"),
+			("elnet", "horeco", "incuba", "renewable_energy_holding"),
 			("anto", "ferma", "start_fotovoltaice"),
 			("mm_mv", "anasun"),
 			("hng",),
@@ -1009,6 +1013,7 @@ def render_balancing_market_intraday_page():
 				use_ulmeni_intraday=intraday_available["ulmeni"],
 				use_start_fotovoltaice_intraday=intraday_available["start_fotovoltaice"],
 				use_anasun_intraday=intraday_available["anasun"],
+				use_renewable_energy_holding_intraday=intraday_available["renewable_energy_holding"],
 			)
 			create_excel_file_with_all_forecasts(quarter_hourly)
 
@@ -1031,6 +1036,7 @@ def render_balancing_market_intraday_page():
 				use_ulmeni_intraday=intraday_available["ulmeni"],
 				use_start_fotovoltaice_intraday=intraday_available["start_fotovoltaice"],
 				use_anasun_intraday=intraday_available["anasun"],
+				use_renewable_energy_holding_intraday=intraday_available["renewable_energy_holding"],
 			)
 			create_excel_file_with_all_forecasts(quarter_hourly)
 			file_path = './Forecast.xlsx'

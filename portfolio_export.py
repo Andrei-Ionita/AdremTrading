@@ -9,7 +9,7 @@ from incuba_intraday import ADREM_TO_INCUBA_SCALE, INCUBA_INTRADAY_RESULTS_PATH
 
 
 RENEWABLE_ENERGY_HOLDING_START = pd.Timestamp("2026-10-01")
-RENEWABLE_ENERGY_HOLDING_SCALE = 2.37 / 2.7
+RENEWABLE_ENERGY_HOLDING_SCALE = intraday.RENEWABLE_ENERGY_HOLDING_SCALE
 RENEWABLE_ENERGY_HOLDING_RESULTS_PATH = (
     Path("Renewable Energy Holding") / "Results_Production_Renewable_Energy_Holding_xgb_15min.xlsx"
 )
@@ -54,6 +54,8 @@ CORRECTIONS = {
     "ulmeni": ("SolEn_Ulmeni", intraday.ULMENI_INTRADAY_CONFIG.intraday_results_path),
     "start_fotovoltaice": ("Start_Fotovoltaice", intraday.START_FOTOVOLTAICE_INTRADAY_CONFIG.intraday_results_path),
     "anasun": ("AnaSun", intraday.ANASUN_INTRADAY_CONFIG.intraday_results_path),
+    "renewable_energy_holding": (
+        "Renewable_Energy_Holding", intraday.RENEWABLE_ENERGY_HOLDING_INTRADAY_CONFIG.intraday_results_path),
 }
 
 
@@ -134,6 +136,8 @@ def build_quarter_hourly_portfolio(enabled_corrections):
         if corrected.empty:
             continue
         values = _series(corrected, "Prediction_ID", suffix).reindex(targets)
+        if asset == "renewable_energy_holding":
+            values = values.where(~before_switch)
         result[column] = values.combine_first(result[column])
 
     column = "Prediction_Renewable_Energy_Holding"

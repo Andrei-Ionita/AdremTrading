@@ -43,7 +43,7 @@ class LiveAssetCorrectionTests(unittest.TestCase):
         ]
         runners.append(('incuba', incuba_intraday.run_incuba_intraday_forecast,
                         incuba_intraday.ADREM_DAM_RESULTS_PATH, incuba_intraday.ADREM_TO_INCUBA_SCALE))
-        self.assertEqual(len(runners), 14)
+        self.assertEqual(len(runners), 15)
         for asset, runner, forecast_path, scale in runners:
             readings = [PowerReading(asset, stamp.isoformat(), 0.08, None, None, 'test')
                         for stamp in pd.date_range(ORIGIN - pd.Timedelta(minutes=15), ORIGIN, freq='5min')]
@@ -64,7 +64,7 @@ class LiveAssetCorrectionTests(unittest.TestCase):
 
     def test_every_portfolio_asset_accepts_upward_downward_and_zero_measurements(self):
         configs = [value for value in vars(portfolio).values() if isinstance(value, portfolio.PortfolioIntradayConfig)]
-        self.assertEqual(len(configs), 13)  # Incuba has its dedicated derived-baseline runner.
+        self.assertEqual(len(configs), 14)  # Incuba has its dedicated derived-baseline runner.
         for config in configs:
             for actual in (0, 0.01, 0.08):
                 with self.subTest(asset=config.asset_key, actual=actual):

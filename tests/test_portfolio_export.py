@@ -48,17 +48,18 @@ class PortfolioExportTests(unittest.TestCase):
         self.assertFalse(result.isna().any().any())
         self.assertEqual(result['Lookup'].iloc[0], '28.09.202651')
 
-    def test_all_13_active_corrections_reach_both_excel_downloads(self):
-        self.assertEqual(len(CORRECTIONS), 13)
+    def test_all_14_active_corrections_reach_both_excel_downloads(self):
+        self.set_horizon(pd.date_range('2026-10-05 12:15', '2026-10-06 14:00', freq='15min'))
+        self.assertEqual(len(CORRECTIONS), 14)
         self.assertNotIn('motif', CORRECTIONS)
-        corrected_times = self.times[(self.times >= '2026-09-28 12:45') & (self.times < '2026-09-29')]
+        corrected_times = self.times[(self.times >= '2026-10-05 12:45') & (self.times < '2026-10-06')]
         for i, (_, path) in enumerate(CORRECTIONS.values()):
             self.frames[str(path.resolve())] = pd.DataFrame({
                 'Data': corrected_times, 'Prediction_ID': 0.01 * (i + 1),
             })
         result = self.build(dict.fromkeys(CORRECTIONS, True))
         hourly = aggregate_hourly_portfolio(result)
-        hour = hourly[(hourly.Data == pd.Timestamp('2026-09-28')) & (hourly.Interval == 14)].iloc[0]
+        hour = hourly[(hourly.Data == pd.Timestamp('2026-10-05')) & (hourly.Interval == 14)].iloc[0]
         for i, (suffix, _) in enumerate(CORRECTIONS.values()):
             column = f'Prediction_{suffix}'
             selected = result[result.Data.isin(corrected_times)][column]
@@ -193,6 +194,28 @@ class PortfolioExportTests(unittest.TestCase):
         np.testing.assert_allclose(result.Prediction_Elnet, 0.6)
         np.testing.assert_allclose(result.Prediction_Renewable_Energy_Holding,
                                    0.25 * RENEWABLE_ENERGY_HOLDING_SCALE)
+
+    def test_renewable_own_correction_overrides_proxy_without_changing_elnet(self):
+        self.set_horizon(pd.date_range('2026-10-05 10:00', periods=4, freq='15min'))
+        _, path = CORRECTIONS['elnet']
+        self.frames[str(path.resolve())] = pd.DataFrame({'Data': self.times, 'Prediction_ID': 0.6})
+        _, path = CORRECTIONS['renewable_energy_holding']
+        self.frames[str(path.resolve())] = pd.DataFrame({'Data': self.times, 'Prediction_ID': [0.1, 0.2, 0.3, 0.4]})
+        flags = {'elnet': True, 'renewable_energy_holding': True}
+        result = self.build(flags)
+        np.testing.assert_allclose(result.Prediction_Elnet, 0.6)
+        np.testing.assert_allclose(result.Prediction_Renewable_Energy_Holding, [0.1, 0.2, 0.3, 0.4])
+        self.assertAlmostEqual(aggregate_hourly_portfolio(result).Prediction_Renewable_Energy_Holding.item(), 1.0)
+        pd.testing.assert_frame_equal(result, self.build(flags))
+        fallback = self.build({'elnet': True, 'renewable_energy_holding': False})
+        np.testing.assert_allclose(fallback.Prediction_Renewable_Energy_Holding, 0.25 * RENEWABLE_ENERGY_HOLDING_SCALE)
+
+    def test_renewable_correction_cannot_activate_pre_october_dates(self):
+        self.set_horizon(pd.date_range('2026-09-30 23:00', periods=8, freq='15min'))
+        _, path = CORRECTIONS['renewable_energy_holding']
+        self.frames[str(path.resolve())] = pd.DataFrame({'Data': self.times, 'Prediction_ID': 0.1})
+        result = self.build({'renewable_energy_holding': True})
+        np.testing.assert_allclose(result.Prediction_Renewable_Energy_Holding, [0] * 4 + [0.1] * 4)
 
     def test_switch_uses_bucharest_not_utc_calendar_date(self):
         self.set_horizon(pd.date_range('2026-09-30 21:00Z', periods=4, freq='15min'))

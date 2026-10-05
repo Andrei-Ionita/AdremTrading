@@ -85,6 +85,7 @@ class FusionSolarScraper:
         browser_timeout_ms: int = 45_000,
         headless: bool = False,
         session_store=None,
+        require_pv_output_power: bool = False,
     ) -> None:
         self.target_url = target_url
         self.username = username
@@ -96,6 +97,7 @@ class FusionSolarScraper:
         self.browser_timeout_ms = browser_timeout_ms
         self.headless = headless
         self.session_store = session_store
+        self.require_pv_output_power = require_pv_output_power
 
     def scrape_once(self) -> PowerSnapshot:
         try:
@@ -131,6 +133,9 @@ class FusionSolarScraper:
                 page = context.new_page()
                 page.set_default_timeout(self.browser_timeout_ms)
                 self._open_session(context, page, restore_session=restore_session)
+                if self.require_pv_output_power:
+                    self._open_plant_if_needed(page)
+                    return self._read_required_pv_output_power(page)
                 if self._uses_validated_overview_active_power():
                     self._open_plant_if_needed(page)
                     validated_power = self._read_validated_overview_active_power(page)
@@ -347,6 +352,23 @@ class FusionSolarScraper:
         plant_name = (self.plant_name or "").strip().lower()
         return plant_name == "elnet biomasa.gr"
 
+    def _read_required_pv_output_power(self, page) -> PowerSnapshot:
+        # This layout may retain energy totals while disconnected. Never fall
+        # back to OCR, grid power, or an unrelated numeric dashboard field.
+        for attempt in range(4):
+            text = page.locator("body").first.inner_text()
+            power_kw = _extract_plant_pv_output_power_kw(text, self.plant_name)
+            if power_kw is not None:
+                return PowerSnapshot(
+                    pv_kw=power_kw, load_kw=None, grid_kw=None,
+                    timestamp_utc=datetime.now(tz=timezone.utc).isoformat(),
+                    source="pv-output-power-text",
+                    raw_excerpt=f"{self.plant_name}: PV output power {power_kw} kW",
+                )
+            if attempt < 3:
+                page.wait_for_timeout(500)
+        raise RuntimeError("FusionSolar PV output power is unavailable for the requested plant.")
+
     def _uses_validated_overview_active_power(self) -> bool:
         plant_name = (self.plant_name or "").strip().lower()
         return plant_name in VALIDATED_OVERVIEW_ACTIVE_POWER_PLANTS
@@ -519,7 +541,7 @@ class FusionSolarScraper:
             page.wait_for_function("""(plant) => {
                 const text = (document.body.innerText || '').toLowerCase();
                 const overview = location.hash.startsWith('#/view/station/') &&
-                    text.includes(plant) && text.includes('active power');
+                    text.includes(plant) && ['active power', 'output power', 'current power'].some(label => text.includes(label));
                 return overview || Array.from(document.querySelectorAll('table tbody tr')).some(row =>
                     (row.textContent || '').toLowerCase().includes(plant));
             }
@@ -862,7 +884,7 @@ class FusionSolarScraper:
         # If we're already on the requested station overview page, do nothing.
         # Saved browser sessions can reopen the last viewed station, which may
         # be a different plant on shared FusionSolar accounts.
-        if page.locator("text=Active power").count() > 0 and page.locator("text=PV").count() > 0:
+        if (page.locator("text=Active power").count() > 0 or page.locator("text=Output power").count() > 0) and page.locator("text=PV").count() > 0:
             try:
                 body_text = page.locator("body").first.inner_text(timeout=3_000)
             except Exception:
@@ -1193,6 +1215,23 @@ class FusionSolarScraper:
             return bool(page.evaluate(script, target))
         except Exception:
             return False
+
+
+def _extract_plant_pv_output_power_kw(text: str, plant_name: Optional[str]) -> Optional[float]:
+    compact = re.sub(r"\s+", " ", text).strip()
+    plant = re.sub(r"\s+", " ", plant_name or "").strip()
+    if not plant or plant.casefold() not in compact.casefold():
+        return None
+    match = re.search(
+        r"\bPV\s+Output\s+power\s+(?:PV\s+)?(-?[0-9][0-9.,]*)\s*(kW|MW|W)\b",
+        compact, re.I,
+    )
+    if not match:
+        return None
+    value = _parse_number(match.group(1))
+    if value is None or not math.isfinite(value) or value < 0:
+        return None
+    return _to_kw_value(value, match.group(2))
 
 
 def _extract_kw(text: str, label: str) -> Optional[float]:

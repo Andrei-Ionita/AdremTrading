@@ -155,6 +155,16 @@ ELNET_INTRADAY_CONFIG = PortfolioIntradayConfig(
     weather_path=APP_ROOT / "Elnet" / "Solcast" / "Bucsani_15min.csv",
     intraday_results_path=APP_ROOT / "Elnet" / "Results_Production_Elnet_DAM_Corrected_Intraday_15min.xlsx",
 )
+RENEWABLE_ENERGY_HOLDING_SCALE = 2.37 / 2.7
+RENEWABLE_ENERGY_HOLDING_INTRADAY_CONFIG = PortfolioIntradayConfig(
+    asset_key="renewable_energy_holding",
+    display_name="Renewable Energy Holding",
+    dam_results_path=ELNET_INTRADAY_CONFIG.dam_results_path,
+    weather_path=ELNET_INTRADAY_CONFIG.weather_path,
+    intraday_results_path=(APP_ROOT / "Renewable Energy Holding"
+                          / "Results_Production_Renewable_Energy_Holding_DAM_Corrected_Intraday_15min.xlsx"),
+    baseline_scale=RENEWABLE_ENERGY_HOLDING_SCALE,
+)
 HORECO_INTRADAY_CONFIG = PortfolioIntradayConfig(
     asset_key="horeco",
     display_name="Horeco",

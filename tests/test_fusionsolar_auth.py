@@ -145,7 +145,8 @@ class FusionSolarAuthenticationTests(unittest.TestCase):
         self.scraper(plant_name='Elnet Biomasa.GR')._wait_for_plant_list(page)
         script = page.wait_for_function.call_args.args[0]
         self.assertIn("location.hash.startsWith('#/view/station/')", script)
-        self.assertIn("text.includes(plant) && text.includes('active power')", script)
+        self.assertIn("text.includes(plant)", script)
+        self.assertIn("['active power', 'output power', 'current power']", script)
         self.assertEqual(page.wait_for_function.call_args.kwargs['arg'], 'elnet biomasa.gr')
 
     def test_missing_plant_row_fails_explicitly(self):

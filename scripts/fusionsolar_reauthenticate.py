@@ -28,7 +28,7 @@ button{background:#087f8c;color:white;cursor:pointer}#error{color:#b32222;min-he
 <script>const csrf=CSRF_VALUE;let busy=false;
 async function update(command,code){if(busy)return;busy=true;document.querySelector('button').disabled=true;
 try{const r=await fetch('/action',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF':csrf},body:JSON.stringify({command,code})});
-const d=await r.json();document.querySelector('#asset').textContent=d.asset?d.asset.toUpperCase():d.status==='complete'?'Both accounts authenticated':'Reader status';
+const d=await r.json();document.querySelector('#asset').textContent=d.asset?d.asset.toUpperCase():d.status==='complete'?'Selected accounts authenticated':'Reader status';
 document.querySelector('#done').textContent=(d.completed||[]).map(x=>x.toUpperCase()+' authenticated').join(' | ');
 document.querySelector('#error').textContent=d.error||'';document.querySelector('#image').hidden=!d.image;
 document.querySelector('#resume').hidden=d.status!=='error';
@@ -45,7 +45,7 @@ from pathlib import Path
 from power_reading.service import _ASSETS, _build_scraper
 from power_reading.fusionsolar_session import FusionSolarSessionStore
 failed = False
-for asset in ('elnet', 'horeco'):
+for asset in VERIFY_ASSETS:
     stage = 'build_reader'
     try:
         scraper = _build_scraper(_ASSETS[asset], headless=True)
@@ -77,9 +77,11 @@ raise SystemExit(1 if failed else 0)
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--ssh-target', required=True)
+    parser.add_argument('--assets', nargs='+', choices=('elnet', 'horeco', 'renewable_energy_holding'),
+                        default=['elnet', 'horeco'])
     parser.add_argument('--timeout', type=int, default=900)
     parser.add_argument('--verify-only', action='store_true',
-                        help='Read both plants using saved sessions without submitting credentials.')
+                        help='Read selected plants using saved sessions without submitting credentials.')
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     name = 'adrem-fusion-human-' + secrets.token_hex(5)
@@ -94,12 +96,14 @@ def main():
         subprocess.run([railway, 'ssh', 'keys', 'add', '--key', name, '--name', name], check=True, capture_output=True, timeout=45)
         registered = True
         sources = []
-        for module in ('power_reading.fusionsolar_session', 'power_reading.scrapers.fusionsolar_scraper', 'power_reading.fusionsolar_auth_bridge'):
+        for module in ('power_reading.fusionsolar_session', 'power_reading.scrapers.fusionsolar_scraper',
+                       'power_reading.service', 'power_reading.fusionsolar_auth_bridge'):
             sources.append((module, (root / (module.replace('.', '/')+'.py')).read_text(encoding='utf-8-sig')))
         bootstrap = "import os,sys,types,importlib\nos.chdir('/app')\nsys.path.insert(0,'/app')\n"
         bootstrap += 'sources=' + repr(sources) + '\n'
         bootstrap += "for name,source in sources:\n parent=name.rsplit('.',1)[0]\n importlib.import_module(parent)\n m=types.ModuleType(name)\n m.__package__=parent\n m.__file__='/app/'+name.replace('.','/')+'.py'\n sys.modules[name]=m\n exec(compile(source,m.__file__,'exec'),m.__dict__)\n"
-        bootstrap += VERIFY_SOURCE if args.verify_only else "sys.modules['power_reading.fusionsolar_auth_bridge'].main()\n"
+        bootstrap += 'VERIFY_ASSETS=' + repr(args.assets) + '\n'
+        bootstrap += VERIFY_SOURCE if args.verify_only else "sys.modules['power_reading.fusionsolar_auth_bridge'].main(VERIFY_ASSETS)\n"
         process = subprocess.Popen(['ssh', '-T', '-o', 'BatchMode=yes', '-o', 'IdentitiesOnly=yes',
             '-o', 'ConnectTimeout=15', '-i', str(key), args.ssh_target,
             "python -B -u -c 'import sys;exec(sys.stdin.readline())'"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, encoding='utf-8')

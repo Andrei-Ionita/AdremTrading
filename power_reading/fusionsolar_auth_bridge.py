@@ -15,9 +15,11 @@ from .scrapers.fusionsolar_scraper import FusionSolarVerificationRequired
 
 
 class VerificationBridge:
-    def __init__(self, playwright):
+    def __init__(self, playwright, assets=("elnet", "horeco")):
+        if not assets or any(asset not in {"elnet", "horeco", "renewable_energy_holding"} for asset in assets):
+            raise ValueError("Select a supported FusionSolar account.")
         self.playwright = playwright
-        self.pending = iter(("elnet", "horeco"))
+        self.pending = iter(dict.fromkeys(assets))
         self.completed = []
         self.context = None
         self.directory = None
@@ -99,9 +101,9 @@ class VerificationBridge:
         return self.next_asset()
 
 
-def main():
+def main(assets=("elnet", "horeco")):
     with sync_playwright() as playwright:
-        bridge = VerificationBridge(playwright)
+        bridge = VerificationBridge(playwright, assets)
         try:
             for line in sys.stdin:
                 try:
