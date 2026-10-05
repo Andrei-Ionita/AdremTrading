@@ -77,7 +77,7 @@ raise SystemExit(1 if failed else 0)
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--ssh-target', required=True)
-    parser.add_argument('--assets', nargs='+', choices=('elnet', 'horeco', 'renewable_energy_holding'),
+    parser.add_argument('--assets', nargs='+', choices=('elnet', 'horeco'),
                         default=['elnet', 'horeco'])
     parser.add_argument('--timeout', type=int, default=900)
     parser.add_argument('--verify-only', action='store_true',

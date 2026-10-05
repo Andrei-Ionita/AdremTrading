@@ -14,31 +14,70 @@ from portfolio_intraday import (
     run_portfolio_intraday_forecast,
 )
 from power_reading.service import _ASSETS, _build_scraper, _credentials, read_asset, PowerReading
-from power_reading.worker import _configured_assets
+from power_reading.worker import _configured_assets, _collection_group, _pop_next_pending_asset
 from power_reading.scrapers.fusionsolar_scraper import FusionSolarScraper, _extract_plant_pv_output_power_kw
+from power_reading.scrapers.adc_monitoring_scraper import ADCMonitoringScraper, _extract_metric_kw, _extract_plant_section
 
 
 class RenewableReaderTests(unittest.TestCase):
-    def test_dedicated_railway_credentials_and_isolated_encrypted_session(self):
-        env = {'RENEWABLE_ENERGY_HOLDING_USERNAME': 'test-user',
-               'RENEWABLE_ENERGY_HOLDING_PASSWORD': 'test-password',
-               'FUSIONSOLAR_USERNAME': 'another-user', 'FUSIONSOLAR_PASSWORD': 'another-password',
+    def test_adc_account_ignores_legacy_fusionsolar_credentials_and_url(self):
+        env = {'ANTO_USERNAME': 'adc-user', 'ANTO_PASSWORD': 'adc-password',
+               'RENEWABLE_ENERGY_HOLDING_USERNAME': 'old-fusion-user',
+               'RENEWABLE_ENERGY_HOLDING_PASSWORD': 'old-fusion-password',
+               'RENEWABLE_ENERGY_HOLDING_URL': 'https://old-fusion.example/',
+               'RENEWABLE_ENERGY_HOLDING_PLANT_NAME': 'Old FusionSolar plant',
                'FUSIONSOLAR_PORTAL_URL': 'https://other-account.example/'}
         with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, env, clear=True), patch(
             'power_reading.service._profile_dir', return_value=Path(directory)
         ) as profile:
             scraper = _build_scraper(_ASSETS['renewable_energy_holding'], headless=True)
-        self.assertEqual((scraper.username, scraper.password), ('test-user', 'test-password'))
-        self.assertEqual(scraper.session_store.asset, 'renewable_energy_holding')
-        self.assertEqual(scraper.plant_name, 'Renewable Energy Holding Parc Popesti')
-        self.assertEqual(scraper.region_name, 'region004')
-        self.assertTrue(scraper.require_pv_output_power)
-        self.assertNotIn('other-account', scraper.target_url)
-        profile.assert_called_once_with('renewable_energy_holding')
+        self.assertIsInstance(scraper, ADCMonitoringScraper)
+        self.assertEqual((scraper.username, scraper.password), ('adc-user', 'adc-password'))
+        self.assertEqual(scraper.plant_name, 'CEF REH 1 Popesti-Leordeni')
+        self.assertEqual(scraper.target_url, 'https://adc-monitoring.ro/')
+        profile.assert_called_once_with('adc_monitoring')
 
-    def test_missing_credentials_never_borrow_another_fusionsolar_account(self):
-        with patch.dict(os.environ, {'FUSIONSOLAR_USERNAME': 'other', 'FUSIONSOLAR_PASSWORD': 'other'}, clear=True):
+    def test_missing_adc_credentials_never_use_old_fusionsolar_account(self):
+        with patch.dict(os.environ, {'RENEWABLE_ENERGY_HOLDING_USERNAME': 'old',
+                                    'RENEWABLE_ENERGY_HOLDING_PASSWORD': 'old',
+                                    'FUSIONSOLAR_USERNAME': 'other', 'FUSIONSOLAR_PASSWORD': 'other'}, clear=True):
             self.assertEqual(_credentials(_ASSETS['renewable_energy_holding']), (None, None))
+
+    def test_dedicated_adc_credential_override(self):
+        with patch.dict(os.environ, {'RENEWABLE_ENERGY_HOLDING_ADC_USERNAME': 'override-user',
+                                    'RENEWABLE_ENERGY_HOLDING_ADC_PASSWORD': 'override-password',
+                                    'ANTO_USERNAME': 'shared-user', 'ANTO_PASSWORD': 'shared-password'}, clear=True):
+            self.assertEqual(_credentials(_ASSETS['renewable_energy_holding']), ('override-user', 'override-password'))
+
+    def test_worker_serializes_renewable_with_other_adc_assets(self):
+        self.assertEqual(_collection_group('renewable_energy_holding'), 'adc_monitoring')
+        pending = ['renewable_energy_holding', 'elnet']
+        self.assertEqual(_pop_next_pending_asset(pending, {'anto': Mock()}), 'elnet')
+        self.assertIsNone(_pop_next_pending_asset(pending, {'incuba': Mock()}))
+        self.assertEqual(_pop_next_pending_asset(pending, {}), 'renewable_energy_holding')
+
+    def test_adc_reads_selected_production_not_setpoint_or_capacity(self):
+        plant = 'CEF REH 1 Popesti-Leordeni'
+        text = ('CEF Group\n7.93 MW TOTAL\nCEF Incuba Reproduction\nLIVE\n'
+                'CURRENT POWER\n62.7 kW\nSETPOINT\n62.4 kW\nPOWER OUTPUT\n62.7 kW / 990 kWp\n'
+                f'{plant}\nLIVE\nCURRENT POWER\n151.1 kW\nSETPOINT\n149.9 kW\n'
+                'POWER OUTPUT\n151.1 kW / 2.38 MWp\n')
+        self.assertEqual(_extract_metric_kw(_extract_plant_section(text, plant), 'POWER OUTPUT'), 151.1)
+        scraper = ADCMonitoringScraper('https://adc-monitoring.ro/', plant_name=plant)
+        playwright = MagicMock()
+        context = playwright.__enter__.return_value.chromium.launch_persistent_context.return_value
+        page = context.new_page.return_value
+        page.locator.return_value.first.inner_text.return_value = text
+        with tempfile.TemporaryDirectory() as directory, patch(
+            'power_reading.scrapers.adc_monitoring_scraper.sync_playwright', return_value=playwright
+        ), patch.object(scraper, '_maybe_login'), patch.object(scraper, '_wait_for_dashboard'), patch(
+            'power_reading.service._build_scraper', return_value=scraper
+        ):
+            scraper.user_data_dir = Path(directory)
+            reading = read_asset('renewable_energy_holding')
+        self.assertAlmostEqual(reading.pv_mw, 0.1511)
+        self.assertEqual(reading.source, 'adc-monitoring-card-power-output')
+        context.close.assert_called_once_with()
 
     def test_renewable_can_be_selected_by_worker_and_power_is_converted_to_mw(self):
         with patch.dict(os.environ, {'POWER_READING_ASSETS': 'renewable_energy_holding'}, clear=True):
@@ -51,6 +90,7 @@ class RenewableReaderTests(unittest.TestCase):
         self.assertEqual(reading.asset, 'renewable_energy_holding')
         self.assertEqual(reading.pv_mw, 1.2345)
 
+class FusionPVOutputTests(unittest.TestCase):
     def test_confirmed_plant_pv_output_supports_units_and_genuine_zero(self):
         plant = 'Renewable Energy Holding Parc Popesti'
         for raw, kw in (('1.25 MW', 1250), ('1,234.5 kW', 1234.5), ('500 W', 0.5), ('0 kW', 0)):

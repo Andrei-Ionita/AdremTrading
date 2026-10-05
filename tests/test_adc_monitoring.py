@@ -99,8 +99,9 @@ class ADCMonitoringTests(unittest.TestCase):
             _build_scraper(_ASSETS["incuba"], headless=True)
             _build_scraper(_ASSETS["ferma_frumusica"], headless=True)
             _build_scraper(_ASSETS["start_fotovoltaice"], headless=True)
+            _build_scraper(_ASSETS["renewable_energy_holding"], headless=True)
 
-        self.assertEqual(profiles, ["adc_monitoring"] * 4)
+        self.assertEqual(profiles, ["adc_monitoring"] * 5)
 
     def test_start_fotovoltaice_uses_borcea_and_shared_adc_credentials(self):
         spec = _ASSETS["start_fotovoltaice"]

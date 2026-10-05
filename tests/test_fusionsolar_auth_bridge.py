@@ -6,13 +6,13 @@ from power_reading.fusionsolar_auth_bridge import VerificationBridge, main
 
 
 class FusionSolarBridgeTests(unittest.TestCase):
-    def test_renewable_verification_does_not_touch_other_accounts(self):
+    def test_selected_verification_does_not_touch_other_accounts(self):
         with patch('power_reading.fusionsolar_auth_bridge._connection_scope', MagicMock()):
-            bridge = VerificationBridge(Mock(), ['renewable_energy_holding'])
-        self.assertEqual(list(bridge.pending), ['renewable_energy_holding'])
+            bridge = VerificationBridge(Mock(), ['elnet'])
+        self.assertEqual(list(bridge.pending), ['elnet'])
 
     def test_unknown_or_empty_account_selection_is_rejected(self):
-        for assets in ([], ['anasun'], ['elnet', 'unrelated']):
+        for assets in ([], ['anasun'], ['elnet', 'unrelated'], ['renewable_energy_holding']):
             with self.subTest(assets=assets), self.assertRaises(ValueError):
                 VerificationBridge(Mock(), assets)
 

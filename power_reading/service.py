@@ -47,8 +47,8 @@ class AssetSpec:
 _ASSETS = {
     "elnet": AssetSpec("elnet", "ELNET", DEFAULT_FUSIONSOLAR_URL, "Elnet Biomasa.GR"),
     "renewable_energy_holding": AssetSpec(
-        "renewable_energy_holding", "RENEWABLE_ENERGY_HOLDING", DEFAULT_FUSIONSOLAR_URL,
-        "Renewable Energy Holding Parc Popesti",
+        "renewable_energy_holding_adc", "RENEWABLE_ENERGY_HOLDING_ADC", "https://adc-monitoring.ro/",
+        "CEF REH 1 Popesti-Leordeni",
     ),
     "anto": AssetSpec("anto", "ANTO", "https://adc-monitoring.ro/", "CEF Anto"),
     "incuba": AssetSpec(
@@ -251,6 +251,7 @@ def _build_scraper(spec: AssetSpec, *, headless: bool):
         "incuba_adc",
         "ferma_frumusica",
         "start_fotovoltaice",
+        "renewable_energy_holding_adc",
     }:
         profile_key = "adc_monitoring"
     elif spec.asset_type in {"imperial", "astro_aurora"}:
@@ -264,6 +265,7 @@ def _build_scraper(spec: AssetSpec, *, headless: bool):
         "incuba_adc",
         "ferma_frumusica",
         "start_fotovoltaice",
+        "renewable_energy_holding_adc",
     }:
         from .scrapers.adc_monitoring_scraper import ADCMonitoringScraper
 
@@ -371,7 +373,7 @@ def _build_scraper(spec: AssetSpec, *, headless: bool):
     from .fusionsolar_session import FusionSolarSessionStore
 
     region = _env(f"{spec.env_prefix}_REGION_NAME")
-    if spec.asset_type in {"horeco", "renewable_energy_holding"}:
+    if spec.asset_type == "horeco":
         region = region or "region004"
     return FusionSolarScraper(
         target_url=url,
@@ -382,8 +384,7 @@ def _build_scraper(spec: AssetSpec, *, headless: bool):
         user_data_dir=str(profile_dir),
         headless=headless,
         session_store=(FusionSolarSessionStore(spec.asset_type, username, password, profile_dir)
-                       if spec.asset_type in {"elnet", "horeco", "renewable_energy_holding"} and username and password else None),
-        require_pv_output_power=spec.asset_type == "renewable_energy_holding",
+                       if spec.asset_type in {"elnet", "horeco"} and username and password else None),
     )
 
 
@@ -399,7 +400,7 @@ def _credentials(spec: AssetSpec) -> tuple[str | None, str | None]:
             username or _env("INCUBA_USERNAME") or _env("FUSIONSOLAR_USERNAME"),
             password or _env("INCUBA_PASSWORD") or _env("FUSIONSOLAR_PASSWORD"),
         )
-    if spec.asset_type in {"incuba_adc", "ferma_frumusica", "start_fotovoltaice"}:
+    if spec.asset_type in {"incuba_adc", "ferma_frumusica", "start_fotovoltaice", "renewable_energy_holding_adc"}:
         return username or _env("ANTO_USERNAME"), password or _env("ANTO_PASSWORD")
     return username, password
 

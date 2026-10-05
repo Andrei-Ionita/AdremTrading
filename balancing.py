@@ -540,8 +540,8 @@ def refresh_intraday_corrections(refreshers=None):
 		by_key = {item[0]: item for item in refreshers}
 		group_keys = (
 			("astro", "imperial"),
-			("elnet", "horeco", "incuba", "renewable_energy_holding"),
-			("anto", "ferma", "start_fotovoltaice"),
+			("elnet", "horeco", "incuba"),
+			("anto", "ferma", "start_fotovoltaice", "renewable_energy_holding"),
 			("mm_mv", "anasun"),
 			("hng",),
 			("necaluxan",),
