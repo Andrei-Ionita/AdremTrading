@@ -13,6 +13,7 @@ LOCAL_TIMEZONE = "Europe/Bucharest"
 MAX_SAMPLE_GAP = pd.Timedelta(minutes=7, seconds=30)
 CORRECTION_INITIAL_WEIGHT = 1.0
 CORRECTION_HALF_LIFE_MINUTES = 120.0
+MIN_ACTUAL_TO_FORECAST_RATIO = 0.5
 
 
 @dataclass(frozen=True)
@@ -25,6 +26,7 @@ class PortfolioIntradayConfig:
     max_interval_energy_mwh: float | None = None
     baseline_scale: float = 1.0
     power_is_net_export: bool = False
+    min_actual_to_forecast_ratio: float | None = MIN_ACTUAL_TO_FORECAST_RATIO
 
 
 ASTRO_INTRADAY_CONFIG = PortfolioIntradayConfig(
@@ -344,6 +346,8 @@ def predict_portfolio_intraday(
     residual = actual_energy - reference_prediction
     forecast_horizons = ((targets - origin) / pd.Timedelta(minutes=1)).astype(int)
     correction_weights = _correction_weights(config, forecast_horizons)
+    if _suppress_downward_correction(config, actual_energy, reference_prediction):
+        correction_weights = np.zeros(len(targets), dtype=float)
     corrections = correction_weights * residual
     predictions = np.maximum(dam_predictions + corrections, 0)
     if config.max_interval_energy_mwh is not None:
@@ -379,10 +383,29 @@ def _correction_weights(
     config: PortfolioIntradayConfig,
     forecast_horizons: pd.Index,
 ) -> np.ndarray:
+    threshold = config.min_actual_to_forecast_ratio
+    if threshold is not None and (not np.isfinite(threshold) or not 0 <= threshold <= 1):
+        raise PortfolioIntradayInputError(
+            f"{config.display_name} minimum actual-to-forecast ratio must be between 0 and 1."
+        )
     return CORRECTION_INITIAL_WEIGHT * np.exp(
         -np.log(2)
         * (forecast_horizons.to_numpy(dtype=float) - 15.0)
         / CORRECTION_HALF_LIFE_MINUTES
+    )
+
+
+def _suppress_downward_correction(
+    config: PortfolioIntradayConfig,
+    actual_energy: float,
+    reference_prediction: float,
+) -> bool:
+    # Preserve the forecast when an extreme shortfall could be curtailment.
+    threshold = config.min_actual_to_forecast_ratio
+    return bool(
+        threshold is not None
+        and reference_prediction > 0
+        and actual_energy < threshold * reference_prediction
     )
 
 

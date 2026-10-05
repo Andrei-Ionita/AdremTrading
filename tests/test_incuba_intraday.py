@@ -73,14 +73,13 @@ def production_readings(
 
 
 class IncubaPredictionTests(unittest.TestCase):
-    def test_severe_downward_deviation_is_corrected(self):
+    def test_severe_downward_deviation_keeps_derived_forecast(self):
         result = predict_incuba_intraday(
             adrem_forecast_for_origin(), weather_for_origin(), ORIGIN, 0.049
         )
-        self.assertEqual(result["Prediction_ID"].iloc[0], 0.049)
-        self.assertEqual(result["Correction_weight"].iloc[0], 1.0)
-        self.assertLess(result["Correction"].iloc[0], 0)
-        self.assertTrue((result["Correction"] <= 0).all())
+        self.assertTrue(result["Prediction_ID"].eq(result["Prediction_DAM"]).all())
+        self.assertTrue(result["Correction"].eq(0).all())
+        self.assertTrue(result["Correction_weight"].eq(0).all())
 
     def test_baseline_uses_exact_adrem_capacity_ratio(self):
         self.assertEqual(ADREM_TO_INCUBA_SCALE, 0.998 / 1.4)

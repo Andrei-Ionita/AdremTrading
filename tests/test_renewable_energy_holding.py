@@ -185,8 +185,9 @@ class RenewableCorrectionTests(unittest.TestCase):
                     result = run_portfolio_intraday_forecast(config, now=origin, readings_getter=getter)
                     self.assertEqual(getter.call_args.args[0], 'renewable_energy_holding')
                     self.assertEqual(result.Prediction_DAM.iloc[0], 0.237)
-                    self.assertEqual(result.Prediction_ID.iloc[0], energy)
-                    self.assertAlmostEqual(result.Correction.iloc[0], energy-0.237)
+                    expected = 0.237 if energy < 0.237 * 0.5 else energy
+                    self.assertEqual(result.Prediction_ID.iloc[0], expected)
+                    self.assertAlmostEqual(result.Correction.iloc[0], expected-0.237)
                     self.assertEqual(result.Prediction_ID.iloc[-1], 0)
                     self.assertTrue(np.isfinite(result.Prediction_ID).all())
                     again = run_portfolio_intraday_forecast(config, now=origin, readings_getter=getter)

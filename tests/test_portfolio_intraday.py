@@ -120,6 +120,7 @@ class PortfolioConfigurationTests(unittest.TestCase):
         self.assertNotIn("snk", {config.asset_key for config in configs})
         self.assertNotIn("pcsun", {config.asset_key for config in configs})
         for config in configs:
+            self.assertEqual(config.min_actual_to_forecast_ratio, 0.5)
             self.assertTrue(config.dam_results_path.is_file())
             self.assertTrue(config.weather_path.is_file())
         self.assertEqual(ULMENI_INTRADAY_CONFIG.max_interval_energy_mwh, 1.0875)
@@ -188,7 +189,7 @@ class PortfolioPredictionTests(unittest.TestCase):
         self.assertEqual(result["Data"].iloc[0], pd.Timestamp("2026-06-01 10:30"))
         self.assertEqual(result["Forecast_horizon_minutes"].iloc[0], 30)
 
-    def test_severe_downward_deviation_is_corrected(self):
+    def test_severe_downward_deviation_keeps_dam_forecast(self):
         result = predict_portfolio_intraday(
             CONFIG,
             dam_forecast(prediction=1.0),
@@ -196,10 +197,9 @@ class PortfolioPredictionTests(unittest.TestCase):
             ORIGIN,
             0.49,
         )
-        self.assertEqual(result["Prediction_ID"].iloc[0], 0.49)
-        self.assertEqual(result["Correction"].iloc[0], -0.51)
-        self.assertEqual(result["Correction_weight"].iloc[0], 1.0)
-        self.assertEqual(result["Correction_weight"].iloc[8], 0.5)
+        self.assertTrue(result["Prediction_ID"].eq(1.0).all())
+        self.assertTrue(result["Correction"].eq(0).all())
+        self.assertTrue(result["Correction_weight"].eq(0).all())
 
     def test_exactly_half_of_forecast_still_uses_decay_correction(self):
         result = predict_portfolio_intraday(

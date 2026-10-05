@@ -19,6 +19,7 @@ INCUBA_MAX_INTERVAL_ENERGY_MWH = 0.998 * 0.25
 MAX_SAMPLE_GAP = pd.Timedelta(minutes=7, seconds=30)
 CORRECTION_INITIAL_WEIGHT = 1.0
 CORRECTION_HALF_LIFE_MINUTES = 120.0
+MIN_ACTUAL_TO_FORECAST_RATIO = 0.5
 
 
 class IncubaIntradayError(RuntimeError):
@@ -163,6 +164,11 @@ def predict_incuba_intraday(
         * (forecast_horizons.to_numpy(dtype=float) - 15.0)
         / CORRECTION_HALF_LIFE_MINUTES
     )
+    if (
+        reference_prediction > 0
+        and actual_energy < MIN_ACTUAL_TO_FORECAST_RATIO * reference_prediction
+    ):
+        correction_weights = np.zeros(len(targets), dtype=float)
     corrections = correction_weights * residual
     predictions = np.clip(
         dam_predictions + corrections,

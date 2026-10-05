@@ -45,7 +45,7 @@ class LiveAssetCorrectionTests(unittest.TestCase):
                         incuba_intraday.ADREM_DAM_RESULTS_PATH, incuba_intraday.ADREM_TO_INCUBA_SCALE))
         self.assertEqual(len(runners), 15)
         for asset, runner, forecast_path, scale in runners:
-            readings = [PowerReading(asset, stamp.isoformat(), 0.08, None, None, 'test')
+            readings = [PowerReading(asset, stamp.isoformat(), 0.32, None, None, 'test')
                         for stamp in pd.date_range(ORIGIN - pd.Timedelta(minutes=15), ORIGIN, freq='5min')]
             with (
                 self.subTest(asset=asset),
@@ -60,26 +60,31 @@ class LiveAssetCorrectionTests(unittest.TestCase):
                 read_forecast.assert_called_once_with(forecast_path)
                 load_model.assert_not_called()
                 np.testing.assert_allclose(result.Prediction_DAM, round(0.1 * scale, 3))
-                self.assertEqual(result.Prediction_ID.iloc[0], 0.02)
+                self.assertEqual(result.Prediction_ID.iloc[0], 0.08)
 
-    def test_every_portfolio_asset_accepts_upward_downward_and_zero_measurements(self):
+    def test_every_portfolio_asset_guards_severe_shortfalls_but_corrects_other_measurements(self):
         configs = [value for value in vars(portfolio).values() if isinstance(value, portfolio.PortfolioIntradayConfig)]
         self.assertEqual(len(configs), 14)  # Incuba has its dedicated derived-baseline runner.
         for config in configs:
-            for actual in (0, 0.01, 0.08):
+            self.assertEqual(config.min_actual_to_forecast_ratio, 0.5)
+            for actual in (0, 0.01, 0.024999, 0.025, 0.03, 0.08):
                 with self.subTest(asset=config.asset_key, actual=actual):
                     result = portfolio.predict_portfolio_intraday(config, baseline(0.05 / config.baseline_scale), WEATHER, ORIGIN, actual)
-                    self.assertEqual(result.Prediction_ID.iloc[0], actual)
-                    self.assertEqual(result.Correction_weight.iloc[0], 1)
-                    self.assertEqual(result.Correction_weight.iloc[8], 0.5)
+                    if actual < 0.025:
+                        np.testing.assert_allclose(result.Prediction_ID, result.Prediction_DAM)
+                        self.assertTrue(result.Correction_weight.eq(0).all())
+                    else:
+                        self.assertEqual(result.Prediction_ID.iloc[0], actual)
+                        self.assertEqual(result.Correction_weight.iloc[0], 1)
+                        self.assertEqual(result.Correction_weight.iloc[8], 0.5)
                     self.assertTrue(np.isfinite(result.Prediction_ID).all())
                     self.assertTrue(result.Prediction_ID.ge(0).all())
 
-    def test_start_fotovoltaice_production_incident_is_corrected(self):
+    def test_start_fotovoltaice_severe_shortfall_retains_scaled_baseline(self):
         config = portfolio.START_FOTOVOLTAICE_INTRADAY_CONFIG
         result = portfolio.predict_portfolio_intraday(config, baseline(0.216 / config.baseline_scale), WEATHER, ORIGIN, 0.015782475754)
-        self.assertEqual(result.Prediction_ID.iloc[0], 0.016)
-        self.assertEqual(result.Correction.iloc[0], -0.2)
+        self.assertEqual(result.Prediction_ID.iloc[0], 0.216)
+        self.assertTrue(result.Correction.eq(0).all())
 
     def test_injection_cap_and_zero_radiation_survive_correction(self):
         config = portfolio.ANASUN_INTRADAY_CONFIG
@@ -102,14 +107,14 @@ class LiveAssetCorrectionTests(unittest.TestCase):
                 output = root / 'corrected.xlsx'
                 baseline(0.1).to_excel(dam, index=False)
                 WEATHER.to_csv(weather, index=False)
-                readings = [PowerReading(asset, timestamp.isoformat(), 0.08, None, None, 'test')
+                readings = [PowerReading(asset, timestamp.isoformat(), 0.32, None, None, 'test')
                             for timestamp in pd.date_range(ORIGIN - pd.Timedelta(minutes=15), ORIGIN, freq='5min')]
                 with patch.object(module, loader, side_effect=AssertionError('Model reload must not occur')):
                     result = getattr(module, f'run_{asset}_intraday_forecast')(
                         now=ORIGIN, readings_getter=lambda *a, **kw: readings,
                         weather_path=weather, result_path=output, dam_forecast_path=dam)
                 self.assertEqual(result.Prediction_DAM.iloc[0], 0.1)
-                self.assertEqual(result.Prediction_ID.iloc[0], 0.02)
+                self.assertEqual(result.Prediction_ID.iloc[0], 0.08)
                 np.testing.assert_allclose(pd.read_excel(output).Prediction_ID, result.Prediction_ID)
 
 
