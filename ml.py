@@ -5407,7 +5407,7 @@ def predicting_exporting_AnaSun_15min(
 	interval_to,
 	limitation_percentage,
 	weather_path="./AnaSun/Solcast/Ulmi_15min.csv",
-	model_path="./AnaSun/rs_xgb_anasun_prod_15min_0826.pkl",
+	model_path="./AnaSun/rs_xgb_anasun_prod_15min_0926.pkl",
 	output_path="./AnaSun/Results_Production_AnaSun_xgb_15min.xlsx",
 ):
 	df = pd.read_csv(weather_path)
