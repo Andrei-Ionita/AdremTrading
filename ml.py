@@ -5473,7 +5473,7 @@ def predicting_exporting_GCSP_15min(
 	interval_to,
 	limitation_percentage,
 	weather_path="./GCSP/Solcast/Nusfalau_15min.csv",
-	model_path="./GCSP/rs_xgb_gcsp_prod_15min_0726.pkl",
+	model_path="./GCSP/rs_xgb_gcsp_prod_15min_0826.pkl",
 	output_path="./GCSP/Results_Production_GCSP_xgb_15min.xlsx",
 ):
 	df = pd.read_csv(weather_path)
