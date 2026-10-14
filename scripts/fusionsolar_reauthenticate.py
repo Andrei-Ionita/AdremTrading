@@ -74,7 +74,7 @@ raise SystemExit(1 if failed else 0)
 """
 
 
-def main():
+def main(*, environment_overrides=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('--ssh-target', required=True)
     parser.add_argument('--assets', nargs='+', choices=('elnet', 'horeco', 'ulmeni'),
@@ -100,6 +100,9 @@ def main():
                        'power_reading.service', 'power_reading.fusionsolar_auth_bridge'):
             sources.append((module, (root / (module.replace('.', '/')+'.py')).read_text(encoding='utf-8-sig')))
         bootstrap = "import os,sys,types,importlib\nos.chdir('/app')\nsys.path.insert(0,'/app')\n"
+        # Staged secrets travel over SSH stdin, never as process arguments or files.
+        if environment_overrides:
+            bootstrap += 'os.environ.update(' + repr(environment_overrides) + ')\n'
         bootstrap += 'sources=' + repr(sources) + '\n'
         bootstrap += "for name,source in sources:\n parent=name.rsplit('.',1)[0]\n importlib.import_module(parent)\n m=types.ModuleType(name)\n m.__package__=parent\n m.__file__='/app/'+name.replace('.','/')+'.py'\n sys.modules[name]=m\n exec(compile(source,m.__file__,'exec'),m.__dict__)\n"
         bootstrap += 'VERIFY_ASSETS=' + repr(args.assets) + '\n'
