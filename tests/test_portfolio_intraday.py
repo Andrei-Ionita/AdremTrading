@@ -272,12 +272,10 @@ class PortfolioProductionTests(unittest.TestCase):
         with self.assertRaisesRegex(PortfolioIntradayInputError, 'No .* power samples'):
             calculate_interval_energy(CONFIG, [stale], ORIGIN, ORIGIN + pd.Timedelta(minutes=15))
 
-    def test_ulmeni_net_import_means_zero_export_energy(self):
+    def test_ulmeni_negative_pv_generation_is_not_a_zero_power_sample(self):
         readings = production_readings(asset='ulmeni', values=(-0.01, -0.01, -0.01, -0.01))
-        energy = calculate_interval_energy(ULMENI_INTRADAY_CONFIG, readings, ORIGIN - pd.Timedelta(minutes=15), ORIGIN)
-        self.assertEqual(energy, 0)
         with self.assertRaisesRegex(PortfolioIntradayInputError, 'cannot be negative'):
-            calculate_interval_energy(CONFIG, readings, ORIGIN - pd.Timedelta(minutes=15), ORIGIN)
+            calculate_interval_energy(ULMENI_INTRADAY_CONFIG, readings, ORIGIN - pd.Timedelta(minutes=15), ORIGIN)
 
     def test_completed_quarter_uses_integrated_energy(self):
         energy = calculate_interval_energy(

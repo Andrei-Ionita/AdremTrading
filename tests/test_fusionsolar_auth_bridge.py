@@ -6,6 +6,11 @@ from power_reading.fusionsolar_auth_bridge import VerificationBridge, main
 
 
 class FusionSolarBridgeTests(unittest.TestCase):
+    def test_ulmeni_can_be_verified_without_touching_other_accounts(self):
+        with patch('power_reading.fusionsolar_auth_bridge._connection_scope', MagicMock()):
+            bridge = VerificationBridge(Mock(), ['ulmeni'])
+        self.assertEqual(list(bridge.pending), ['ulmeni'])
+
     def test_selected_verification_does_not_touch_other_accounts(self):
         with patch('power_reading.fusionsolar_auth_bridge._connection_scope', MagicMock()):
             bridge = VerificationBridge(Mock(), ['elnet'])

@@ -83,7 +83,20 @@ the production correction path that integrates stored worker samples.
 snapshot. It is not used to calculate production energy for forecast correction.
 
 For direct interval diagnostics, ADC combines the portal's `15M AVG` and live
-power; Ulmeni uses its validated WinCC power for the 0.25-hour estimate. In the
-production path, both use stored samples from the completed interval. Ulmeni's
-grid-meter imports count as zero exported production; stale readings are never
+power; Ulmeni uses FusionSolar's historical interval API. In production, both
+use stored samples from the completed interval. Stale readings are never
 carried forward to replace a missing interval.
+
+Ulmeni no longer uses WinCC, which is disconnected from its PLC. Configure
+`ULMENI_FUSIONSOLAR_USERNAME`, `ULMENI_FUSIONSOLAR_PASSWORD`, and the exact
+`ULMENI_FUSIONSOLAR_PLANT_NAME` (default `CEF OLTENITA 1`) in the reader's Railway variables. Optional URL
+and region overrides use the same prefix. Legacy `ULMENI_URL`, login and HTTP
+credentials are ignored; there is no WinCC fallback. The reader requires the
+selected plant's PV output power, converts kW to MW, and retains the `ulmeni`
+database key. Missing PV power is an error, not a zero-production sample.
+
+Use `scripts/fusionsolar_reauthenticate.py --assets ulmeni --ssh-target ...`
+when human verification is required, then repeat with `--verify-only` to test
+the encrypted saved session. Set `ULMENI_ENABLED=true` only after live validation.
+The forecast cap (4.35 MW), 50% downward-gap guardrail and decay are unchanged.
+Negative FusionSolar generation is rejected, not interpreted as grid import.

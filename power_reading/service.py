@@ -77,10 +77,10 @@ _ASSETS = {
     "hng": AssetSpec("hng", "HNG", "https://app.veltol-ems.ro/locations/3068", "HNG"),
     "pcsun": AssetSpec("pcsun", "PCSUN", "https://oltenita2.epgr.ro/~ViewOfThings/index.html", "PCSun"),
     "ulmeni": AssetSpec(
-        "ulmeni",
-        "ULMENI",
-        "https://oltenita1.epgr.ro/~ViewOfThings/index.html",
-        "Solar Energy Ulmeni",
+        "ulmeni_fusionsolar",
+        "ULMENI_FUSIONSOLAR",
+        DEFAULT_FUSIONSOLAR_URL,
+        "CEF OLTENITA 1",
     ),
     "imperial": AssetSpec("imperial", "IMPERIAL", DEFAULT_AURORA_URL, "PV Jucu"),
     "horeco": AssetSpec("horeco", "HORECO", DEFAULT_FUSIONSOLAR_URL, "CEF HORECO Costesti"),
@@ -289,7 +289,7 @@ def _build_scraper(spec: AssetSpec, *, headless: bool):
             headless=headless,
         )
 
-    if spec.asset_type in {"pcsun", "ulmeni"}:
+    if spec.asset_type == "pcsun":
         from .scrapers.pcsun_scraper import PCSunScraper
 
         prefix = spec.env_prefix
@@ -375,6 +375,7 @@ def _build_scraper(spec: AssetSpec, *, headless: bool):
     region = _env(f"{spec.env_prefix}_REGION_NAME")
     if spec.asset_type == "horeco":
         region = region or "region004"
+    session_asset = "ulmeni" if spec.asset_type == "ulmeni_fusionsolar" else spec.asset_type
     return FusionSolarScraper(
         target_url=url,
         username=username,
@@ -383,8 +384,9 @@ def _build_scraper(spec: AssetSpec, *, headless: bool):
         region_name=region,
         user_data_dir=str(profile_dir),
         headless=headless,
-        session_store=(FusionSolarSessionStore(spec.asset_type, username, password, profile_dir)
-                       if spec.asset_type in {"elnet", "horeco"} and username and password else None),
+        require_pv_output_power=spec.asset_type == "ulmeni_fusionsolar",
+        session_store=(FusionSolarSessionStore(session_asset, username, password, profile_dir)
+                       if session_asset in {"elnet", "horeco", "ulmeni"} and username and password else None),
     )
 
 

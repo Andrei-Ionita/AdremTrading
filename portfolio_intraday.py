@@ -113,7 +113,6 @@ ULMENI_INTRADAY_CONFIG = PortfolioIntradayConfig(
         / "Results_Production_SolarEnergy_DAM_Corrected_Intraday_15min.xlsx"
     ),
     max_interval_energy_mwh=4.35 / 4,
-    power_is_net_export=True,
 )
 START_FOTOVOLTAICE_SCALE = 0.996 / 4.44
 START_FOTOVOLTAICE_INTRADAY_CONFIG = PortfolioIntradayConfig(
