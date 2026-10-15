@@ -86,6 +86,7 @@ class FusionSolarScraper:
         headless: bool = False,
         session_store=None,
         require_pv_output_power: bool = False,
+        require_overview_active_power: bool = False,
     ) -> None:
         self.target_url = target_url
         self.username = username
@@ -98,6 +99,7 @@ class FusionSolarScraper:
         self.headless = headless
         self.session_store = session_store
         self.require_pv_output_power = require_pv_output_power
+        self.require_overview_active_power = require_overview_active_power
 
     def scrape_once(self) -> PowerSnapshot:
         try:
@@ -133,6 +135,9 @@ class FusionSolarScraper:
                 page = context.new_page()
                 page.set_default_timeout(self.browser_timeout_ms)
                 self._open_session(context, page, restore_session=restore_session)
+                if self.require_overview_active_power:
+                    self._open_plant_if_needed(page)
+                    return self._read_required_overview_active_power(page)
                 if self.require_pv_output_power:
                     self._open_plant_if_needed(page)
                     return self._read_required_pv_output_power(page)
@@ -368,6 +373,21 @@ class FusionSolarScraper:
             if attempt < 3:
                 page.wait_for_timeout(500)
         raise RuntimeError("FusionSolar PV output power is unavailable for the requested plant.")
+
+    def _read_required_overview_active_power(self, page) -> PowerSnapshot:
+        for attempt in range(4):
+            text = page.locator("body").first.inner_text()
+            power_kw = _extract_ulmeni_overview_power_kw(text, self.plant_name)
+            if power_kw is not None:
+                return PowerSnapshot(
+                    pv_kw=power_kw, load_kw=None, grid_kw=None,
+                    timestamp_utc=datetime.now(tz=timezone.utc).isoformat(),
+                    source="overview-active-power-text",
+                    raw_excerpt=f"{self.plant_name}: Active power {power_kw} kW",
+                )
+            if attempt < 3:
+                page.wait_for_timeout(500)
+        raise RuntimeError("FusionSolar overview active power is unavailable for the requested plant.")
 
     def _uses_validated_overview_active_power(self) -> bool:
         plant_name = (self.plant_name or "").strip().lower()
@@ -1215,6 +1235,25 @@ class FusionSolarScraper:
             return bool(page.evaluate(script, target))
         except Exception:
             return False
+
+
+def _extract_ulmeni_overview_power_kw(text: str, plant_name: Optional[str]) -> Optional[float]:
+    # The navigation lists both plants. The last plant title before the weather
+    # and KPI block identifies the selected overview, not the navigation entry.
+    plant = (plant_name or "").strip().casefold()
+    if plant != "cef oltenita 1":
+        return None
+    compact = re.sub(r"\s+", " ", text).strip()
+    match = re.search(r"(?<![\w.,-])(-?[0-9][0-9.,]*)\s*(kW|MW|W)\s+Active\s+power\b", compact, re.I)
+    if not match:
+        return None
+    titles = re.findall(r"\bCEF\s+OLTENITA\s+[12]\b", compact[:match.start()], re.I)
+    if not titles or re.sub(r"\s+", " ", titles[-1]).casefold() != plant:
+        return None
+    value = _parse_number(match.group(1))
+    if value is None or not math.isfinite(value) or value < 0:
+        return None
+    return _to_kw_value(value, match.group(2))
 
 
 def _extract_plant_pv_output_power_kw(text: str, plant_name: Optional[str]) -> Optional[float]:

@@ -384,7 +384,7 @@ def _build_scraper(spec: AssetSpec, *, headless: bool):
         region_name=region,
         user_data_dir=str(profile_dir),
         headless=headless,
-        require_pv_output_power=spec.asset_type == "ulmeni_fusionsolar",
+        require_overview_active_power=spec.asset_type == "ulmeni_fusionsolar",
         session_store=(FusionSolarSessionStore(session_asset, username, password, profile_dir)
                        if session_asset in {"elnet", "horeco", "ulmeni"} and username and password else None),
     )

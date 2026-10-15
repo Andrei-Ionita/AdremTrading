@@ -205,7 +205,7 @@ class UlmeniPowerServiceTests(unittest.TestCase):
         self.assertEqual(kwargs["target_url"], service.DEFAULT_FUSIONSOLAR_URL)
         self.assertEqual(kwargs["plant_name"], "Test Ulmeni PV Plant")
         self.assertEqual(kwargs["region_name"], "region004")
-        self.assertTrue(kwargs["require_pv_output_power"])
+        self.assertTrue(kwargs["require_overview_active_power"])
         self.assertNotIn("http_username", kwargs)
         self.assertIsNotNone(kwargs["session_store"])
         self.assertEqual(Path(kwargs["user_data_dir"]).name, "ulmeni_fusionsolar")
@@ -264,6 +264,28 @@ class UlmeniCollectionGuardTests(unittest.TestCase):
 
 
 class UlmeniFusionPowerTests(unittest.TestCase):
+    def test_verified_overview_uses_active_power_not_reactive_or_yield(self):
+        scraper = FusionSolarScraper(service.DEFAULT_FUSIONSOLAR_URL,
+            plant_name="CEF OLTENITA 1", require_overview_active_power=True)
+        for value, expected in (("0.000 kW", 0), ("800 kW", 800), ("1.2 MW", 1200), ("900 W", 0.9)):
+            with self.subTest(value=value):
+                page = Mock()
+                page.locator.return_value.first.inner_text.return_value = (
+                    "CEF OLTENITA 1\nCEF OLTENITA 2\nOverview\nCEF OLTENITA 1\nClear\n" +
+                    value + "\nActive power\n-170.538 kvar\nReactive power\n10.28 MWh\nYield today")
+                snapshot = scraper._read_required_overview_active_power(page)
+                self.assertEqual(snapshot.pv_kw, expected)
+                self.assertEqual(snapshot.source, "overview-active-power-text")
+        for title, value in (("CEF OLTENITA 2", "800 kW"), ("CEF OLTENITA 1", "-- kW"),
+                             ("CEF OLTENITA 1", "-10 kW"), ("CEF OLTENITA 1", "800 kWh")):
+            with self.subTest(title=title, value=value):
+                page = Mock()
+                page.locator.return_value.first.inner_text.return_value = (
+                    "CEF OLTENITA 1\nCEF OLTENITA 2\nOverview\n" + title + "\n" +
+                    value + "\nActive power\n100 kvar\nReactive power\n100 MWh\nYield today")
+                with self.assertRaisesRegex(RuntimeError, "unavailable"):
+                    scraper._read_required_overview_active_power(page)
+
     def test_pv_output_units_zero_and_invalid_values(self):
         scraper = FusionSolarScraper(service.DEFAULT_FUSIONSOLAR_URL,
                                      plant_name="Test Ulmeni PV Plant", require_pv_output_power=True)

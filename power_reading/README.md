@@ -92,8 +92,8 @@ Ulmeni no longer uses WinCC, which is disconnected from its PLC. Configure
 `ULMENI_FUSIONSOLAR_PLANT_NAME` (default `CEF OLTENITA 1`) in the reader's Railway variables. Optional URL
 and region overrides use the same prefix. Legacy `ULMENI_URL`, login and HTTP
 credentials are ignored; there is no WinCC fallback. The reader requires the
-selected plant's PV output power, converts kW to MW, and retains the `ulmeni`
-database key. Missing PV power is an error, not a zero-production sample.
+selected plant's overview Active power, converts kW to MW, and retains the `ulmeni`
+database key. Missing active power is an error, not a zero-production sample.
 
 Use `scripts/fusionsolar_reauthenticate.py --assets ulmeni --ssh-target ...`
 when human verification is required, then repeat with `--verify-only` to test
