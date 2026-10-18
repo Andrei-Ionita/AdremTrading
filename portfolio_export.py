@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 
 import portfolio_intraday as intraday
+from forecast_time import delivery_times, delivery_intervals, utc_strings
 from incuba_intraday import ADREM_TO_INCUBA_SCALE, INCUBA_INTRADAY_RESULTS_PATH
 
 
@@ -60,16 +61,16 @@ CORRECTIONS = {
 
 
 def _timestamps(values):
-    parsed = pd.to_datetime(values, errors="raise", format="mixed")
-    if parsed.dt.tz is not None:
-        parsed = parsed.dt.tz_convert("Europe/Bucharest").dt.tz_localize(None)
-    if parsed.isna().any() or (parsed != parsed.dt.floor("15min")).any():
+    frame = values if isinstance(values, pd.DataFrame) else pd.DataFrame({"Data": values})
+    parsed = delivery_times(frame)
+    utc = parsed.tz_convert("UTC")
+    if parsed.isna().any() or (utc != utc.floor("15min")).any():
         raise ValueError("Forecast timestamps must be valid 15-minute boundaries.")
     return pd.DatetimeIndex(parsed)
 
 
 def _series(frame, value_column, label):
-    stamps = _timestamps(frame["Data"])
+    stamps = _timestamps(frame)
     if stamps.duplicated().any():
         raise ValueError(f"{label} has duplicate forecast timestamps.")
     values = pd.to_numeric(frame[value_column], errors="raise").to_numpy(dtype=float)
@@ -86,7 +87,7 @@ def _align_baseline(series, targets, weather_path, label):
         # permits filling a missing production row with zero.
         weather = pd.read_csv(weather_path)
         stamps = pd.to_datetime(weather["period_end"], utc=True, errors="raise", format="mixed")
-        stamps = stamps.dt.tz_convert("Europe/Bucharest").dt.tz_localize(None)
+        stamps = stamps.dt.tz_convert("Europe/Bucharest")
         radiation = pd.Series(pd.to_numeric(weather["ghi"], errors="raise").to_numpy(), index=stamps)
         if radiation.index.duplicated().any():
             raise ValueError(f"{label} has duplicate weather timestamps.")
@@ -118,7 +119,7 @@ def build_quarter_hourly_portfolio(enabled_corrections):
     result = pd.DataFrame(index=targets)
     for suffix, series in baselines.items():
         result[f"Prediction_{suffix}"] = _align_baseline(series, targets, weather_paths[suffix], suffix)
-    before_switch = targets < RENEWABLE_ENERGY_HOLDING_START
+    before_switch = targets < RENEWABLE_ENERGY_HOLDING_START.tz_localize("Europe/Bucharest")
     if (~before_switch).any():
         result["Prediction_Renewable_Energy_Holding"] = (
             result["Prediction_Elnet"] * RENEWABLE_ENERGY_HOLDING_SCALE
@@ -149,14 +150,15 @@ def build_quarter_hourly_portfolio(enabled_corrections):
     for suffix in ("Incuba", "Start_Fotovoltaice", "AnaSun", "GCSP"):
         column = f"Prediction_{suffix}"
         result[column] = result.pop(column)
-    result.insert(0, "Data", targets)
-    result.insert(1, "Interval", targets.hour * 4 + targets.minute // 15 + 1)
+    result.insert(0, "Data", targets.tz_localize(None))
+    result.insert(1, "Interval", delivery_intervals(targets))
+    result["Data_UTC"] = utc_strings(targets)
     result["Lookup"] = result["Data"].dt.strftime("%d.%m.%Y") + result["Interval"].astype(str)
     return result.reset_index(drop=True)
 
 
 def aggregate_hourly_portfolio(quarters):
-    stamps = _timestamps(quarters["Data"])
+    stamps = _timestamps(quarters)
     if stamps.duplicated().any():
         raise ValueError("Cannot aggregate duplicate forecast quarters.")
     columns = [column for column in quarters if column.startswith("Prediction_")]
@@ -164,12 +166,13 @@ def aggregate_hourly_portfolio(quarters):
     if not np.isfinite(values.to_numpy(dtype=float)).all() or (values < 0).any().any():
         raise ValueError("Cannot aggregate missing or invalid forecast quarters.")
     values.index = stamps
-    groups = values.groupby(values.index.floor("h"))
+    groups = values.groupby(values.index.tz_convert("UTC").floor("h"))
     counts = groups.size()
     # A partial leading/trailing hour is not a complete hourly energy forecast.
     result = groups.sum(min_count=4).loc[counts == 4].copy()
-    hours = result.index
-    result.insert(0, "Data", hours.normalize())
-    result.insert(1, "Interval", hours.hour + 1)
+    hours = result.index.tz_convert("Europe/Bucharest")
+    result.insert(0, "Data", hours.tz_localize(None).normalize())
+    result.insert(1, "Interval", delivery_intervals(hours, minutes=60))
+    result["Data_UTC"] = utc_strings(hours)
     result["Lookup"] = result["Data"].dt.strftime("%d.%m.%Y") + result["Interval"].astype(str)
     return result.reset_index(drop=True)

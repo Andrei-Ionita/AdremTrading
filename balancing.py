@@ -494,7 +494,8 @@ def create_excel_file_with_all_forecasts_15min(
 	if "Prediction_Renewable_Energy_Holding" in df_all:
 		renewable = df_all.loc[
 			df_all["Data"] >= RENEWABLE_ENERGY_HOLDING_START,
-			["Data", "Interval", "Prediction_Renewable_Energy_Holding", "Lookup"],
+			["Data", "Interval", "Prediction_Renewable_Energy_Holding", "Lookup"]
+			+ (["Data_UTC"] if "Data_UTC" in df_all else []),
 		].rename(columns={"Prediction_Renewable_Energy_Holding": "Prediction"})
 		RENEWABLE_ENERGY_HOLDING_RESULTS_PATH.parent.mkdir(parents=True, exist_ok=True)
 		renewable.to_excel(RENEWABLE_ENERGY_HOLDING_RESULTS_PATH, index=False)

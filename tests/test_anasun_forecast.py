@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tempfile
+import inspect
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -14,7 +15,8 @@ from ml import fetching_AnaSun_data_15min, predicting_exporting_AnaSun_15min
 
 class AnaSunForecastTests(unittest.TestCase):
     def test_model_loads_with_six_features(self):
-        model = joblib.load("AnaSun/rs_xgb_anasun_prod_15min_0426.pkl")
+        model_path = inspect.signature(predicting_exporting_AnaSun_15min).parameters["model_path"].default
+        model = joblib.load(model_path)
 
         self.assertEqual(model.n_features_in_, 6)
 

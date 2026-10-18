@@ -5,6 +5,7 @@ from typing import Callable
 
 import numpy as np
 import pandas as pd
+from forecast_time import delivery_times, local_day_end, round_delivery, utc_strings
 
 
 APP_ROOT = Path(__file__).resolve().parent
@@ -139,7 +140,7 @@ def predict_incuba_intraday(
     target_start: pd.Timestamp | None = None,
 ) -> pd.DataFrame:
     origin = _local_timestamp(forecast_origin)
-    if origin != origin.floor("15min"):
+    if origin != round_delivery(origin, "floor"):
         raise IncubaIntradayInputError("Forecast_origin must be on a 15-minute boundary.")
 
     targets, baseline = _derived_incuba_baseline(
@@ -198,6 +199,8 @@ def predict_incuba_intraday(
             "Correction_weight": np.round(correction_weights, 4),
             "Forecast_horizon_minutes": forecast_horizons,
             "Market": "Intraday",
+            "Data_UTC": utc_strings(targets),
+            "Forecast_origin_UTC": origin.tz_convert("UTC").isoformat(),
         }
     )
 
@@ -269,18 +272,25 @@ def _derived_incuba_baseline(
             "Adrem forecast is missing columns: " + ", ".join(missing_columns)
         )
 
-    day_end = origin.normalize() + pd.Timedelta(hours=23, minutes=45)
+    day_end = local_day_end(origin)
     first_target = origin + pd.Timedelta(minutes=15)
     if target_start is not None:
-        first_target = max(first_target, _local_timestamp(target_start).ceil("15min"))
+        first_target = max(first_target, round_delivery(_local_timestamp(target_start), "ceil"))
     targets = pd.date_range(first_target, day_end, freq="15min", tz=INCUBA_TIMEZONE)
     if len(targets) == 0:
         return targets, pd.DataFrame(columns=["Interval", "Prediction_DAM"], index=targets)
 
-    forecast = adrem_forecast.loc[:, ["Data", "Interval", "Prediction"]].copy()
-    forecast["Target_timestamp"] = _local_timestamp_series(
-        forecast["Data"], "Adrem forecast"
-    )
+    forecast = adrem_forecast.copy()
+    dates = pd.to_datetime(forecast["Data"], errors="coerce", format="mixed")
+    if dates.isna().any():
+        raise IncubaIntradayInputError("Adrem forecast contains invalid Data timestamps.")
+    if dates.dt.tz is not None:
+        dates = dates.dt.tz_convert(INCUBA_TIMEZONE)
+    forecast = forecast.loc[dates.dt.date == origin.date()].copy()
+    try:
+        forecast["Target_timestamp"] = delivery_times(forecast)
+    except ValueError as exc:
+        raise IncubaIntradayInputError(f"Adrem forecast: {exc}") from exc
     forecast = forecast[forecast["Target_timestamp"].isin(targets)].copy()
     duplicate_targets = forecast["Target_timestamp"].duplicated(keep=False)
     if duplicate_targets.any():
@@ -390,7 +400,7 @@ def _local_timestamp(value) -> pd.Timestamp:
 
 
 def _latest_completed_origin(current_time: pd.Timestamp) -> pd.Timestamp:
-    return current_time.floor("15min")
+    return round_delivery(current_time, "floor")
 
 
 def _finite_number(value, label: str) -> float:
@@ -418,5 +428,7 @@ def _empty_result() -> pd.DataFrame:
             "Correction_weight",
             "Forecast_horizon_minutes",
             "Market",
+            "Data_UTC",
+            "Forecast_origin_UTC",
         ]
     )

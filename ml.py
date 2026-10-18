@@ -2524,15 +2524,11 @@ def predicting_exporting_Astro_15min(interval_from, interval_to, limitation_perc
 	# Creating the forecast_dataset df
 	df= pd.read_csv('./Astro/Solcast/Luna_15min.csv')
 	# Convert the 'period_end' column to datetime, handling errors
-	df['period_end'] = pd.to_datetime(df['period_end'], errors='coerce', format='%Y-%m-%dT%H:%M:%SZ')
+	from forecast_time import solcast_times, utc_strings
+	period_end = solcast_times(df["period_end"])
+	data_utc = utc_strings(period_end)
+	df["period_end"] = period_end.dt.tz_localize(None)
 
-	# Drop any rows with NaT in 'period_end'
-	df.dropna(subset=['period_end'], inplace=True)
-
-	# Shift the 'period_end' column by 2 hours
-	df['period_end'] = df['period_end'] + pd.Timedelta(hours=3)
-
-	# Creating the Interval column
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
 
 	df.rename(columns={'period_end': 'Data', 'ghi': 'Radiatie', "air_temp": "Temperatura", "cloud_opacity": "Nori", "azimuth": "Azimuth", "zenith": "Zenith", "dewpoint_temp": "Dewpoint", "relative_humidity": "Umiditate"}, inplace=True)
@@ -2611,6 +2607,7 @@ def predicting_exporting_Astro_15min(interval_from, interval_to, limitation_perc
 	# Create the 'Lookup' column by concatenating the 'Data' and 'Interval' columns
 	# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
 	df['Lookup'] = df["Data"].dt.strftime('%d.%m.%Y') + df["Interval"].astype(str)
+	df["Data_UTC"] = data_utc
 	df.to_excel(file_path, index=False)
 	return dataset
 
@@ -3117,15 +3114,11 @@ def predicting_exporting_Imperial_15min(interval_to, interval_from, limitation_p
 	# Creating the forecast_dataset df
 	df= pd.read_csv('./Imperial/Solcast/Jucu_15min.csv')
 	# Convert the 'period_end' column to datetime, handling errors
-	df['period_end'] = pd.to_datetime(df['period_end'], errors='coerce', format='%Y-%m-%dT%H:%M:%SZ')
+	from forecast_time import solcast_times, utc_strings
+	period_end = solcast_times(df["period_end"])
+	data_utc = utc_strings(period_end)
+	df["period_end"] = period_end.dt.tz_localize(None)
 
-	# Drop any rows with NaT in 'period_end'
-	df.dropna(subset=['period_end'], inplace=True)
-
-	# Shift the 'period_end' column by 2 hours
-	df['period_end'] = df['period_end'] + pd.Timedelta(hours=3)
-
-	# Creating the Interval column
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
 
 	df.rename(columns={'period_end': 'Data', 'ghi': 'Radiatie', "air_temp": "Temperatura", "cloud_opacity": "Nori", "azimuth": "Azimuth", "zenith": "Zenith", "dewpoint_temp": "Dewpoint", "relative_humidity": "Umiditate"}, inplace=True)
@@ -3205,6 +3198,7 @@ def predicting_exporting_Imperial_15min(interval_to, interval_from, limitation_p
 	# Create the 'Lookup' column by concatenating the 'Data' and 'Interval' columns
 	# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
 	df['Lookup'] = df["Data"].dt.strftime('%d.%m.%Y') + df["Interval"].astype(str)
+	df["Data_UTC"] = data_utc
 	df.to_excel(file_path, index=False)
 	return dataset
 
@@ -3499,15 +3493,11 @@ def predicting_exporting_Kahraman_15min(interval_from, interval_to, limitation_p
 	# Creating the forecast_dataset df
 	df= pd.read_csv('./Kahraman/Solcast/Telesti_15min.csv')
 	# Convert the 'period_end' column to datetime, handling errors
-	df['period_end'] = pd.to_datetime(df['period_end'], errors='coerce', format='%Y-%m-%dT%H:%M:%SZ')
+	from forecast_time import solcast_times, utc_strings
+	period_end = solcast_times(df["period_end"])
+	data_utc = utc_strings(period_end)
+	df["period_end"] = period_end.dt.tz_localize(None)
 
-	# Drop any rows with NaT in 'period_end'
-	df.dropna(subset=['period_end'], inplace=True)
-
-	# Shift the 'period_end' column by 2 hours
-	df['period_end'] = df['period_end'] + pd.Timedelta(hours=2)
-
-	# Creating the Interval column
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
 
 	df.rename(columns={'period_end': 'Data', 'ghi': 'Radiatie', "air_temp": "Temperatura", "cloud_opacity": "Nori", "azimuth": "Azimuth", "zenith": "Zenith", "dewpoint_temp": "Dewpoint", "relative_humidity": "Umiditate"}, inplace=True)
@@ -3586,6 +3576,7 @@ def predicting_exporting_Kahraman_15min(interval_from, interval_to, limitation_p
 	# Create the 'Lookup' column by concatenating the 'Data' and 'Interval' columns
 	# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
 	df['Lookup'] = df["Data"].dt.strftime('%d.%m.%Y') + df["Interval"].astype(str)
+	df["Data_UTC"] = data_utc
 	df.to_excel(file_path, index=False)
 	return dataset
 
@@ -3697,15 +3688,11 @@ def predicting_exporting_SunEnergy_15min(interval_from, interval_to, limitation_
 	# Creating the forecast_dataset df
 	df= pd.read_csv('./PC SunEnergy/Solcast/Oltenita_15min.csv')
 	# Convert the 'period_end' column to datetime, handling errors
-	df['period_end'] = pd.to_datetime(df['period_end'], errors='coerce', format='%Y-%m-%dT%H:%M:%SZ')
+	from forecast_time import solcast_times, utc_strings
+	period_end = solcast_times(df["period_end"])
+	data_utc = utc_strings(period_end)
+	df["period_end"] = period_end.dt.tz_localize(None)
 
-	# Drop any rows with NaT in 'period_end'
-	df.dropna(subset=['period_end'], inplace=True)
-
-	# Shift the 'period_end' column by 2 hours
-	df['period_end'] = df['period_end'] + pd.Timedelta(hours=3)
-
-	# Creating the Interval column
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
 
 	df.rename(columns={'period_end': 'Data', 'ghi': 'Radiatie', "air_temp": "Temperatura", "cloud_opacity": "Nori", "azimuth": "Azimuth", "zenith": "Zenith", "dewpoint_temp": "Dewpoint", "relative_humidity": "Umiditate"}, inplace=True)
@@ -3788,6 +3775,7 @@ def predicting_exporting_SunEnergy_15min(interval_from, interval_to, limitation_
 	# Create the 'Lookup' column by concatenating the 'Data' and 'Interval' columns
 	# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
 	df['Lookup'] = df["Data"].dt.strftime('%d.%m.%Y') + df["Interval"].astype(str)
+	df["Data_UTC"] = data_utc
 	df.to_excel(file_path, index=False)
 	return dataset
 
@@ -3899,9 +3887,10 @@ def predicting_exporting_SolarEnergy_15min(interval_from, interval_to, limitatio
 	# Load and process forecast data
 	df = pd.read_csv('./Solar Energy Ulmeni/Solcast/Oltenita_15min.csv')
 
-	df['period_end'] = pd.to_datetime(df['period_end'], errors='coerce', format='%Y-%m-%dT%H:%M:%SZ')
-	df.dropna(subset=['period_end'], inplace=True)
-	df['period_end'] = df['period_end'] + pd.Timedelta(hours=3)
+	from forecast_time import solcast_times, utc_strings
+	period_end = solcast_times(df["period_end"])
+	data_utc = utc_strings(period_end)
+	df["period_end"] = period_end.dt.tz_localize(None)
 
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
 
@@ -3997,6 +3986,7 @@ def predicting_exporting_SolarEnergy_15min(interval_from, interval_to, limitatio
 	# Create the 'Lookup' column by concatenating the 'Data' and 'Interval' columns
 	# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
 	df['Lookup'] = df["Data"].dt.strftime('%d.%m.%Y') + df["Interval"].astype(str)
+	df["Data_UTC"] = data_utc
 	df.to_excel(file_path, index=False)
 	return dataset
 
@@ -4108,15 +4098,11 @@ def predicting_exporting_Elnet_15min(interval_from, interval_to, limitation_perc
 	# Creating the forecast_dataset df
 	df= pd.read_csv('./Elnet/Solcast/Bucsani_15min.csv')
 	# Convert the 'period_end' column to datetime, handling errors
-	df['period_end'] = pd.to_datetime(df['period_end'], errors='coerce', format='%Y-%m-%dT%H:%M:%SZ')
+	from forecast_time import solcast_times, utc_strings
+	period_end = solcast_times(df["period_end"])
+	data_utc = utc_strings(period_end)
+	df["period_end"] = period_end.dt.tz_localize(None)
 
-	# Drop any rows with NaT in 'period_end'
-	df.dropna(subset=['period_end'], inplace=True)
-
-	# Shift the 'period_end' column by 2 hours
-	df['period_end'] = df['period_end'] + pd.Timedelta(hours=3)
-
-	# Creating the Interval column
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
 
 	df.rename(columns={'period_end': 'Data', 'ghi': 'Radiatie', "air_temp": "Temperatura", "cloud_opacity": "Nori", "azimuth": "Azimuth", "zenith": "Zenith", "dewpoint_temp": "Dewpoint", "relative_humidity": "Umiditate"}, inplace=True)
@@ -4199,6 +4185,7 @@ def predicting_exporting_Elnet_15min(interval_from, interval_to, limitation_perc
 	# Create the 'Lookup' column by concatenating the 'Data' and 'Interval' columns
 	# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
 	df['Lookup'] = df["Data"].dt.strftime('%d.%m.%Y') + df["Interval"].astype(str)
+	df["Data_UTC"] = data_utc
 	df.to_excel(file_path, index=False)
 	return dataset
 
@@ -4310,15 +4297,11 @@ def predicting_exporting_Horeco_15min(interval_from, interval_to, limitation_per
 	# Creating the forecast_dataset df
 	df= pd.read_csv('./Horeco/Solcast/Buzau_15min.csv')
 	# Convert the 'period_end' column to datetime, handling errors
-	df['period_end'] = pd.to_datetime(df['period_end'], errors='coerce', format='%Y-%m-%dT%H:%M:%SZ')
+	from forecast_time import solcast_times, utc_strings
+	period_end = solcast_times(df["period_end"])
+	data_utc = utc_strings(period_end)
+	df["period_end"] = period_end.dt.tz_localize(None)
 
-	# Drop any rows with NaT in 'period_end'
-	df.dropna(subset=['period_end'], inplace=True)
-
-	# Shift the 'period_end' column by 2 hours
-	df['period_end'] = df['period_end'] + pd.Timedelta(hours=3)
-
-	# Creating the Interval column
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
 
 	df.rename(columns={'period_end': 'Data', 'ghi': 'Radiatie', "air_temp": "Temperatura", "cloud_opacity": "Nori", "azimuth": "Azimuth", "zenith": "Zenith", "dewpoint_temp": "Dewpoint", "relative_humidity": "Umiditate"}, inplace=True)
@@ -4401,6 +4384,7 @@ def predicting_exporting_Horeco_15min(interval_from, interval_to, limitation_per
 	# Create the 'Lookup' column by concatenating the 'Data' and 'Interval' columns
 	# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
 	df['Lookup'] = df["Data"].dt.strftime('%d.%m.%Y') + df["Interval"].astype(str)
+	df["Data_UTC"] = data_utc
 	df.to_excel(file_path, index=False)
 	return dataset
 
@@ -4714,15 +4698,11 @@ def predicting_exporting_Dragosel_15min(interval_from, interval_to, limitation_p
 	# Creating the forecast_dataset df
 	df= pd.read_csv('./Dragosel/Solcast/Dragosel_15min.csv')
 	# Convert the 'period_end' column to datetime, handling errors
-	df['period_end'] = pd.to_datetime(df['period_end'], errors='coerce', format='%Y-%m-%dT%H:%M:%SZ')
+	from forecast_time import solcast_times, utc_strings
+	period_end = solcast_times(df["period_end"])
+	data_utc = utc_strings(period_end)
+	df["period_end"] = period_end.dt.tz_localize(None)
 
-	# Drop any rows with NaT in 'period_end'
-	df.dropna(subset=['period_end'], inplace=True)
-
-	# Shift the 'period_end' column by 2 hours
-	df['period_end'] = df['period_end'] + pd.Timedelta(hours=3)
-
-	# Creating the Interval column
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
 
 	df.rename(columns={'period_end': 'Data', 'ghi': 'Radiatie', "air_temp": "Temperatura", "cloud_opacity": "Nori", "azimuth": "Azimuth", "zenith": "Zenith", "dewpoint_temp": "Dewpoint", "relative_humidity": "Umiditate"}, inplace=True)
@@ -4805,6 +4785,7 @@ def predicting_exporting_Dragosel_15min(interval_from, interval_to, limitation_p
 	# Create the 'Lookup' column by concatenating the 'Data' and 'Interval' columns
 	# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
 	df['Lookup'] = df["Data"].dt.strftime('%d.%m.%Y') + df["Interval"].astype(str)
+	df["Data_UTC"] = data_utc
 	df.to_excel(file_path, index=False)
 	return dataset
 
@@ -4916,15 +4897,11 @@ def predicting_exporting_GESS_15min(interval_from, interval_to, limitation_perce
 	# Creating the forecast_dataset df
 	df= pd.read_csv('./GESS/Solcast/Brezoaia_15min.csv')
 	# Convert the 'period_end' column to datetime, handling errors
-	df['period_end'] = pd.to_datetime(df['period_end'], errors='coerce', format='%Y-%m-%dT%H:%M:%SZ')
+	from forecast_time import solcast_times, utc_strings
+	period_end = solcast_times(df["period_end"])
+	data_utc = utc_strings(period_end)
+	df["period_end"] = period_end.dt.tz_localize(None)
 
-	# Drop any rows with NaT in 'period_end'
-	df.dropna(subset=['period_end'], inplace=True)
-
-	# Shift the 'period_end' column by 2 hours
-	df['period_end'] = df['period_end'] + pd.Timedelta(hours=3)
-
-	# Creating the Interval column
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
 
 	df.rename(columns={'period_end': 'Data', 'ghi': 'Radiatie', "air_temp": "Temperatura", "cloud_opacity": "Nori", "azimuth": "Azimuth", "zenith": "Zenith", "dewpoint_temp": "Dewpoint", "relative_humidity": "Umiditate"}, inplace=True)
@@ -5007,6 +4984,7 @@ def predicting_exporting_GESS_15min(interval_from, interval_to, limitation_perce
 	# Create the 'Lookup' column by concatenating the 'Data' and 'Interval' columns
 	# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
 	df['Lookup'] = df["Data"].dt.strftime('%d.%m.%Y') + df["Interval"].astype(str)
+	df["Data_UTC"] = data_utc
 	df.to_excel(file_path, index=False)
 	return dataset
 
@@ -5014,15 +4992,11 @@ def predicting_exporting_NRG_15min(interval_from, interval_to, limitation_percen
 	# Creating the forecast_dataset df
 	df= pd.read_csv('./NRG/Solcast/Mihaesti_15min.csv')
 	# Convert the 'period_end' column to datetime, handling errors
-	df['period_end'] = pd.to_datetime(df['period_end'], errors='coerce', format='%Y-%m-%dT%H:%M:%SZ')
+	from forecast_time import solcast_times, utc_strings
+	period_end = solcast_times(df["period_end"])
+	data_utc = utc_strings(period_end)
+	df["period_end"] = period_end.dt.tz_localize(None)
 
-	# Drop any rows with NaT in 'period_end'
-	df.dropna(subset=['period_end'], inplace=True)
-
-	# Shift the 'period_end' column by 2 hours
-	df['period_end'] = df['period_end'] + pd.Timedelta(hours=3)
-
-	# Creating the Interval column
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
 
 	df.rename(columns={'period_end': 'Data', 'ghi': 'Radiatie', "air_temp": "Temperatura", "cloud_opacity": "Nori", "azimuth": "Azimuth", "zenith": "Zenith", "dewpoint_temp": "Dewpoint", "relative_humidity": "Umiditate"}, inplace=True)
@@ -5105,6 +5079,7 @@ def predicting_exporting_NRG_15min(interval_from, interval_to, limitation_percen
 	# Create the 'Lookup' column by concatenating the 'Data' and 'Interval' columns
 	# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
 	df['Lookup'] = df["Data"].dt.strftime('%d.%m.%Y') + df["Interval"].astype(str)
+	df["Data_UTC"] = data_utc
 	df.to_excel(file_path, index=False)
 	return dataset
 
@@ -5112,15 +5087,11 @@ def predicting_exporting_Sun_Grow_Lucia_15min(interval_from, interval_to, limita
 	# Creating the forecast_dataset df
 	df= pd.read_csv('./Sun_Grow_Lucia/Solcast/Vulcan_15min.csv')
 	# Convert the 'period_end' column to datetime, handling errors
-	df['period_end'] = pd.to_datetime(df['period_end'], errors='coerce', format='%Y-%m-%dT%H:%M:%SZ')
+	from forecast_time import solcast_times, utc_strings
+	period_end = solcast_times(df["period_end"])
+	data_utc = utc_strings(period_end)
+	df["period_end"] = period_end.dt.tz_localize(None)
 
-	# Drop any rows with NaT in 'period_end'
-	df.dropna(subset=['period_end'], inplace=True)
-
-	# Shift the 'period_end' column by 2 hours
-	df['period_end'] = df['period_end'] + pd.Timedelta(hours=3)
-
-	# Creating the Interval column
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
 
 	df.rename(columns={'period_end': 'Data', 'ghi': 'Radiatie', "air_temp": "Temperatura", "cloud_opacity": "Nori", "azimuth": "Azimuth", "zenith": "Zenith", "dewpoint_temp": "Dewpoint", "relative_humidity": "Umiditate"}, inplace=True)
@@ -5203,6 +5174,7 @@ def predicting_exporting_Sun_Grow_Lucia_15min(interval_from, interval_to, limita
 	# Create the 'Lookup' column by concatenating the 'Data' and 'Interval' columns
 	# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
 	df['Lookup'] = df["Data"].dt.strftime('%d.%m.%Y') + df["Interval"].astype(str)
+	df["Data_UTC"] = data_utc
 	df.to_excel(file_path, index=False)
 	return dataset
 
@@ -5210,15 +5182,11 @@ def predicting_exporting_Photovoltaic_Energy_Project_15min(interval_from, interv
 	# Creating the forecast_dataset df
 	df= pd.read_csv('./Photovoltaic_Energy_Project/Solcast/Racari_15min.csv')
 	# Convert the 'period_end' column to datetime, handling errors
-	df['period_end'] = pd.to_datetime(df['period_end'], errors='coerce', format='%Y-%m-%dT%H:%M:%SZ')
+	from forecast_time import solcast_times, utc_strings
+	period_end = solcast_times(df["period_end"])
+	data_utc = utc_strings(period_end)
+	df["period_end"] = period_end.dt.tz_localize(None)
 
-	# Drop any rows with NaT in 'period_end'
-	df.dropna(subset=['period_end'], inplace=True)
-
-	# Shift the 'period_end' column by 2 hours
-	df['period_end'] = df['period_end'] + pd.Timedelta(hours=3)
-
-	# Creating the Interval column
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
 
 	df.rename(columns={'period_end': 'Data', 'ghi': 'Radiatie', "air_temp": "Temperatura", "cloud_opacity": "Nori", "azimuth": "Azimuth", "zenith": "Zenith", "dewpoint_temp": "Dewpoint", "relative_humidity": "Umiditate"}, inplace=True)
@@ -5301,6 +5269,7 @@ def predicting_exporting_Photovoltaic_Energy_Project_15min(interval_from, interv
 	# Create the 'Lookup' column by concatenating the 'Data' and 'Interval' columns
 	# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
 	df['Lookup'] = df["Data"].dt.strftime('%d.%m.%Y') + df["Interval"].astype(str)
+	df["Data_UTC"] = data_utc
 	df.to_excel(file_path, index=False)
 	return dataset
 
@@ -5308,15 +5277,11 @@ def predicting_exporting_MM_MV_15min(interval_from, interval_to, limitation_perc
 	# Creating the forecast_dataset df
 	df= pd.read_csv('./MM_MV/Solcast/Reghin_15min.csv')
 	# Convert the 'period_end' column to datetime, handling errors
-	df['period_end'] = pd.to_datetime(df['period_end'], errors='coerce', format='%Y-%m-%dT%H:%M:%SZ')
+	from forecast_time import solcast_times, utc_strings
+	period_end = solcast_times(df["period_end"])
+	data_utc = utc_strings(period_end)
+	df["period_end"] = period_end.dt.tz_localize(None)
 
-	# Drop any rows with NaT in 'period_end'
-	df.dropna(subset=['period_end'], inplace=True)
-
-	# Shift the 'period_end' column by 2 hours
-	df['period_end'] = df['period_end'] + pd.Timedelta(hours=3)
-
-	# Creating the Interval column
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
 
 	df.rename(columns={'period_end': 'Data', 'ghi': 'Radiatie', "air_temp": "Temperatura", "cloud_opacity": "Nori", "azimuth": "Azimuth", "zenith": "Zenith", "dewpoint_temp": "Dewpoint", "relative_humidity": "Umiditate"}, inplace=True)
@@ -5399,6 +5364,7 @@ def predicting_exporting_MM_MV_15min(interval_from, interval_to, limitation_perc
 	# Create the 'Lookup' column by concatenating the 'Data' and 'Interval' columns
 	# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
 	df['Lookup'] = df["Data"].dt.strftime('%d.%m.%Y') + df["Interval"].astype(str)
+	df["Data_UTC"] = data_utc
 	df.to_excel(file_path, index=False)
 	return dataset
 
@@ -5462,6 +5428,7 @@ def predicting_exporting_AnaSun_15min(
 
 	result = df[["Data", "Interval"]].copy()
 	result["Prediction"] = predictions
+	result["Data_UTC"] = period_end.dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 	result["Lookup"] = (
 		result["Data"].dt.strftime("%d.%m.%Y") + result["Interval"].astype(str)
 	)
@@ -5530,6 +5497,7 @@ def predicting_exporting_GCSP_15min(
 
 	result = df[["Data", "Interval"]].copy()
 	result["Prediction"] = predictions
+	result["Data_UTC"] = period_end.dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 	result["Lookup"] = (
 		result["Data"].dt.strftime("%d.%m.%Y") + result["Interval"].astype(str)
 	)
@@ -5540,15 +5508,11 @@ def predicting_exporting_Rosiori_15min(interval_from, interval_to, limitation_pe
 	# Creating the forecast_dataset df
 	df= pd.read_csv('./Rosiori/Solcast/Rosiori_15min.csv')
 	# Convert the 'period_end' column to datetime, handling errors
-	df['period_end'] = pd.to_datetime(df['period_end'], errors='coerce', format='%Y-%m-%dT%H:%M:%SZ')
+	from forecast_time import solcast_times, utc_strings
+	period_end = solcast_times(df["period_end"])
+	data_utc = utc_strings(period_end)
+	df["period_end"] = period_end.dt.tz_localize(None)
 
-	# Drop any rows with NaT in 'period_end'
-	df.dropna(subset=['period_end'], inplace=True)
-
-	# Shift the 'period_end' column by 2 hours
-	df['period_end'] = df['period_end'] + pd.Timedelta(hours=3)
-
-	# Creating the Interval column
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
 
 	df.rename(columns={'period_end': 'Data', 'ghi': 'Radiatie', "air_temp": "Temperatura", "cloud_opacity": "Nori", "azimuth": "Azimuth", "zenith": "Zenith", "dewpoint_temp": "Dewpoint", "relative_humidity": "Umiditate"}, inplace=True)
@@ -5631,6 +5595,7 @@ def predicting_exporting_Rosiori_15min(interval_from, interval_to, limitation_pe
 	# Create the 'Lookup' column by concatenating the 'Data' and 'Interval' columns
 	# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
 	df['Lookup'] = df["Data"].dt.strftime('%d.%m.%Y') + df["Interval"].astype(str)
+	df["Data_UTC"] = data_utc
 	df.to_excel(file_path, index=False)
 	return dataset
 
@@ -5638,15 +5603,11 @@ def predicting_exporting_Necaluxan_15min(interval_from, interval_to, limitation_
 	# Creating the forecast_dataset df
 	df= pd.read_csv('./Necaluxan/Solcast/Salcioara_15min.csv')
 	# Convert the 'period_end' column to datetime, handling errors
-	df['period_end'] = pd.to_datetime(df['period_end'], errors='coerce', format='%Y-%m-%dT%H:%M:%SZ')
+	from forecast_time import solcast_times, utc_strings
+	period_end = solcast_times(df["period_end"])
+	data_utc = utc_strings(period_end)
+	df["period_end"] = period_end.dt.tz_localize(None)
 
-	# Drop any rows with NaT in 'period_end'
-	df.dropna(subset=['period_end'], inplace=True)
-
-	# Shift the 'period_end' column by 2 hours
-	df['period_end'] = df['period_end'] + pd.Timedelta(hours=3)
-
-	# Creating the Interval column
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
 
 	df.rename(columns={'period_end': 'Data', 'ghi': 'Radiatie', "air_temp": "Temperatura", "cloud_opacity": "Nori", "azimuth": "Azimuth", "zenith": "Zenith", "dewpoint_temp": "Dewpoint", "relative_humidity": "Umiditate"}, inplace=True)
@@ -5729,6 +5690,7 @@ def predicting_exporting_Necaluxan_15min(interval_from, interval_to, limitation_
 	# Create the 'Lookup' column by concatenating the 'Data' and 'Interval' columns
 	# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
 	df['Lookup'] = df["Data"].dt.strftime('%d.%m.%Y') + df["Interval"].astype(str)
+	df["Data_UTC"] = data_utc
 	df.to_excel(file_path, index=False)
 	return dataset
 
@@ -5736,15 +5698,11 @@ def predicting_exporting_Adrem_15min(interval_from, interval_to, limitation_perc
 	# Creating the forecast_dataset df
 	df= pd.read_csv('./Adrem/Solcast/Apold_15min.csv')
 	# Convert the 'period_end' column to datetime, handling errors
-	df['period_end'] = pd.to_datetime(df['period_end'], errors='coerce', format='%Y-%m-%dT%H:%M:%SZ')
+	from forecast_time import solcast_times, utc_strings
+	period_end = solcast_times(df["period_end"])
+	data_utc = utc_strings(period_end)
+	df["period_end"] = period_end.dt.tz_localize(None)
 
-	# Drop any rows with NaT in 'period_end'
-	df.dropna(subset=['period_end'], inplace=True)
-
-	# Shift the 'period_end' column by 2 hours
-	df['period_end'] = df['period_end'] + pd.Timedelta(hours=3)
-
-	# Creating the Interval column
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
 
 	df.rename(columns={'period_end': 'Data', 'ghi': 'Radiatie', "air_temp": "Temperatura", "cloud_opacity": "Nori", "azimuth": "Azimuth", "zenith": "Zenith", "dewpoint_temp": "Dewpoint", "relative_humidity": "Umiditate"}, inplace=True)
@@ -5827,6 +5785,7 @@ def predicting_exporting_Adrem_15min(interval_from, interval_to, limitation_perc
 	# Create the 'Lookup' column by concatenating the 'Data' and 'Interval' columns
 	# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
 	df['Lookup'] = df["Data"].dt.strftime('%d.%m.%Y') + df["Interval"].astype(str)
+	df["Data_UTC"] = data_utc
 	df.to_excel(file_path, index=False)
 	return dataset
 
@@ -5834,15 +5793,11 @@ def predicting_exporting_Anto_15min(interval_from, interval_to, limitation_perce
 	# Creating the forecast_dataset df
 	df= pd.read_csv('./Anto/Solcast/Uileacu_15min.csv')
 	# Convert the 'period_end' column to datetime, handling errors
-	df['period_end'] = pd.to_datetime(df['period_end'], errors='coerce', format='%Y-%m-%dT%H:%M:%SZ')
+	from forecast_time import solcast_times, utc_strings
+	period_end = solcast_times(df["period_end"])
+	data_utc = utc_strings(period_end)
+	df["period_end"] = period_end.dt.tz_localize(None)
 
-	# Drop any rows with NaT in 'period_end'
-	df.dropna(subset=['period_end'], inplace=True)
-
-	# Shift the 'period_end' column by 2 hours
-	df['period_end'] = df['period_end'] + pd.Timedelta(hours=3)
-
-	# Creating the Interval column
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
 
 	df.rename(columns={'period_end': 'Data', 'ghi': 'Radiatie', "air_temp": "Temperatura", "cloud_opacity": "Nori", "azimuth": "Azimuth", "zenith": "Zenith", "dewpoint_temp": "Dewpoint", "relative_humidity": "Umiditate"}, inplace=True)
@@ -5925,6 +5880,7 @@ def predicting_exporting_Anto_15min(interval_from, interval_to, limitation_perce
 	# Create the 'Lookup' column by concatenating the 'Data' and 'Interval' columns
 	# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
 	df['Lookup'] = df["Data"].dt.strftime('%d.%m.%Y') + df["Interval"].astype(str)
+	df["Data_UTC"] = data_utc
 	df.to_excel(file_path, index=False)
 	return dataset
 
@@ -6030,15 +5986,11 @@ def predicting_exporting_HNG_15min(interval_from, interval_to, limitation_percen
 	# Creating the forecast_dataset df
 	df= pd.read_csv('./HNG/Solcast/Mures_15min.csv')
 	# Convert the 'period_end' column to datetime, handling errors
-	df['period_end'] = pd.to_datetime(df['period_end'], errors='coerce', format='%Y-%m-%dT%H:%M:%SZ')
+	from forecast_time import solcast_times, utc_strings
+	period_end = solcast_times(df["period_end"])
+	data_utc = utc_strings(period_end)
+	df["period_end"] = period_end.dt.tz_localize(None)
 
-	# Drop any rows with NaT in 'period_end'
-	df.dropna(subset=['period_end'], inplace=True)
-
-	# Shift the 'period_end' column by 2 hours
-	df['period_end'] = df['period_end'] + pd.Timedelta(hours=3)
-
-	# Creating the Interval column
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
 
 	df.rename(columns={'period_end': 'Data', 'ghi': 'Radiatie', "air_temp": "Temperatura", "cloud_opacity": "Nori", "azimuth": "Azimuth", "zenith": "Zenith", "dewpoint_temp": "Dewpoint", "relative_humidity": "Umiditate"}, inplace=True)
@@ -6121,6 +6073,7 @@ def predicting_exporting_HNG_15min(interval_from, interval_to, limitation_percen
 	# Create the 'Lookup' column by concatenating the 'Data' and 'Interval' columns
 	# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
 	df['Lookup'] = df["Data"].dt.strftime('%d.%m.%Y') + df["Interval"].astype(str)
+	df["Data_UTC"] = data_utc
 	df.to_excel(file_path, index=False)
 	return dataset
 
@@ -6128,15 +6081,11 @@ def predicting_exporting_Ferma_15min(interval_from, interval_to, limitation_perc
 	# Creating the forecast_dataset df
 	df= pd.read_csv('./Ferma/Solcast/Axintele_15min.csv')
 	# Convert the 'period_end' column to datetime, handling errors
-	df['period_end'] = pd.to_datetime(df['period_end'], errors='coerce', format='%Y-%m-%dT%H:%M:%SZ')
+	from forecast_time import solcast_times, utc_strings
+	period_end = solcast_times(df["period_end"])
+	data_utc = utc_strings(period_end)
+	df["period_end"] = period_end.dt.tz_localize(None)
 
-	# Drop any rows with NaT in 'period_end'
-	df.dropna(subset=['period_end'], inplace=True)
-
-	# Shift the 'period_end' column by 2 hours
-	df['period_end'] = df['period_end'] + pd.Timedelta(hours=3)
-
-	# Creating the Interval column
 	df['Interval'] = df.period_end.dt.hour * 4 + df.period_end.dt.minute // 15 + 1
 
 	df.rename(columns={'period_end': 'Data', 'ghi': 'Radiatie', "air_temp": "Temperatura", "cloud_opacity": "Nori", "azimuth": "Azimuth", "zenith": "Zenith", "dewpoint_temp": "Dewpoint", "relative_humidity": "Umiditate"}, inplace=True)
@@ -6219,6 +6168,7 @@ def predicting_exporting_Ferma_15min(interval_from, interval_to, limitation_perc
 	# Create the 'Lookup' column by concatenating the 'Data' and 'Interval' columns
 	# Format the 'Data' column as a string in 'dd.mm.yyyy' format for concatenation
 	df['Lookup'] = df["Data"].dt.strftime('%d.%m.%Y') + df["Interval"].astype(str)
+	df["Data_UTC"] = data_utc
 	df.to_excel(file_path, index=False)
 	return dataset
 
