@@ -16,7 +16,7 @@ def verify(*, refresh_weather=False):
     import portfolio_intraday as intraday
     from forecast_time import delivery_times
     from incuba_intraday import get_latest_incuba_forecast_origin, predict_incuba_intraday
-    from portfolio_export import ASSET_FILES, CORRECTIONS, build_quarter_hourly_portfolio, aggregate_hourly_portfolio
+    from portfolio_export import ASSET_FILES, CORRECTIONS, build_quarter_hourly_portfolio, aggregate_hourly_portfolio, write_portfolio_excel
 
     root = Path(__file__).resolve().parents[1]
     original = Path.cwd()
@@ -106,10 +106,11 @@ def verify(*, refresh_weather=False):
             for frame in (quarters, hours):
                 assert np.isfinite(frame.filter(like="Prediction_").to_numpy()).all()
                 output = io.BytesIO()
-                frame.to_excel(output, index=False)
+                write_portfolio_excel(frame, output)
                 output.seek(0)
                 reread = pd.read_excel(output)
                 assert len(frame) == len(reread)
+                assert reread.Data.eq(reread.Data.dt.normalize()).all()
             report["export"] = {"quarters": len(quarters), "hours": len(hours),
                                 "assets": len(quarters.filter(like="Prediction_").columns),
                                 "duplicate_utc": int(quarters.Data_UTC.duplicated().sum())}

@@ -444,12 +444,12 @@ def flows_crossborders(start_cet, end_cet):
 
 # Creating a single Excel file with all the forecasts
 def create_excel_file_with_all_forecasts(quarter_hourly=None, **intraday_options):
-	from portfolio_export import aggregate_hourly_portfolio
+	from portfolio_export import aggregate_hourly_portfolio, write_portfolio_excel
 
 	if quarter_hourly is None:
 		quarter_hourly = create_excel_file_with_all_forecasts_15min(**intraday_options)
 	df_all = aggregate_hourly_portfolio(quarter_hourly)
-	df_all.to_excel("./Forecast.xlsx", index=False)
+	write_portfolio_excel(df_all, "./Forecast.xlsx")
 	return df_all
 
 
@@ -471,6 +471,7 @@ def create_excel_file_with_all_forecasts_15min(
 ):
 	from portfolio_export import (
 		build_quarter_hourly_portfolio,
+		write_portfolio_excel,
 		RENEWABLE_ENERGY_HOLDING_START,
 		RENEWABLE_ENERGY_HOLDING_RESULTS_PATH,
 	)
@@ -499,7 +500,7 @@ def create_excel_file_with_all_forecasts_15min(
 		].rename(columns={"Prediction_Renewable_Energy_Holding": "Prediction"})
 		RENEWABLE_ENERGY_HOLDING_RESULTS_PATH.parent.mkdir(parents=True, exist_ok=True)
 		renewable.to_excel(RENEWABLE_ENERGY_HOLDING_RESULTS_PATH, index=False)
-	df_all.to_excel("./Forecast_15min.xlsx", index=False)
+	write_portfolio_excel(df_all, "./Forecast_15min.xlsx")
 	return df_all
 
 

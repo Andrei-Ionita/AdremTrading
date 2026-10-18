@@ -12,7 +12,7 @@ import ml
 import portfolio_intraday as intraday
 from forecast_time import delivery_times, local_day_end, round_delivery, utc_strings
 from incuba_intraday import predict_incuba_intraday
-from portfolio_export import ASSET_FILES, CORRECTIONS, aggregate_hourly_portfolio, build_quarter_hourly_portfolio
+from portfolio_export import ASSET_FILES, CORRECTIONS, aggregate_hourly_portfolio, build_quarter_hourly_portfolio, write_portfolio_excel
 
 
 def baseline(times, prediction=0.1):
@@ -72,10 +72,13 @@ class ForecastDstTests(unittest.TestCase):
                     self.assertAlmostEqual(result[column].sum(), hourly[column].sum())
                 for output in (result, hourly):
                     buffer = io.BytesIO()
-                    output.to_excel(buffer, index=False)
+                    write_portfolio_excel(output, buffer)
                     buffer.seek(0)
                     reread = pd.read_excel(buffer)
                     self.assertEqual(reread.Data_UTC.tolist(), output.Data_UTC.tolist())
+                    self.assertTrue(reread.Data.eq(reread.Data.dt.normalize()).all())
+                    self.assertEqual(reread.Interval.tolist(), output.Interval.tolist())
+                    self.assertFalse(reread.Lookup.duplicated().any())
 
     def test_every_correction_survives_future_dst_rows(self):
         origin = pd.Timestamp("2026-10-18 12:00", tz="Europe/Bucharest")

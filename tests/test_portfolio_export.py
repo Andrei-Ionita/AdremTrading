@@ -5,10 +5,12 @@ from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
+from openpyxl import load_workbook
 
 from portfolio_export import (
     ASSET_FILES, CORRECTIONS, RENEWABLE_ENERGY_HOLDING_SCALE,
     aggregate_hourly_portfolio, build_quarter_hourly_portfolio,
+    write_portfolio_excel,
 )
 from incuba_intraday import ADREM_TO_INCUBA_SCALE
 from portfolio_intraday import START_FOTOVOLTAICE_SCALE
@@ -47,6 +49,30 @@ class PortfolioExportTests(unittest.TestCase):
         np.testing.assert_array_equal(result['Prediction_AnaSun'], frame['Prediction'])
         self.assertFalse(result.isna().any().any())
         self.assertEqual(result['Lookup'].iloc[0], '28.09.202651')
+
+    def test_download_date_cells_have_no_time_value_or_time_format(self):
+        quarters = self.build()
+        for frame in (quarters, aggregate_hourly_portfolio(quarters)):
+            original = frame.copy(deep=True)
+            buffer = io.BytesIO()
+            write_portfolio_excel(frame, buffer)
+            pd.testing.assert_frame_equal(frame, original)
+            buffer.seek(0)
+            workbook = load_workbook(buffer)
+            for row in workbook.active.iter_rows(min_row=2, max_col=1):
+                cell = row[0]
+                self.assertEqual(cell.value.hour, 0)
+                self.assertEqual(cell.value.minute, 0)
+                self.assertEqual(cell.value.second, 0)
+                self.assertEqual(cell.number_format.lower(), 'yyyy-mm-dd')
+            workbook.close()
+            buffer.seek(0)
+            reread = pd.read_excel(buffer)
+            self.assertEqual(reread.Data.tolist(), frame.Data.dt.normalize().tolist())
+            self.assertEqual(reread.Interval.tolist(), frame.Interval.tolist())
+            self.assertEqual(reread.Data_UTC.tolist(), frame.Data_UTC.tolist())
+            self.assertEqual(reread.Lookup.tolist(), frame.Lookup.tolist())
+            np.testing.assert_allclose(reread.filter(like='Prediction_'), frame.filter(like='Prediction_'))
 
     def test_all_14_active_corrections_reach_both_excel_downloads(self):
         self.set_horizon(pd.date_range('2026-10-05 12:15', '2026-10-06 14:00', freq='15min'))

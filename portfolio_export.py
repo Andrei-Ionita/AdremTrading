@@ -157,6 +157,16 @@ def build_quarter_hourly_portfolio(enabled_corrections):
     return result.reset_index(drop=True)
 
 
+def write_portfolio_excel(frame, destination):
+    """Export calendar dates without altering internal delivery timestamps."""
+    exported = frame.copy()
+    dates = pd.to_datetime(exported["Data"], errors="raise", format="mixed")
+    if dates.dt.tz is not None:
+        dates = dates.dt.tz_convert("Europe/Bucharest")
+    exported["Data"] = dates.dt.date
+    exported.to_excel(destination, index=False)
+
+
 def aggregate_hourly_portfolio(quarters):
     stamps = _timestamps(quarters)
     if stamps.duplicated().any():
