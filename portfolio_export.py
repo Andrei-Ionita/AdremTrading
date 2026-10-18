@@ -158,8 +158,8 @@ def build_quarter_hourly_portfolio(enabled_corrections):
 
 
 def write_portfolio_excel(frame, destination):
-    """Export calendar dates without altering internal delivery timestamps."""
-    exported = frame.copy()
+    """Export date/interval columns without exposing internal UTC timestamps."""
+    exported = frame.drop(columns=["Data_UTC"], errors="ignore").copy()
     dates = pd.to_datetime(exported["Data"], errors="raise", format="mixed")
     if dates.dt.tz is not None:
         dates = dates.dt.tz_convert("Europe/Bucharest")

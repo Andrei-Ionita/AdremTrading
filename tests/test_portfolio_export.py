@@ -70,7 +70,8 @@ class PortfolioExportTests(unittest.TestCase):
             reread = pd.read_excel(buffer)
             self.assertEqual(reread.Data.tolist(), frame.Data.dt.normalize().tolist())
             self.assertEqual(reread.Interval.tolist(), frame.Interval.tolist())
-            self.assertEqual(reread.Data_UTC.tolist(), frame.Data_UTC.tolist())
+            self.assertNotIn('Data_UTC', reread.columns)
+            self.assertEqual(reread.columns.tolist(), [column for column in frame if column != 'Data_UTC'])
             self.assertEqual(reread.Lookup.tolist(), frame.Lookup.tolist())
             np.testing.assert_allclose(reread.filter(like='Prediction_'), frame.filter(like='Prediction_'))
 
@@ -93,7 +94,7 @@ class PortfolioExportTests(unittest.TestCase):
             self.assertAlmostEqual(hour[column], 0.04 * (i + 1))
         for frame in (result, hourly):
             buffer = io.BytesIO()
-            frame.to_excel(buffer, index=False)
+            write_portfolio_excel(frame, buffer)
             buffer.seek(0)
             reread = pd.read_excel(buffer)
             self.assertFalse(reread.filter(like='Prediction_').isna().any().any())
@@ -190,7 +191,7 @@ class PortfolioExportTests(unittest.TestCase):
         self.assertFalse(result.isna().any().any())
         for frame in (result, hourly):
             buffer = io.BytesIO()
-            frame.to_excel(buffer, index=False)
+            write_portfolio_excel(frame, buffer)
             buffer.seek(0)
             reread = pd.read_excel(buffer)
             self.assertNotIn('Prediction_Motif', reread)

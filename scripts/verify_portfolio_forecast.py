@@ -111,6 +111,7 @@ def verify(*, refresh_weather=False):
                 reread = pd.read_excel(output)
                 assert len(frame) == len(reread)
                 assert reread.Data.eq(reread.Data.dt.normalize()).all()
+                assert "Data_UTC" not in reread.columns
             report["export"] = {"quarters": len(quarters), "hours": len(hours),
                                 "assets": len(quarters.filter(like="Prediction_").columns),
                                 "duplicate_utc": int(quarters.Data_UTC.duplicated().sum())}
