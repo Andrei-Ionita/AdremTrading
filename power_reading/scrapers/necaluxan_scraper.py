@@ -8,7 +8,12 @@ from pathlib import Path
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from playwright.sync_api import BrowserContext, TimeoutError as PlaywrightTimeoutError, sync_playwright
+from playwright.sync_api import (
+    BrowserContext,
+    Error as PlaywrightError,
+    TimeoutError as PlaywrightTimeoutError,
+    sync_playwright,
+)
 
 from power_reading.scrapers.fusionsolar_scraper import PowerSnapshot
 
@@ -21,6 +26,14 @@ _INITIAL_POWER_SETTLE_MS = 5_000
 _STABLE_POWER_SAMPLE_COUNT = 3
 _STABLE_POWER_ABSOLUTE_TOLERANCE_KW = 50.0
 _STABLE_POWER_RELATIVE_TOLERANCE = 0.01
+_VCOM_PORTAL_RE = re.compile(r"^https://www1\.meteocontrol\.de/vcom/(?![^?#]*login)")
+_VCOM_LOGIN_DESTINATION_RE = re.compile(
+    r"^https://(?:auth\.meteocontrol\.com/|www1\.meteocontrol\.de/vcom/(?![^?#]*login))"
+)
+
+
+def _is_navigation_error(exc: PlaywrightError) -> bool:
+    return "execution context was destroyed" in str(exc).lower()
 
 
 class NecaluxanReadOnlyError(RuntimeError):
@@ -145,6 +158,23 @@ class NecaluxanScraper:
             )
 
     def _login_vcom(self, page) -> None:
+        # Redirects can replace the document between a locator check and its use.
+        # Reinspect the current page; never reload the login URL during recovery.
+        for attempt in range(3):
+            try:
+                self._login_vcom_once(page)
+                return
+            except PlaywrightError as exc:
+                if not _is_navigation_error(exc):
+                    raise
+                if attempt == 2:
+                    raise NecaluxanReadOnlyError(
+                        "VCOM login kept redirecting while its form was being inspected."
+                    ) from exc
+                page.wait_for_timeout(250)
+
+    def _login_vcom_once(self, page) -> None:
+        page.wait_for_load_state("domcontentloaded")
         legacy_form = page.locator("form[action*='/vcom/login/process']")
         if "/default/login/" in page.url:
             try:
@@ -160,23 +190,23 @@ class NecaluxanScraper:
             legacy_form.locator("button[type='submit'][title='Login']").click()
             try:
                 page.wait_for_url(
-                    re.compile(r"auth\.meteocontrol\.com|/vcom/(?!default/login)"),
+                    _VCOM_LOGIN_DESTINATION_RE,
                     timeout=self.browser_timeout_ms,
                 )
             except PlaywrightTimeoutError as exc:
                 raise NecaluxanReadOnlyError(
-                    f"The initial VCOM login did not advance (url={page.url})."
+                    "The initial VCOM login did not advance."
                 ) from exc
 
         self._complete_meteocontrol_sso(page)
         try:
             page.wait_for_url(
-                re.compile(r"www1\.meteocontrol\.de/vcom/(?!.*login)"),
+                _VCOM_PORTAL_RE,
                 timeout=self.browser_timeout_ms,
             )
         except PlaywrightTimeoutError as exc:
             raise NecaluxanReadOnlyError(
-                f"VCOM login did not reach the authenticated portal (url={page.url})."
+                "VCOM login did not reach the authenticated portal."
             ) from exc
 
     def _dismiss_cookie_banner(self, page) -> None:
@@ -186,13 +216,20 @@ class NecaluxanScraper:
                 necessary.click()
         except PlaywrightTimeoutError:
             pass
+        except PlaywrightError as exc:
+            if not _is_navigation_error(exc):
+                raise
 
     def _complete_meteocontrol_sso(self, page) -> None:
         if "auth.meteocontrol.com" not in page.url:
             try:
-                page.wait_for_url(re.compile(r"auth\.meteocontrol\.com|/vcom/"), timeout=15_000)
-            except PlaywrightTimeoutError:
-                pass
+                page.wait_for_url(
+                    _VCOM_LOGIN_DESTINATION_RE, timeout=self.browser_timeout_ms
+                )
+            except PlaywrightTimeoutError as exc:
+                raise NecaluxanReadOnlyError(
+                    "VCOM did not reach its sign-in form or authenticated portal."
+                ) from exc
         if "auth.meteocontrol.com" not in page.url:
             return
 
@@ -200,9 +237,11 @@ class NecaluxanScraper:
         username.wait_for(state="visible")
         username.fill(self.username)
         password = page.locator("input#password")
-        if password.count() == 0:
+        if not password.is_visible():
             page.locator("input#kc-login[type='submit']").click()
             password.wait_for(state="visible")
+            # Username discovery can replace the form and clear the username.
+            username.fill(self.username)
         password.fill(self.password)
         page.locator("input#kc-login[type='submit']").click()
 
