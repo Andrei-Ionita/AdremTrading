@@ -98,5 +98,7 @@ database key. Missing active power is an error, not a zero-production sample.
 Use `scripts/fusionsolar_reauthenticate.py --assets ulmeni --ssh-target ...`
 when human verification is required, then repeat with `--verify-only` to test
 the encrypted saved session. Set `ULMENI_ENABLED=true` only after live validation.
-The forecast cap (4.35 MW), 50% downward-gap guardrail and decay are unchanged.
+The forecast cap (4.35 MW) and correction decay are unchanged. The portfolio-wide
+50% downward-gap guardrail has been removed: valid production below half the
+forecast now receives the same decaying correction as other measurements.
 Negative FusionSolar generation is rejected, not interpreted as grid import.

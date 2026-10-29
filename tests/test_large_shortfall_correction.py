@@ -1,5 +1,4 @@
 import unittest
-from dataclasses import replace
 from functools import partial
 from unittest.mock import patch
 
@@ -25,8 +24,8 @@ def baseline(value):
                          'Prediction': value})
 
 
-class CurtailmentGuardrailTests(unittest.TestCase):
-    def test_reported_necaluxan_and_mm_mv_regressions_retain_daylight_baseline(self):
+class LargeShortfallCorrectionTests(unittest.TestCase):
+    def test_necaluxan_and_mm_mv_large_shortfalls_are_corrected(self):
         cases = (
             (portfolio.NECALUXAN_INTRADAY_CONFIG, [3.721, 3.458, 2.822, 2.428, 2.452], 0.2623623189166667),
             (portfolio.MM_MV_INTRADAY_CONFIG, [0.889, 0.787, 0.767, 0.625, 0.523], 0.02766094998653194),
@@ -36,11 +35,14 @@ class CurtailmentGuardrailTests(unittest.TestCase):
                 frame = baseline(0.0)
                 frame.loc[:4, 'Prediction'] = predictions
                 result = portfolio.predict_portfolio_intraday(config, frame, WEATHER, ORIGIN, actual)
-                np.testing.assert_allclose(result.Prediction_ID, frame.Prediction)
-                self.assertTrue(result.Correction.eq(0).all())
-                self.assertTrue(result.Correction_weight.eq(0).all())
+                weights = np.exp(-np.log(2) * np.arange(len(TARGETS)) * 15 / 120)
+                expected = np.maximum(frame.Prediction + weights * (actual - predictions[0]), 0)
+                np.testing.assert_allclose(result.Prediction_ID, np.round(expected, 3))
+                self.assertEqual(result.Prediction_ID.iloc[0], np.round(actual, 3))
+                self.assertEqual(result.Correction_weight.iloc[0], 1)
+                self.assertEqual(result.Correction_weight.iloc[8], 0.5)
 
-    def test_all_production_runners_write_guarded_results_without_reloading_models(self):
+    def test_all_production_runners_correct_large_shortfalls_without_reloading_models(self):
         special = {'elnet': elnet_intraday.run_elnet_intraday_forecast,
                    'horeco': horeco_intraday.run_horeco_intraday_forecast,
                    'hng': hng_intraday.run_hng_intraday_forecast}
@@ -57,47 +59,53 @@ class CurtailmentGuardrailTests(unittest.TestCase):
                 'pandas.read_csv', return_value=WEATHER
             ), patch.object(pd.DataFrame, 'to_excel') as write:
                 result = runner(now=ORIGIN, readings_getter=lambda *args, **kwargs: readings)
-                np.testing.assert_allclose(result.Prediction_ID, round(0.1*scale, 3))
-                self.assertTrue(result.Correction_weight.eq(0).all())
-                self.assertTrue(result.Correction.eq(0).all())
+                weights = np.exp(-np.log(2) * np.arange(len(TARGETS)) * 15 / 120)
+                expected = 0.1 * scale + weights * (0.001 - 0.1 * scale)
+                np.testing.assert_allclose(result.Prediction_ID, np.round(expected, 3))
+                self.assertEqual(result.Prediction_ID.iloc[0], 0.001)
+                self.assertEqual(result.Correction_weight.iloc[0], 1)
+                self.assertEqual(result.Correction_weight.iloc[8], 0.5)
+                self.assertTrue(result.Correction.lt(0).all())
                 write.assert_called_once()
 
-    def test_incuba_threshold_boundary_upward_and_zero_baseline(self):
-        for forecast, actual, guarded in ((0.1, 0, True), (0.1, 0.049999, True),
-                                          (0.1, 0.05, False), (0.1, 0.06, False),
-                                          (0.1, 0.2, False), (0, 0.02, False), (0, 0, False)):
+    def test_incuba_large_shortfall_former_boundary_upward_and_zero_baseline(self):
+        for forecast, actual in ((0.1, 0), (0.1, 0.01), (0.1, 0.049999),
+                                (0.1, 0.05), (0.1, 0.06),
+                                (0.1, 0.2), (0, 0.02), (0, 0)):
             with self.subTest(forecast=forecast, actual=actual):
                 result = incuba.predict_incuba_intraday(baseline(forecast/incuba.ADREM_TO_INCUBA_SCALE), WEATHER, ORIGIN, actual)
-                self.assertEqual(result.Prediction_ID.iloc[0], forecast if guarded else actual)
-                self.assertEqual(result.Correction_weight.iloc[0], 0 if guarded else 1)
+                self.assertEqual(result.Prediction_ID.iloc[0], np.round(actual, 3))
+                self.assertEqual(result.Correction_weight.iloc[0], 1)
+                self.assertEqual(result.Correction_weight.iloc[8], 0.5)
 
-    def test_guard_does_not_disable_injection_caps_or_nighttime_zeros(self):
+    def test_correction_preserves_injection_caps_and_nighttime_zeros(self):
         weather = WEATHER.copy()
         weather.loc[4:, 'ghi'] = 0
-        result = portfolio.predict_portfolio_intraday(portfolio.ANASUN_INTRADAY_CONFIG, baseline(2), weather, ORIGIN, 0)
+        result = portfolio.predict_portfolio_intraday(portfolio.ANASUN_INTRADAY_CONFIG, baseline(2), weather, ORIGIN, 3)
         self.assertTrue(result.Prediction_ID.iloc[:4].eq(1.875).all())
         self.assertTrue(result.Prediction_ID.iloc[4:].eq(0).all())
-        self.assertTrue(result.Correction_weight.eq(0).all())
+        self.assertEqual(result.Correction_weight.iloc[0], 1)
         np.testing.assert_allclose(result.Correction, result.Prediction_ID-result.Prediction_DAM)
-        result = incuba.predict_incuba_intraday(baseline(2), weather, ORIGIN, 0)
+        result = incuba.predict_incuba_intraday(baseline(2), weather, ORIGIN, 3)
         self.assertTrue(result.Prediction_ID.iloc[:4].eq(np.round(incuba.INCUBA_MAX_INTERVAL_ENERGY_MWH, 3)).all())
         self.assertTrue(result.Prediction_ID.iloc[4:].eq(0).all())
-        self.assertTrue(result.Correction_weight.eq(0).all())
+        self.assertEqual(result.Correction_weight.iloc[0], 1)
 
-    def test_zero_forecast_is_not_a_division_error_or_downward_guard(self):
+    def test_zero_forecast_can_be_corrected(self):
         for actual in (0, 0.1):
             result = portfolio.predict_portfolio_intraday(portfolio.NECALUXAN_INTRADAY_CONFIG, baseline(0), WEATHER, ORIGIN, actual)
             self.assertEqual(result.Prediction_ID.iloc[0], actual)
             self.assertEqual(result.Correction_weight.iloc[0], 1)
 
-    def test_original_threshold_configuration_validation_and_opt_out(self):
-        for threshold in (-0.1, 1.1, float('nan'), float('inf')):
-            config = replace(portfolio.NECALUXAN_INTRADAY_CONFIG, min_actual_to_forecast_ratio=threshold)
-            with self.subTest(threshold=threshold), self.assertRaises(portfolio.PortfolioIntradayInputError):
-                portfolio.predict_portfolio_intraday(config, baseline(1), WEATHER, ORIGIN, 0.01)
-        config = replace(portfolio.NECALUXAN_INTRADAY_CONFIG, min_actual_to_forecast_ratio=None)
-        result = portfolio.predict_portfolio_intraday(config, baseline(1), WEATHER, ORIGIN, 0.01)
-        self.assertEqual(result.Prediction_ID.iloc[0], 0.01)
+    def test_invalid_production_is_still_rejected(self):
+        for actual in (-0.1, float('nan'), float('inf')):
+            with self.subTest(actual=actual):
+                with self.assertRaises(portfolio.PortfolioIntradayInputError):
+                    portfolio.predict_portfolio_intraday(
+                        portfolio.NECALUXAN_INTRADAY_CONFIG, baseline(1), WEATHER, ORIGIN, actual
+                    )
+                with self.assertRaises(incuba.IncubaIntradayInputError):
+                    incuba.predict_incuba_intraday(baseline(1), WEATHER, ORIGIN, actual)
 
 
 if __name__ == '__main__':

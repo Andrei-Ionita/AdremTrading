@@ -307,7 +307,7 @@ class UlmeniFusionPowerTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "unavailable"):
                     scraper._read_required_pv_output_power(page)
 
-    def test_fusion_samples_drive_ulmeni_correction_with_existing_gap_guard(self):
+    def test_fusion_samples_drive_ulmeni_correction_including_large_shortfalls(self):
         origin = pd.Timestamp("2026-10-13 12:00", tz="Europe/Bucharest")
         targets = pd.date_range(origin + pd.Timedelta(minutes=15),
                                 origin.normalize() + pd.Timedelta(hours=23, minutes=45), freq="15min")
@@ -323,7 +323,7 @@ class UlmeniFusionPowerTests(unittest.TestCase):
         energy = calculate_interval_energy(ULMENI_INTRADAY_CONFIG, readings,
                                            origin - pd.Timedelta(minutes=15), origin)
         self.assertAlmostEqual(energy, 0.2)
-        for baseline, expected in ((0.3, 0.2), (0.1, 0.2), (0.5, 0.5)):
+        for baseline, expected in ((0.3, 0.2), (0.1, 0.2), (0.5, 0.2)):
             with self.subTest(baseline=baseline):
                 dam = pd.DataFrame({"Data": targets.tz_localize(None),
                                     "Interval": targets.hour * 4 + targets.minute // 15 + 1,
