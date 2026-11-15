@@ -13,7 +13,6 @@ from portfolio_export import (
     write_portfolio_excel,
 )
 from incuba_intraday import ADREM_TO_INCUBA_SCALE
-from portfolio_intraday import START_FOTOVOLTAICE_SCALE
 
 
 def forecast(times, values=0.25):
@@ -109,12 +108,14 @@ class PortfolioExportTests(unittest.TestCase):
         self.assertTrue(result['Prediction_AnaSun'].eq(0.3).all())
         self.assertEqual(result['Data'].iloc[0], self.times[1])
 
-    def test_derived_assets_use_uncorrected_parent_baseline(self):
+    def test_start_uses_own_baseline_independent_of_ulmeni_correction(self):
         _, path = CORRECTIONS['ulmeni']
         self.frames[str(path.resolve())] = pd.DataFrame({'Data': self.times, 'Prediction_ID': 0.8})
+        start_path = Path('Start Fotovoltaice/Results_Production_Start_Fotovoltaice_xgb_15min.xlsx').resolve()
+        self.frames[str(start_path)] = forecast(self.times, 0.123)
         result = self.build({'ulmeni': True})
         np.testing.assert_allclose(result['Prediction_SolEn_Ulmeni'], 0.8)
-        np.testing.assert_allclose(result['Prediction_Start_Fotovoltaice'], 0.25 * START_FOTOVOLTAICE_SCALE)
+        np.testing.assert_allclose(result['Prediction_Start_Fotovoltaice'], 0.123)
         np.testing.assert_allclose(result['Prediction_Incuba'], 0.25 * ADREM_TO_INCUBA_SCALE)
 
     def test_only_weather_confirmed_dark_gaps_are_filled(self):

@@ -113,25 +113,23 @@ ULMENI_INTRADAY_CONFIG = PortfolioIntradayConfig(
     ),
     max_interval_energy_mwh=4.35 / 4,
 )
-START_FOTOVOLTAICE_SCALE = 0.996 / 4.44
 START_FOTOVOLTAICE_INTRADAY_CONFIG = PortfolioIntradayConfig(
     asset_key="start_fotovoltaice",
     display_name="Start Fotovoltaice",
     dam_results_path=(
         APP_ROOT
-        / "Solar Energy Ulmeni"
-        / "Results_Production_SolarEnergy_xgb_15min.xlsx"
+        / "Start Fotovoltaice"
+        / "Results_Production_Start_Fotovoltaice_xgb_15min.xlsx"
     ),
     weather_path=(
-        APP_ROOT / "Solar Energy Ulmeni" / "Solcast" / "Oltenita_15min.csv"
+        APP_ROOT / "Start Fotovoltaice" / "Solcast" / "Borcea_15min.csv"
     ),
     intraday_results_path=(
         APP_ROOT
         / "Start Fotovoltaice"
-        / "Results_Production_Start_Fotovoltaice_Derived_Corrected_Intraday_15min.xlsx"
+        / "Results_Production_Start_Fotovoltaice_DAM_Corrected_Intraday_15min.xlsx"
     ),
     max_interval_energy_mwh=0.996 / 4,
-    baseline_scale=START_FOTOVOLTAICE_SCALE,
 )
 ANASUN_INTRADAY_CONFIG = PortfolioIntradayConfig(
     asset_key="anasun",

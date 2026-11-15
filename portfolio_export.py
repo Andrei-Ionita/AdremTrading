@@ -39,6 +39,7 @@ ASSET_FILES = (
     ("HNG", "HNG", "HNG", "Mures"),
     ("AnaSun", "AnaSun", "AnaSun", "Ulmi"),
     ("GCSP", "GCSP", "GCSP", "Nusfalau"),
+    ("Start_Fotovoltaice", "Start Fotovoltaice", "Start_Fotovoltaice", "Borcea"),
 )
 
 CORRECTIONS = {
@@ -125,7 +126,6 @@ def build_quarter_hourly_portfolio(enabled_corrections):
             result["Prediction_Elnet"] * RENEWABLE_ENERGY_HOLDING_SCALE
         ).where(~before_switch, 0.0)
     result["Prediction_Incuba"] = result["Prediction_Adrem"] * ADREM_TO_INCUBA_SCALE
-    result["Prediction_Start_Fotovoltaice"] = result["Prediction_SolEn_Ulmeni"] * intraday.START_FOTOVOLTAICE_SCALE
 
     for asset, (suffix, path) in CORRECTIONS.items():
         column = f"Prediction_{suffix}"

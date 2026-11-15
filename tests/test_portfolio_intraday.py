@@ -17,7 +17,6 @@ from portfolio_intraday import (
     MOTIF_INTRADAY_CONFIG,
     NECALUXAN_INTRADAY_CONFIG,
     START_FOTOVOLTAICE_INTRADAY_CONFIG,
-    START_FOTOVOLTAICE_SCALE,
     ULMENI_INTRADAY_CONFIG,
     PortfolioIntradayConfig,
     PortfolioIntradayInputError,
@@ -123,7 +122,7 @@ class PortfolioConfigurationTests(unittest.TestCase):
             self.assertTrue(config.dam_results_path.is_file())
             self.assertTrue(config.weather_path.is_file())
         self.assertEqual(ULMENI_INTRADAY_CONFIG.max_interval_energy_mwh, 1.0875)
-        self.assertEqual(START_FOTOVOLTAICE_SCALE, 0.996 / 4.44)
+        self.assertEqual(START_FOTOVOLTAICE_INTRADAY_CONFIG.baseline_scale, 1.0)
         self.assertEqual(
             START_FOTOVOLTAICE_INTRADAY_CONFIG.max_interval_energy_mwh,
             0.996 / 4,
@@ -133,13 +132,13 @@ class PortfolioConfigurationTests(unittest.TestCase):
 
 
 class PortfolioPredictionTests(unittest.TestCase):
-    def test_start_fotovoltaice_baseline_scales_ulmeni_forecast(self):
+    def test_start_fotovoltaice_uses_own_unscaled_forecast(self):
         result = predict_portfolio_intraday(
             START_FOTOVOLTAICE_INTRADAY_CONFIG,
-            dam_forecast(prediction=0.444),
+            dam_forecast(prediction=0.1),
             weather_for_origin(),
             ORIGIN,
-            0.0996,
+            0.1,
         )
 
         self.assertEqual(result["Prediction_DAM"].iloc[0], 0.1)

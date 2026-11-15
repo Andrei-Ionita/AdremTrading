@@ -10,7 +10,7 @@ import pandas as pd
 
 import ml
 import portfolio_intraday as intraday
-from forecast_time import delivery_times, local_day_end, round_delivery, utc_strings
+from forecast_time import delivery_times, delivery_intervals, local_day_end, round_delivery, utc_strings
 from incuba_intraday import predict_incuba_intraday
 from portfolio_export import ASSET_FILES, CORRECTIONS, aggregate_hourly_portfolio, build_quarter_hourly_portfolio, write_portfolio_excel
 
@@ -49,7 +49,9 @@ class ForecastDstTests(unittest.TestCase):
                         self.assertEqual(len(output), 100)
                         self.assertEqual(output.Data.duplicated().sum(), 4)
                         pd.testing.assert_index_equal(delivery_times(output), times, check_names=False)
-                        self.assertEqual(output.Interval.tolist(), (times.hour * 4 + times.minute // 15 + 1).tolist())
+                        expected_intervals = (delivery_intervals(times) if suffix == 'Start_Fotovoltaice'
+                                              else times.hour * 4 + times.minute // 15 + 1)
+                        self.assertEqual(output.Interval.tolist(), expected_intervals.tolist())
             finally:
                 os.chdir(previous)
 

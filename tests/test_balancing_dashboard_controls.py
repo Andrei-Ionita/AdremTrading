@@ -79,7 +79,7 @@ class DashboardControlsTests(unittest.TestCase):
             'Astro', 'Imperial', 'Kahraman', 'SunEnergy', 'SolarEnergy', 'Elnet',
             'Horeco', 'Dragosel', 'GESS', 'NRG', 'Sun_Grow_Lucia',
             'Photovoltaic_Energy_Project', 'MM_MV', 'Rosiori', 'Necaluxan',
-            'Adrem', 'Anto', 'Ferma', 'HNG', 'AnaSun', 'GCSP',
+            'Adrem', 'Anto', 'Ferma', 'HNG', 'AnaSun', 'Start_Fotovoltaice', 'GCSP',
         )
         self.assertEqual(app.session_state['predictions'],
                          [f'predicting_exporting_{asset}_15min' for asset in expected_assets])

@@ -28,6 +28,7 @@ from ml import fetching_Imperial_data, fetching_Astro_data, predicting_exporting
 from ml import uploading_onedrive_file, upload_file_with_retries, check_file_sync, predicting_exporting_SolarEnergy, predicting_exporting_SolarEnergy_15min, fetching_SolarEnergy_data, fetching_SolarEnergy_data_15min, fetching_Elnet_data, fetching_Elnet_data_15min, predicting_exporting_Elnet, predicting_exporting_Elnet_15min, fetching_Horeco_data, fetching_Horeco_data_15min, predicting_exporting_Horeco, predicting_exporting_Horeco_15min, fetching_3D_Steel_data, fetching_3D_Steel_data_15min, predicting_exporting_3D_Steel, predicting_exporting_3D_Steel_15min, fetching_GESS_data_15min, predicting_exporting_GESS_15min, predicting_exporting_NRG_15min, fetching_NRG_data_15min, fetching_Photovoltaic_Energy_Project_data_15min, predicting_exporting_Photovoltaic_Energy_Project_15min, predicting_exporting_Anto_15min
 from ml import fetching_MM_MV_data_15min, predicting_exporting_MM_MV_15min, fetching_Rosiori_data_15min, predicting_exporting_Rosiori_15min, fetching_Necaluxan_data_15min, predicting_exporting_Necaluxan_15min, fetching_Adrem_data_15min, predicting_exporting_Adrem_15min, fetching_Anto_data_15min, fetching_Ferma_data_15min, predicting_exporting_Ferma_15min, fetching_HNG_data_15min, predicting_exporting_HNG_15min
 from ml import fetching_AnaSun_data_15min, predicting_exporting_AnaSun_15min, fetching_GCSP_data_15min, predicting_exporting_GCSP_15min
+from ml import fetching_Start_Fotovoltaice_data_15min, predicting_exporting_Start_Fotovoltaice_15min
 from database import render_indisponibility_db_Kahraman, render_indisponibility_db_Astro, render_indisponibility_db_Imperial, render_indisponibility_db_SunEnergy, render_indisponibility_db_SolarEnergy, render_indisponibility_db_Elnet, render_indisponibility_db_Horeco, render_indisponibility_db_3D_Steel, render_indisponibility_db_Dragosel, render_indisponibility_db_GESS, render_indisponibility_db_NRG, render_indisponibility_db_Sun_Grow_Lucia, render_indisponibility_db_Photovoltaic_Energy_Project, render_indisponibility_db_MM_MV, render_indisponibility_db_Rosiori, render_indisponibility_db_Necaluxan, render_indisponibility_db_Adrem, render_indisponibility_db_Anto, render_indisponibility_db_Ferma, render_indisponibility_db_HNG
 from data_fetching.entsoe_newapi_data import fetch_process_wind_notified, fetch_process_wind_actual_production, fetch_process_solar_notified, fetch_process_solar_actual_production
 from data_fetching.entsoe_newapi_data import fetch_consumption_forecast, fetch_actual_consumption, render_test_entsoe_newapi_functions
@@ -60,7 +61,6 @@ from portfolio_intraday import (
 	MM_MV_INTRADAY_CONFIG,
 	NECALUXAN_INTRADAY_CONFIG,
 	START_FOTOVOLTAICE_INTRADAY_CONFIG,
-	START_FOTOVOLTAICE_SCALE,
 	ULMENI_INTRADAY_CONFIG,
 	PortfolioIntradayError,
 	run_portfolio_intraday_forecast,
@@ -990,6 +990,10 @@ def render_balancing_market_intraday_page():
 			# Forecasting AnaSun
 			fetching_AnaSun_data_15min()
 			st.dataframe(predicting_exporting_AnaSun_15min(1, 24, 0))
+
+			# Forecasting Start Fotovoltaice with its own model.
+			fetching_Start_Fotovoltaice_data_15min()
+			st.dataframe(predicting_exporting_Start_Fotovoltaice_15min(1, 24, 0))
 
 			# Forecasting GCSP
 			fetching_GCSP_data_15min()

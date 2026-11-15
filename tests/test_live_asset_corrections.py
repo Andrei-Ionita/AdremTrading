@@ -75,9 +75,9 @@ class LiveAssetCorrectionTests(unittest.TestCase):
                     self.assertTrue(np.isfinite(result.Prediction_ID).all())
                     self.assertTrue(result.Prediction_ID.ge(0).all())
 
-    def test_start_fotovoltaice_severe_shortfall_corrects_scaled_baseline(self):
+    def test_start_fotovoltaice_severe_shortfall_corrects_own_baseline(self):
         config = portfolio.START_FOTOVOLTAICE_INTRADAY_CONFIG
-        result = portfolio.predict_portfolio_intraday(config, baseline(0.216 / config.baseline_scale), WEATHER, ORIGIN, 0.015782475754)
+        result = portfolio.predict_portfolio_intraday(config, baseline(0.216), WEATHER, ORIGIN, 0.015782475754)
         self.assertEqual(result.Prediction_ID.iloc[0], 0.016)
         self.assertEqual(result.Prediction_ID.iloc[8], 0.116)
         self.assertTrue(result.Correction.lt(0).all())

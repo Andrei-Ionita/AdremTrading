@@ -102,3 +102,10 @@ The forecast cap (4.35 MW) and correction decay are unchanged. The portfolio-wid
 50% downward-gap guardrail has been removed: valid production below half the
 forecast now receives the same decaying correction as other measurements.
 Negative FusionSolar generation is rejected, not interpreted as grid import.
+
+Start Fotovoltaice uses its own `rs_xgb_start_fotovoltaice_prod_15min_1026.pkl`
+model and Borcea weather at latitude `44.331569`, longitude `27.746911`, not a
+scaled Ulmeni forecast. Optional `START_FOTOVOLTAICE_LATITUDE` and
+`START_FOTOVOLTAICE_LONGITUDE` environment variables override these coordinates. Its existing
+ADC `start_fotovoltaice` readings still correct the independently generated
+baseline; the 0.996 MW capacity bound and correction decay remain unchanged.

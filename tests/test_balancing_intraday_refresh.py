@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from unittest.mock import patch
+from pathlib import Path
 
 import pandas as pd
 
@@ -14,7 +15,6 @@ from portfolio_intraday import (
     ANASUN_INTRADAY_CONFIG,
     MM_MV_INTRADAY_CONFIG,
     START_FOTOVOLTAICE_INTRADAY_CONFIG,
-    START_FOTOVOLTAICE_SCALE,
     RENEWABLE_ENERGY_HOLDING_INTRADAY_CONFIG,
     PortfolioIntradayInputError,
     ULMENI_INTRADAY_CONFIG,
@@ -346,7 +346,7 @@ class IntradayRefreshTests(unittest.TestCase):
 
         self.assertEqual(result["Prediction_MM_MV"].tolist(), [0.7, 0.3])
 
-    def test_start_fotovoltaice_uses_scaled_ulmeni_and_intraday_overlay(self):
+    def test_start_fotovoltaice_uses_own_baseline_and_intraday_overlay(self):
         timestamps = pd.to_datetime(["2026-08-13 10:15", "2026-08-13 10:30"])
         dam = pd.DataFrame(
             {
@@ -365,6 +365,8 @@ class IntradayRefreshTests(unittest.TestCase):
                 START_FOTOVOLTAICE_INTRADAY_CONFIG.intraday_results_path
             ):
                 return corrected.copy()
+            if Path(path).name == START_FOTOVOLTAICE_INTRADAY_CONFIG.dam_results_path.name:
+                return dam.assign(Prediction=[0.18, 0.09])
             if str(path).endswith("Forecast_template.xlsx"):
                 return pd.DataFrame(index=range(len(dam)))
             return dam.copy()
@@ -392,7 +394,7 @@ class IntradayRefreshTests(unittest.TestCase):
 
         self.assertEqual(
             result["Prediction_Start_Fotovoltaice"].round(6).tolist(),
-            [0.12, round(0.222 * START_FOTOVOLTAICE_SCALE, 6)],
+            [0.12, 0.09],
         )
         self.assertLess(
             result.columns.get_loc("Prediction_Start_Fotovoltaice"),

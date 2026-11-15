@@ -2159,6 +2159,40 @@ def fetching_AnaSun_data_15min(output_path="./AnaSun/Solcast/Ulmi_15min.csv"):
 		raise Exception(f"Failed to fetch data: Status code {response.status_code}")
 	return pd.read_csv(output_path)
 
+def fetching_Start_Fotovoltaice_data_15min(
+	output_path="./Start Fotovoltaice/Solcast/Borcea_15min.csv",
+	*, latitude=None, longitude=None,
+):
+	from pathlib import Path
+	latitude = latitude if latitude is not None else os.getenv("START_FOTOVOLTAICE_LATITUDE", "44.331569")
+	longitude = longitude if longitude is not None else os.getenv("START_FOTOVOLTAICE_LONGITUDE", "27.746911")
+	try:
+		latitude, longitude = float(latitude), float(longitude)
+	except (TypeError, ValueError) as exc:
+		raise ValueError("Set START_FOTOVOLTAICE_LATITUDE and START_FOTOVOLTAICE_LONGITUDE for Solcast.") from exc
+	if not (np.isfinite(latitude) and np.isfinite(longitude) and -90 <= latitude <= 90 and -180 <= longitude <= 180):
+		raise ValueError("Start Fotovoltaice Solcast coordinates are invalid.")
+	try:
+		response = requests.get(
+			"https://api.solcast.com.au/data/forecast/radiation_and_weather",
+			params={"latitude": latitude, "longitude": longitude, "hours": 168,
+				"output_parameters": "air_temp,ghi,azimuth,cloud_opacity,dewpoint_temp,relative_humidity,zenith",
+				"period": "PT15M", "format": "csv", "time_zone": 0, "api_key": solcast_api_key},
+			timeout=60,
+		)
+	except requests.RequestException:
+		raise RuntimeError("Start Fotovoltaice weather request failed; check Solcast connectivity.") from None
+	if response.status_code != 200:
+		raise RuntimeError(f"Start Fotovoltaice weather fetch failed with HTTP {response.status_code}.")
+	data = pd.read_csv(BytesIO(response.content))
+	required = {"period_end", "air_temp", "cloud_opacity", "ghi"}
+	if data.empty or not required.issubset(data.columns):
+		raise ValueError("Start Fotovoltaice weather response is empty or missing required columns.")
+	path = Path(output_path)
+	path.parent.mkdir(parents=True, exist_ok=True)
+	path.write_bytes(response.content)
+	return data
+
 def fetching_GCSP_data_15min(output_path="./GCSP/Solcast/Nusfalau_15min.csv"):
 	lat = 47.199625
 	lon = 22.709948
@@ -5432,6 +5466,53 @@ def predicting_exporting_AnaSun_15min(
 	result["Lookup"] = (
 		result["Data"].dt.strftime("%d.%m.%Y") + result["Interval"].astype(str)
 	)
+	result.to_excel(output_path, index=False, sheet_name="Production_Predictions")
+	return result
+
+def predicting_exporting_Start_Fotovoltaice_15min(
+	interval_from,
+	interval_to,
+	limitation_percentage,
+	weather_path="./Start Fotovoltaice/Solcast/Borcea_15min.csv",
+	model_path="./Start Fotovoltaice/rs_xgb_start_fotovoltaice_prod_15min_1026.pkl",
+	output_path="./Start Fotovoltaice/Results_Production_Start_Fotovoltaice_xgb_15min.xlsx",
+):
+	from pathlib import Path
+	from forecast_time import solcast_times, utc_strings, delivery_intervals
+	from portfolio_intraday import START_FOTOVOLTAICE_INTRADAY_CONFIG
+	df = pd.read_csv(weather_path)
+	required = {"period_end", "air_temp", "cloud_opacity", "ghi"}
+	missing = sorted(required - set(df.columns))
+	if missing or df.empty:
+		raise ValueError("Start Fotovoltaice weather is empty or missing columns: " + ", ".join(missing))
+	stamps = pd.DatetimeIndex(solcast_times(df["period_end"]))
+	if stamps.isna().any() or stamps.duplicated().any() or not stamps.tz_convert("UTC").equals(stamps.tz_convert("UTC").floor("15min")):
+		raise ValueError("Start Fotovoltaice weather timestamps must be unique 15-minute boundaries.")
+	df["Data"] = stamps.tz_localize(None)
+	# The trained model uses wall-clock quarter numbers, even on DST days.
+	df["Interval"] = df.Data.dt.hour * 4 + df.Data.dt.minute // 15 + 1
+	df.rename(columns={"ghi": "Radiatie", "air_temp": "Temperatura", "cloud_opacity": "Nori"}, inplace=True)
+	df["Month"] = df.Data.dt.month
+	df["is_dark"] = (df["Radiatie"] <= 0).astype(int)
+	features = df[["Interval", "Temperatura", "Nori", "Radiatie", "Month", "is_dark"]].to_numpy(dtype=float)
+	if not np.isfinite(features).all():
+		raise ValueError("Start Fotovoltaice forecast features contain NaN or infinite values.")
+	model = joblib.load(model_path)
+	if int(model.n_features_in_) != features.shape[1]:
+		raise ValueError("Start Fotovoltaice model must have six input features.")
+	predictions = np.asarray(model.predict(features), dtype=float)
+	if predictions.shape != (len(df),) or not np.isfinite(predictions).all():
+		raise ValueError("Start Fotovoltaice model returned invalid predictions.")
+	if not np.isfinite(limitation_percentage) or not 0 <= limitation_percentage <= 100:
+		raise ValueError("Start Fotovoltaice limitation must be between 0 and 100 percent.")
+	predictions = np.clip(predictions, 0, START_FOTOVOLTAICE_INTRADAY_CONFIG.max_interval_energy_mwh)
+	predictions[df["is_dark"].to_numpy(dtype=bool)] = 0
+	limited = df["Interval"].between(interval_from * 4, interval_to * 4)
+	predictions[limited] *= 1 - limitation_percentage / 100
+	result = pd.DataFrame({"Data": df["Data"], "Interval": delivery_intervals(stamps), "Prediction": np.round(predictions, 3)})
+	result["Data_UTC"] = utc_strings(stamps)
+	result["Lookup"] = result["Data"].dt.strftime("%d.%m.%Y") + result["Interval"].astype(str)
+	Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 	result.to_excel(output_path, index=False, sheet_name="Production_Predictions")
 	return result
 
