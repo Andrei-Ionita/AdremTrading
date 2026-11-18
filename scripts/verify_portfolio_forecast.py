@@ -7,12 +7,17 @@ import json
 import os
 import tempfile
 import shutil
+import sys
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
+
+APP_ROOT = Path(__file__).resolve().parents[1]
+if str(APP_ROOT) not in sys.path:
+    sys.path.insert(0, str(APP_ROOT))
 
 
 def verify(*, refresh_weather=False, output_dir=None):
@@ -100,6 +105,8 @@ def verify(*, refresh_weather=False, output_dir=None):
                         "insufficient_samples" if "at least two" in message else (
                         "sample_gap" if "gap larger" in message else type(exc).__name__))
                     entry = {"asset": asset, "status": "blocked", "reason": category}
+                    if isinstance(exc, ModuleNotFoundError):
+                        entry['missing_module'] = exc.name
                     try:
                         from power_reading.database import get_latest_reading
                         key = "incuba" if asset == "incuba" else config.asset_key
