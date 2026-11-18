@@ -54,18 +54,35 @@ class ADCMonitoringScraper:
                 context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
                 page = context.new_page()
                 page.set_default_timeout(self.browser_timeout_ms)
+                responses: list[dict] = []
+
+                def capture(response) -> None:
+                    if "/api/v1/fleet/overview/grouped" not in response.url or not response.ok:
+                        return
+                    try:
+                        payload = response.json()
+                    except Exception:
+                        return
+                    if isinstance(payload, dict) and isinstance(payload.get("groups"), list):
+                        responses[:] = [payload]
+
+                page.on("response", capture)
                 page.goto(self.target_url, wait_until="domcontentloaded")
                 self._maybe_login(page)
-                self._wait_for_dashboard(page)
-
-                plant_text = self._wait_for_plant_card(page)
-                pv_kw = _extract_metric_kw(plant_text, "POWER OUTPUT")
-                source = "adc-monitoring-card-power-output"
-                if pv_kw is None:
-                    pv_kw = _extract_metric_kw(plant_text, "15M AVG")
-                    source = "adc-monitoring-card-15m-avg"
-                if pv_kw is None:
-                    source = "adc-monitoring-card-unmatched"
+                deadline = time.monotonic() + min(self.browser_timeout_ms / 1000.0, 15.0)
+                plant_text = ""
+                while not responses and time.monotonic() < deadline:
+                    plant_text = _extract_plant_section(page.locator("body").first.inner_text(), self.plant_name)
+                    page.wait_for_timeout(250)
+                if responses:
+                    pv_kw = _extract_live_site_power_kw(responses[-1], self.plant_name)
+                    source = "adc-monitoring-live-api"
+                    plant_text = f"{self.plant_name}: {pv_kw} kW"
+                else:
+                    pv_kw = _extract_live_card_power_kw(plant_text)
+                    if pv_kw is None:
+                        raise RuntimeError("ADC current plant power is unavailable; no live sample recorded.")
+                    source = "adc-monitoring-card-power-output"
                 return PowerSnapshot(
                     pv_kw=pv_kw,
                     load_kw=None,
@@ -114,8 +131,11 @@ class ADCMonitoringScraper:
         if not self.username or not self.password:
             return
         try:
-            page.locator("input").first.wait_for(timeout=15_000)
-        except Exception:
+            page.wait_for_function("""(plant) =>
+                !!document.querySelector("input[type='password']") ||
+                (document.body.innerText || '').includes(plant)
+            """, arg=self.plant_name, timeout=15_000)
+        except PlaywrightTimeoutError:
             pass
         if not _looks_like_login_page(page):
             return
@@ -151,9 +171,12 @@ class ADCMonitoringScraper:
                 continue
 
         try:
-            page.wait_for_load_state("networkidle", timeout=15_000)
+            page.wait_for_function("""() =>
+                !Array.from(document.querySelectorAll("input[type='password']"))
+                  .some(element => element.getClientRects().length)
+            """, timeout=15_000)
         except PlaywrightTimeoutError:
-            pass
+            raise RuntimeError("ADC login did not reach the authenticated dashboard.") from None
 
     def _fill_first(self, page, selectors: tuple[str, ...], value: str) -> None:
         for selector in selectors:
@@ -213,7 +236,6 @@ def _extract_metric_kw(text: str, label: str) -> Optional[float]:
     label_pattern = r"\s+".join(re.escape(part) for part in label.split())
     patterns = (
         rf"(?is)\b{label_pattern}\b\s*(-?[0-9]+(?:[.,][0-9]+)?)\s*(kW|MW|W)\b",
-        rf"(?is)\b{label_pattern}\b.*?(-?[0-9]+(?:[.,][0-9]+)?)\s*(kW|MW|W)\b",
     )
     for pattern in patterns:
         match = re.search(pattern, compact)
@@ -233,9 +255,44 @@ def _extract_plant_section(text: str, plant_name: str, max_lines: int = 12) -> s
         return ""
     for index, line in enumerate(lines):
         candidate = _normalized_text(line)
-        if candidate == wanted or wanted in candidate:
-            return "\n".join(lines[index : index + max_lines])
+        if candidate == wanted:
+            section = []
+            for item in lines[index : index + max_lines]:
+                if section and re.match(r"^CEF\s", item, re.I):
+                    break
+                section.append(item)
+            return "\n".join(section)
     return ""
+
+
+def _extract_live_card_power_kw(text: str) -> Optional[float]:
+    if re.search(r"COMM\s+FAILURE|OFFLINE|DISCONNECTED", text, re.I):
+        raise RuntimeError("ADC reports a plant communication failure; no live sample recorded.")
+    for label in ("CURRENT POWER", "POWER OUTPUT"):
+        value = _extract_metric_kw(text, label)
+        if value is not None and math.isfinite(value) and value >= 0:
+            return value
+    return None
+
+
+def _extract_live_site_power_kw(payload: dict, plant_name: str) -> float:
+    wanted = _normalized_text(plant_name)
+    matches = [site for group in payload.get("groups", []) for site in group.get("sites", [])
+               if _normalized_text(site.get("name")) == wanted]
+    if len(matches) != 1:
+        raise RuntimeError("ADC did not return exactly one matching plant.")
+    site = matches[0]
+    status = str(site.get("onlineStatus", "")).strip().lower()
+    if status in {"offline", "disconnected", "comm_failure", "communication_failure"}:
+        raise RuntimeError("ADC reports a plant communication failure; no live sample recorded.")
+    raw = site.get("pvPowerKw")
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        raise RuntimeError("ADC current plant power is unavailable; no live sample recorded.") from None
+    if isinstance(raw, bool) or not math.isfinite(value) or value < 0:
+        raise RuntimeError("ADC returned invalid current plant power.")
+    return value
 
 
 def _normalized_text(value: str) -> str:

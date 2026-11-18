@@ -173,11 +173,13 @@ class WorkerTests(unittest.TestCase):
             patch("power_reading.worker._install_signal_handlers"),
             patch("power_reading.worker.ensure_schema") as ensure,
             patch("power_reading.worker.run_cycle") as cycle,
+            patch("power_reading.worker.run_continuous") as continuous,
         ):
             main()
 
         ensure.assert_called_once_with()
         cycle.assert_called_once_with(["hng"], 4, 120)
+        continuous.assert_not_called()
 
 
 class FusionSolarSelectionTests(unittest.TestCase):

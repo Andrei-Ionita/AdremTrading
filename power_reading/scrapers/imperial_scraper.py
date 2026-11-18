@@ -134,6 +134,8 @@ class ImperialScraper:
                             "Imperial CSV feeds have no common valid timestamp; refusing a mixed-quarter total."
                         )
                     p1_mw, p2_mw, common_ts = aligned
+                    if not _is_recent_enough(common_ts):
+                        raise RuntimeError("Imperial common CSV timestamp is stale.")
                     p1_ts = p2_ts = common_ts
                 total_mw = p1_mw + p2_mw
                 source_suffix = "visible-fallback" if used_visible_fallback else "csv"
@@ -274,9 +276,8 @@ class ImperialScraper:
             self._set_1d_range(page)
             # Aurora's CSV export can lag the live chart by hours.
             vis_mw, vis_ts = self._extract_visible_power_sample(page)
-            if vis_mw is not None:
-                ts = vis_ts or datetime.now(timezone.utc).isoformat()
-                return vis_mw, ts, f"visible-power:{vis_mw}"
+            if vis_mw is not None and _is_recent_enough(vis_ts):
+                return vis_mw, vis_ts, f"visible-power:{vis_mw}"
             try:
                 self._ensure_csv_ready(page)
                 csv_text, mw_value, ts = self._download_fresh_csv_snapshot(page)
@@ -320,18 +321,17 @@ class ImperialScraper:
         self._maybe_login(page)
 
     def _download_fresh_csv_snapshot(self, page) -> tuple[str, Optional[float], Optional[str]]:
-        best_text = ""
-        best_value = None
-        best_ts = None
         for _ in range(6):
             csv_text = self._download_csv_text(page)
             mw_value, ts = _extract_latest_power_mw(csv_text)
-            if _is_newer_ts(ts, best_ts):
-                best_text, best_value, best_ts = csv_text, mw_value, ts
-            if _is_recent_enough(best_ts, max_age_minutes=45):
-                break
+            # The live chart/widget can finish loading after the export controls.
+            visible_mw, visible_ts = self._extract_visible_power_sample(page)
+            if visible_mw is not None and _is_recent_enough(visible_ts):
+                return f"visible-power:{visible_mw}", visible_mw, visible_ts
+            if mw_value is not None and _is_recent_enough(ts):
+                return csv_text, mw_value, ts
             page.wait_for_timeout(2_000)
-        return best_text, best_value, best_ts
+        raise RuntimeError("Aurora has no current numeric power in the visible dashboard or latest CSV row.")
 
     def _goto_with_fallbacks(self, page) -> None:
         urls = [
@@ -781,15 +781,15 @@ class ImperialScraper:
 
     def _extract_visible_power_sample(self, page) -> tuple[Optional[float], Optional[str]]:
         try:
+            # Historical tooltips must not be relabeled with the polling time.
             text = page.locator("body").inner_text()
+            for tooltip in page.locator("[role='tooltip']").all_text_contents():
+                text = text.replace(tooltip, "")
         except Exception:
             text = ""
 
         patterns = (
-            r"(?is)\bActive\s*Power\b[^0-9-]{0,30}(-?[0-9][0-9\s,.'']*)\s*(MW|kW|W)\b",
-            r"(?is)\bCurrent\s*Power\b[^0-9-]{0,30}(-?[0-9][0-9\s,.'']*)\s*(MW|kW|W)\b",
-            r"(?is)\bGenerated\s*Power\b[^0-9-]{0,30}(-?[0-9][0-9\s,.'']*)\s*(MW|kW|W)\b",
-            r"(?is)\bPower\b[^0-9-]{0,30}(-?[0-9][0-9\s,.'']*)\s*(MW|kW|W)\b",
+            r"(?i)\b(?:Active|Current)\s*Power\s*:?\s*(-?[0-9][0-9 \t,.'\u00a0]*)\s*(MW|kW|W)\b",
         )
         for pat in patterns:
             m = re.search(pat, text)
@@ -883,7 +883,7 @@ class ImperialScraper:
                     tooltip_texts = []
                 for tooltip_text in tooltip_texts:
                     parsed = _parse_chart_power_tooltip(tooltip_text)
-                    if parsed is not None:
+                    if parsed is not None and _is_recent_enough(parsed[1]):
                         return parsed
         return None, None
 
@@ -1026,6 +1026,10 @@ def _extract_latest_common_power_mw(
 ) -> Optional[tuple[float, float, str]]:
     primary = _extract_power_series_mw(primary_csv)
     secondary = _extract_power_series_mw(secondary_csv)
+    if not primary or not secondary:
+        return None
+    if primary[max(primary)][0] is None or secondary[max(secondary)][0] is None:
+        return None
     common_timestamps = primary.keys() & secondary.keys()
     if not common_timestamps:
         return None
@@ -1033,10 +1037,12 @@ def _extract_latest_common_power_mw(
     latest_common = max(common_timestamps)
     primary_mw, primary_ts_raw = primary[latest_common]
     secondary_mw, _ = secondary[latest_common]
+    if primary_mw is None or secondary_mw is None:
+        return None
     return primary_mw, secondary_mw, primary_ts_raw
 
 
-def _extract_power_series_mw(csv_text: str) -> dict[datetime, tuple[float, str]]:
+def _extract_power_series_mw(csv_text: str) -> dict[datetime, tuple[Optional[float], str]]:
     reader = csv.reader(csv_text.splitlines())
     rows = [row for row in reader if row]
     if not rows:
@@ -1051,21 +1057,17 @@ def _extract_power_series_mw(csv_text: str) -> dict[datetime, tuple[float, str]]
         return {}
 
     data_rows = rows[header_idx + 1 :]
-    parsed: dict[datetime, tuple[float, str]] = {}
+    parsed: dict[datetime, tuple[Optional[float], str]] = {}
     for row in data_rows:
-        if len(row) < 2:
-            continue
         ts_raw = row[0].strip()
-        energy_raw = row[1].strip()
-        if not ts_raw or energy_raw in {"--", ""}:
-            continue
-
         ts = _parse_ts(ts_raw)
-        energy_kwh = _parse_number(energy_raw)
-        if ts is None or energy_kwh is None:
+        if ts is None:
             continue
-        # In this tenant export, values align with chart tooltip "Generated Power: ... W".
-        parsed[ts] = (energy_kwh / 1_000_000.0, ts_raw)
+        power = _parse_number(row[1]) if len(row) > 1 else None
+        # Keep missing rows so the latest sample cannot silently carry forward.
+        # Preserve this tenant's second-column watts convention, including exports
+        # whose header says Energy Produced but matches Generated Power tooltips.
+        parsed[_timestamp_utc(ts)] = (power / 1_000_000.0 if power is not None else None, ts_raw)
     return parsed
 
 
@@ -1171,13 +1173,19 @@ def _is_newer_ts(left_raw: Optional[str], right_raw: Optional[str]) -> bool:
     return left > right
 
 
+def _timestamp_utc(timestamp: datetime) -> datetime:
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=ZoneInfo("Europe/Bucharest"))
+    return timestamp.astimezone(timezone.utc)
+
+
 def _is_recent_enough(ts_raw: Optional[str], max_age_minutes: int = 45) -> bool:
     ts = _parse_ts(ts_raw) if ts_raw else None
     if ts is None:
         return False
     now_utc = datetime.now(timezone.utc)
-    age_minutes = (now_utc - ts).total_seconds() / 60.0
-    return age_minutes <= max_age_minutes
+    age_minutes = (now_utc - _timestamp_utc(ts)).total_seconds() / 60.0
+    return -5 <= age_minutes <= max_age_minutes
 
 
 def _parse_number(raw: str) -> Optional[float]:
@@ -1187,7 +1195,8 @@ def _parse_number(raw: str) -> Optional[float]:
     else:
         cleaned = cleaned.replace(",", ".")
     try:
-        return float(cleaned)
+        value = float(cleaned)
+        return value if math.isfinite(value) else None
     except ValueError:
         return None
 

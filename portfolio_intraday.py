@@ -6,7 +6,7 @@ from typing import Callable
 
 import numpy as np
 import pandas as pd
-from forecast_time import delivery_times, local_day_end, round_delivery, utc_strings
+from forecast_time import delivery_intervals, delivery_times, local_day_end, round_delivery, utc_strings
 
 
 APP_ROOT = Path(__file__).resolve().parent
@@ -253,10 +253,12 @@ def calculate_interval_energy(
             f"{config.display_name} interval energy requires at least two power samples "
             "from the completed interval."
         )
-    gaps = pd.Series([sample[0] for sample in interval_samples]).diff().dropna()
+    coverage_times = [start, *(sample[0] for sample in interval_samples), end]
+    gaps = pd.Series(coverage_times).diff().dropna()
     if (gaps > MAX_SAMPLE_GAP).any():
         raise PortfolioIntradayInputError(
-            f"{config.display_name} power samples contain a gap larger than 7.5 minutes."
+            f"{config.display_name} power samples contain a gap larger than 7.5 minutes, "
+            "including interval boundaries."
         )
 
     points = list(interval_samples)
@@ -517,7 +519,12 @@ def _remaining_dam_baseline(
         )
 
     expected_intervals = targets.hour * 4 + targets.minute // 15 + 1
-    if not np.array_equal(intervals.to_numpy(dtype=int), expected_intervals):
+    # New baselines can use sequential market numbering; legacy files use the clock.
+    market_intervals = delivery_intervals(targets)
+    interval_values = intervals.to_numpy(dtype=float)
+    if "Data_UTC" in forecast and np.array_equal(interval_values, market_intervals):
+        expected_intervals = market_intervals
+    if not np.array_equal(interval_values, expected_intervals):
         raise PortfolioIntradayInputError(
             f"{config.display_name} DAM Interval values do not match their timestamps."
         )

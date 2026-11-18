@@ -40,6 +40,9 @@ class _AssetProcess:
     process: multiprocessing.Process
     connection: object
     started_at: float
+    stopping_at: float | None = None
+    terminated_at: float | None = None
+    killed: bool = False
 
 
 def collect_once(
@@ -267,6 +270,161 @@ def run_cycle(assets: list[str], max_workers: int, asset_timeout_seconds: int) -
     return CollectionResult(result.readings, errors)
 
 
+def _start_asset_process(context, asset: str) -> _AssetProcess:
+    receive_connection, send_connection = context.Pipe(duplex=False)
+    process = None
+    try:
+        process = context.Process(
+            target=_read_asset_child,
+            args=(asset, send_connection),
+            name=f"power-reader-{asset}",
+            daemon=True,
+        )
+        started_at = time.monotonic()
+        process.start()
+        return _AssetProcess(process, receive_connection, started_at)
+    except BaseException:
+        receive_connection.close()
+        if process is not None:
+            if process.pid is not None:
+                _stop_process(process)
+            process.close()
+        raise
+    finally:
+        send_connection.close()
+
+
+def _reap_asset_process(task: _AssetProcess, now: float) -> bool:
+    # Keep the slot and portal lock until exit, without blocking other polls
+    # during the normal-exit grace period or terminate/kill escalation.
+    task.process.join(timeout=0)
+    if not task.process.is_alive():
+        task.connection.close()
+        task.process.close()
+        return True
+    if task.terminated_at is None:
+        if now - task.stopping_at >= 1:
+            task.process.terminate()
+            task.terminated_at = now
+    elif not task.killed and now - task.terminated_at >= 5:
+        task.process.kill()
+        task.killed = True
+    return False
+
+
+def _persist_asset_result(asset: str, result: tuple, started_at: float) -> None:
+    status, payload = result
+    errors: dict[str, str] = {}
+    failure_kind = "reader_error"
+    stored = 0
+    if status == "ok":
+        if payload.pv_mw is None and payload.load_mw is None and payload.grid_mw is None:
+            errors[asset] = "No numeric power values were detected."
+            failure_kind = "no_numeric_power"
+        else:
+            try:
+                stored = store_readings((payload,))
+            except Exception as exc:
+                errors[asset] = f"Could not store reading: {type(exc).__name__}: {exc}"
+                failure_kind = f"storage_error: {type(exc).__name__}"
+    else:
+        errors[asset] = str(payload)
+    if errors:
+        try:
+            store_errors(errors)
+        except Exception as exc:
+            LOGGER.error("Could not store power reading errors for %s (%s)", asset, type(exc).__name__)
+    LOGGER.info(
+        json.dumps(
+            {
+                "event": "power_collection_complete",
+                "asset": asset,
+                "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+                "stored": stored,
+                "failed": len(errors),
+                # Retain detailed DB errors, but never log portal/DB payloads.
+                "errors": {asset: failure_kind for asset in errors},
+                "duration_seconds": round(time.monotonic() - started_at, 2),
+            },
+            ensure_ascii=True,
+        )
+    )
+
+
+def run_continuous(
+    assets: Iterable[str], max_workers: int, asset_timeout_seconds: int, interval_seconds: int
+) -> None:
+    """Poll independently, oldest due first, within worker and portal limits.
+
+    Cadence is start-to-start. Overruns coalesce into one pending attempt per
+    asset; missed intervals never create an unbounded catch-up queue.
+    """
+    next_due = dict.fromkeys(assets, time.monotonic())
+    if not next_due:
+        return
+    context = multiprocessing.get_context("spawn")
+    worker_limit = max(1, min(max_workers, len(next_due)))
+    timeout = max(1, asset_timeout_seconds)
+    interval = max(1, interval_seconds)
+    active: dict[str, _AssetProcess] = {}
+    try:
+        while not STOP_EVENT.is_set():
+            for asset, task in list(active.items()):
+                if task.stopping_at is None:
+                    result = _receive_child_result(task)
+                    if result is None and not task.process.is_alive():
+                        # A final pipe message can race with process exit.
+                        result = _receive_child_result(task)
+                        if result is None:
+                            result = (
+                                "error",
+                                f"Reader process exited without a result (exit code {task.process.exitcode}).",
+                            )
+                    if result is None and time.monotonic() - task.started_at >= timeout:
+                        result = ("error", f"Asset read exceeded {timeout} seconds.")
+                    if result is not None:
+                        task.stopping_at = time.monotonic()
+                        _persist_asset_result(asset, result, task.started_at)
+                if task.stopping_at is not None and _reap_asset_process(task, time.monotonic()):
+                    del active[asset]
+
+            # Sorting one deadline per asset is bounded and prevents a fast
+            # asset from overtaking older due work under sustained saturation.
+            now = time.monotonic()
+            pending = sorted(
+                (asset for asset, due in next_due.items() if due <= now and asset not in active),
+                key=next_due.__getitem__,
+            )
+            while pending and len(active) < worker_limit and not STOP_EVENT.is_set():
+                asset = _pop_next_pending_asset(pending, active)
+                if asset is None:
+                    break
+                started_at = time.monotonic()
+                next_due[asset] = started_at + interval
+                try:
+                    active[asset] = _start_asset_process(context, asset)
+                    next_due[asset] = active[asset].started_at + interval
+                except Exception as exc:
+                    _persist_asset_result(
+                        asset, ("error", f"Could not start reader: {type(exc).__name__}: {exc}"), started_at
+                    )
+            STOP_EVENT.wait(0.1)
+    finally:
+        for asset, task in active.items():
+            try:
+                try:
+                    _stop_process(task.process)
+                    if task.stopping_at is None:
+                        result = _receive_child_result(task) or ("error", "Worker is stopping.")
+                        _persist_asset_result(asset, result, task.started_at)
+                finally:
+                    task.connection.close()
+                    if not task.process.is_alive():
+                        task.process.close()
+            except Exception as exc:
+                LOGGER.error("Could not finish reader cleanup for %s (%s)", asset, type(exc).__name__)
+
+
 def main() -> None:
     logging.basicConfig(
         level=(os.getenv("POWER_READING_LOG_LEVEL") or "INFO").upper(),
@@ -288,16 +446,15 @@ def main() -> None:
         asset_timeout_seconds,
     )
 
-    while not STOP_EVENT.is_set():
-        cycle_started = time.monotonic()
+    if STOP_EVENT.is_set():
+        return
+    if run_once:
         try:
             run_cycle(assets, max_workers, asset_timeout_seconds)
         except Exception:
             LOGGER.exception("Power collection cycle failed before completion")
-        if run_once:
-            return
-        elapsed = time.monotonic() - cycle_started
-        STOP_EVENT.wait(max(1.0, interval_seconds - elapsed))
+        return
+    run_continuous(assets, max_workers, asset_timeout_seconds, interval_seconds)
 
 
 def _configured_assets() -> list[str]:

@@ -159,6 +159,31 @@ class IncubaPredictionTests(unittest.TestCase):
 
 
 class IncubaProductionTests(unittest.TestCase):
+    def test_boundary_and_interior_gaps_over_limit_are_rejected(self):
+        for timestamps in (
+            ("09:45", "09:46"),
+            ("09:59", "10:00"),
+            ("09:52:31", "10:00"),
+            ("09:45", "09:52:29"),
+            ("09:45", "09:52:31", "10:00"),
+        ):
+            readings = production_readings(values=(0.4,) * len(timestamps), timestamps=timestamps)
+            with self.subTest(timestamps=timestamps), self.assertRaisesRegex(
+                IncubaIntradayInputError, "gap larger than 7.5 minutes"
+            ):
+                calculate_incuba_interval_energy(readings, ORIGIN - pd.Timedelta(minutes=15), ORIGIN)
+
+    def test_boundary_gaps_at_limit_and_normal_padding_are_accepted(self):
+        for timestamps in (
+            ("09:45", "09:52:30"),
+            ("09:52:30", "10:00"),
+            ("09:47", "09:52", "09:58"),
+        ):
+            readings = production_readings(values=(0.4,) * len(timestamps), timestamps=timestamps)
+            with self.subTest(timestamps=timestamps):
+                energy = calculate_incuba_interval_energy(readings, ORIGIN - pd.Timedelta(minutes=15), ORIGIN)
+                self.assertAlmostEqual(energy, 0.1)
+
     def test_completed_interval_uses_trapezoidal_energy_integration(self):
         energy = calculate_incuba_interval_energy(
             production_readings(values=(0.2, 0.4, 0.6, 0.8)),

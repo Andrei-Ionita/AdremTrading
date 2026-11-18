@@ -5,7 +5,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from power_reading.scrapers.adc_monitoring_scraper import _extract_metric_kw, _extract_plant_section
+from power_reading.scrapers.adc_monitoring_scraper import (
+    _extract_metric_kw, _extract_plant_section, _extract_live_site_power_kw,
+    _extract_live_card_power_kw,
+)
 from power_reading.service import _ASSETS, _build_scraper, _credentials, _url
 
 
@@ -40,6 +43,44 @@ POWER OUTPUT
 
 
 class ADCMonitoringTests(unittest.TestCase):
+    def test_live_api_uses_exact_site_current_power_not_average(self):
+        payload = {'groups': [{'sites': [
+            {'name': 'CEF Anto Extension', 'pvPowerKw': 900},
+            {'name': 'CEF Anto', 'pvPowerKw': 13.199, 'pvPowerAvg15MinKw': 20},
+        ]}]}
+        self.assertEqual(_extract_live_site_power_kw(payload, 'CEF Anto'), 13.199)
+
+    def test_missing_live_value_never_uses_average(self):
+        for value in (None, float('nan'), float('inf'), -1, True):
+            with self.subTest(value=value):
+                payload = {'groups': [{'sites': [{'name': 'CEF Anto', 'pvPowerKw': value,
+                                                 'pvPowerAvg15MinKw': 50}]}]}
+                with self.assertRaises(RuntimeError):
+                    _extract_live_site_power_kw(payload, 'CEF Anto')
+
+    def test_offline_api_value_rejected_and_live_zero_accepted(self):
+        site = {'name': 'CEF Anto', 'pvPowerKw': 0, 'onlineStatus': 'online'}
+        payload = {'groups': [{'sites': [site]}]}
+        self.assertEqual(_extract_live_site_power_kw(payload, 'CEF Anto'), 0)
+        site['onlineStatus'] = 'offline'
+        with self.assertRaises(RuntimeError):
+            _extract_live_site_power_kw(payload, 'CEF Anto')
+
+    def test_missing_or_duplicate_site_rejected(self):
+        for sites in ([], [{'name': 'CEF Anto', 'pvPowerKw': 1}] * 2):
+            with self.assertRaises(RuntimeError):
+                _extract_live_site_power_kw({'groups': [{'sites': sites}]}, 'CEF Anto')
+
+    def test_card_missing_power_does_not_consume_setpoint_or_next_plant(self):
+        text = 'CEF Anto\nLIVE\nCURRENT POWER\n-\nSETPOINT\n1 MW\nPOWER OUTPUT\n-\nCEF Borcea\nCURRENT POWER\n20 kW'
+        section = _extract_plant_section(text, 'CEF Anto')
+        self.assertNotIn('Borcea', section)
+        self.assertIsNone(_extract_live_card_power_kw(section))
+
+    def test_card_communication_failure_never_becomes_zero(self):
+        with self.assertRaises(RuntimeError):
+            _extract_live_card_power_kw('COMM FAILURE\nPOWER OUTPUT\n0.00 kW')
+
     def test_extracts_selected_plant_power_output_instead_of_fleet_total(self):
         anto = _extract_plant_section(FLEET_TEXT, "CEF Anto")
         ferma = _extract_plant_section(FLEET_TEXT, "CEF Ferma Frumusica")

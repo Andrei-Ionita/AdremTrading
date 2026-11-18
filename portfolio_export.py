@@ -116,6 +116,11 @@ def build_quarter_hourly_portfolio(enabled_corrections):
     end = min(series.index.max() for series in baselines.values())
     if start > end:
         raise ValueError("Asset forecasts have no common delivery horizon. Refresh the portfolio forecasts.")
+    # Sequential weather requests can straddle one quarter boundary. Larger
+    # differences indicate a stale/truncated file, not a shorter portfolio.
+    if (start - min(series.index.min() for series in baselines.values()) > pd.Timedelta(minutes=15)
+            or max(series.index.max() for series in baselines.values()) - end > pd.Timedelta(minutes=15)):
+        raise ValueError("Asset forecasts have inconsistent delivery horizons. Refresh the portfolio forecasts.")
     targets = pd.date_range(start, end, freq="15min")
     result = pd.DataFrame(index=targets)
     for suffix, series in baselines.items():

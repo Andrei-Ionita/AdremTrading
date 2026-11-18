@@ -71,6 +71,8 @@ class RenewableReaderTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory, patch(
             'power_reading.scrapers.adc_monitoring_scraper.sync_playwright', return_value=playwright
         ), patch.object(scraper, '_maybe_login'), patch.object(scraper, '_wait_for_dashboard'), patch(
+            'power_reading.scrapers.adc_monitoring_scraper.time.monotonic', side_effect=[0, 0, 16]
+        ), patch(
             'power_reading.service._build_scraper', return_value=scraper
         ):
             scraper.user_data_dir = Path(directory)

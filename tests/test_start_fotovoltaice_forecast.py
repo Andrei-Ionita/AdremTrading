@@ -1,7 +1,9 @@
 import inspect
 import os
+from dataclasses import replace
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
@@ -12,7 +14,9 @@ import requests
 
 from ml import fetching_Start_Fotovoltaice_data_15min as fetch
 from ml import predicting_exporting_Start_Fotovoltaice_15min as predict
+from forecast_time import delivery_intervals, delivery_times, utc_strings
 from portfolio_intraday import START_FOTOVOLTAICE_INTRADAY_CONFIG as CONFIG
+from portfolio_intraday import run_portfolio_intraday_forecast
 from portfolio_export import ASSET_FILES
 
 
@@ -24,6 +28,56 @@ def weather(times=None):
 
 
 class StartFotovoltaiceForecastTests(unittest.TestCase):
+    def test_generated_dst_workbook_flows_through_intraday_correction(self):
+        for origin_utc, day_quarters in (
+            ("2026-03-29 00:45Z", 92),
+            ("2026-10-25 00:15Z", 100),
+            ("2026-10-25 01:15Z", 100),
+            ("2026-10-25 10:00Z", 100),
+        ):
+            with self.subTest(origin=origin_utc), tempfile.TemporaryDirectory() as tmp:
+                origin = pd.Timestamp(origin_utc).tz_convert("Europe/Bucharest")
+                times = pd.date_range(
+                    origin.normalize(), origin.normalize() + pd.DateOffset(days=1),
+                    freq="15min", inclusive="left",
+                )
+                data = pd.DataFrame({
+                    "period_end": utc_strings(times), "air_temp": 20.0,
+                    "cloud_opacity": 10.0, "ghi": 100.0,
+                })
+                data.loc[len(data) - 1, "ghi"] = 0.0
+                root = Path(tmp)
+                config = replace(CONFIG, weather_path=root / "weather.csv",
+                                 dam_results_path=root / "dam.xlsx",
+                                 intraday_results_path=root / "corrected.xlsx")
+                data.to_csv(config.weather_path, index=False)
+                model = Mock(n_features_in_=6)
+                model.predict.side_effect = lambda features: np.full(len(features), 0.1)
+                with patch("ml.joblib.load", return_value=model):
+                    generated = predict(1, 24, 0, weather_path=config.weather_path,
+                                        output_path=config.dam_results_path)
+                self.assertEqual(len(generated), day_quarters)
+                readings = [SimpleNamespace(timestamp_utc=stamp.isoformat(), pv_mw=0.32)
+                            for stamp in pd.date_range(origin.tz_convert("UTC") - pd.Timedelta(minutes=15),
+                                                       origin.tz_convert("UTC"), freq="5min")]
+                result = run_portfolio_intraday_forecast(
+                    config, now=origin, readings_getter=lambda *args, **kwargs: readings,
+                )
+                targets = times[times > origin]
+                pd.testing.assert_index_equal(delivery_times(result), targets, check_names=False)
+                self.assertEqual(result.Interval.tolist(), delivery_intervals(targets).tolist())
+                self.assertFalse(result.Data_UTC.duplicated().any())
+                np.testing.assert_allclose(result.Last_Productie, 0.08)
+                self.assertEqual(result.Prediction_ID.iloc[0], 0.08)
+                self.assertEqual(result.Correction_weight.iloc[0], 1.0)
+                self.assertEqual(result.Correction_weight.iloc[8], 0.5)
+                self.assertEqual(result.Prediction_ID.iloc[8], 0.09)
+                self.assertEqual(result.Prediction_ID.iloc[-1], 0.0)
+                self.assertTrue(result.Prediction_ID.between(0, CONFIG.max_interval_energy_mwh).all())
+                saved = pd.read_excel(config.intraday_results_path)
+                self.assertEqual(saved.Interval.tolist(), result.Interval.tolist())
+                self.assertEqual(saved.Data_UTC.tolist(), result.Data_UTC.tolist())
+
     def run_prediction(self, data, model, limitation=0):
         with tempfile.TemporaryDirectory() as tmp:
             source, target = Path(tmp)/'weather.csv', Path(tmp)/'forecast.xlsx'

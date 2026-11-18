@@ -76,10 +76,12 @@ def calculate_incuba_interval_energy(
         raise IncubaIntradayInputError(
             "Incuba interval energy requires at least two power samples from the completed interval."
         )
-    gaps = pd.Series([sample[0] for sample in interval_samples]).diff().dropna()
+    coverage_times = [start, *(sample[0] for sample in interval_samples), end]
+    gaps = pd.Series(coverage_times).diff().dropna()
     if (gaps > MAX_SAMPLE_GAP).any():
         raise IncubaIntradayInputError(
-            "Incuba power samples contain a gap larger than 7.5 minutes."
+            "Incuba power samples contain a gap larger than 7.5 minutes, "
+            "including interval boundaries."
         )
 
     points = list(interval_samples)

@@ -137,6 +137,12 @@ class PortfolioExportTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'duplicate forecast timestamps'):
             self.build()
 
+    def test_truncated_asset_cannot_silently_shorten_portfolio(self):
+        path = str(Path('Astro/Results_Production_Astro_xgb_15min.xlsx').resolve())
+        self.frames[path] = self.frames[path].iloc[:4]
+        with self.assertRaisesRegex(ValueError, 'inconsistent delivery horizons'):
+            self.build()
+
     def test_dark_gap_accepts_mixed_solcast_date_formats(self):
         path = str(Path('Astro/Results_Production_Astro_xgb_15min.xlsx').resolve())
         missing = pd.Timestamp('2026-09-29 03:00')

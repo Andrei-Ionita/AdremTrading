@@ -4,6 +4,7 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_playwright
@@ -45,13 +46,7 @@ class VeltolScraper:
             try:
                 page = context.new_page()
                 page.set_default_timeout(self.browser_timeout_ms)
-                page.goto(self.target_url, wait_until="domcontentloaded")
-                self._accept_cookies(page)
-                self._maybe_login(page)
-                if page.url.rstrip("/") != self.target_url.rstrip("/"):
-                    page.goto(self.target_url, wait_until="domcontentloaded")
-                self._accept_cookies(page)
-                self._wait_for_dashboard(page)
+                self._open_dashboard(page)
                 text = self._collect_text(page)
 
                 pv_kw = self._extract_kw(text, "solar")
@@ -92,12 +87,7 @@ class VeltolScraper:
                         responses.append(payload)
 
                 page.on("response", capture)
-                page.goto(self.target_url, wait_until="domcontentloaded")
-                self._accept_cookies(page)
-                self._maybe_login(page)
-                if page.url.rstrip("/") != self.target_url.rstrip("/"):
-                    page.goto(self.target_url, wait_until="domcontentloaded")
-                self._accept_cookies(page)
+                self._open_dashboard(page)
                 for _ in range(30):
                     if responses:
                         break
@@ -109,6 +99,25 @@ class VeltolScraper:
             finally:
                 context.close()
                 browser.close()
+
+    def _open_dashboard(self, page) -> None:
+        page.goto(self.target_url, wait_until="domcontentloaded")
+        self._accept_cookies(page)
+        self._maybe_login(page)
+        # A successful SPA redirect may normalize the URL or add query state.
+        # Reloading it immediately can interrupt authentication persistence.
+        if urlsplit(page.url).path.rstrip("/") != urlsplit(self.target_url).path.rstrip("/"):
+            page.goto(self.target_url, wait_until="domcontentloaded")
+            self._accept_cookies(page)
+            self._maybe_login(page)
+        try:
+            self._wait_for_dashboard(page)
+        except RuntimeError:
+            if "/auth/login" not in urlsplit(page.url).path:
+                raise
+            self._accept_cookies(page)
+            self._maybe_login(page)
+            self._wait_for_dashboard(page)
 
     def _maybe_login(self, page) -> None:
         email = page.locator("input[type='email'], input[name='email']")

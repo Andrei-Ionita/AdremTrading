@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from forecast_time import delivery_intervals, local_day_end, utc_strings
 from portfolio_intraday import (
     ANASUN_INTRADAY_CONFIG,
     ANTO_INTRADAY_CONFIG,
@@ -70,8 +71,11 @@ def weather_for_origin(origin=ORIGIN, ghi=100.0):
     )
 
 
-def production_readings(asset="test_asset", values=(2.0, 4.0, 6.0, 8.0)):
-    timestamps = ("09:45", "09:50", "09:55", "10:00")
+def production_readings(
+    asset="test_asset",
+    values=(2.0, 4.0, 6.0, 8.0),
+    timestamps=("09:45", "09:50", "09:55", "10:00"),
+):
     return [
         PowerReading(
             asset,
@@ -132,6 +136,30 @@ class PortfolioConfigurationTests(unittest.TestCase):
 
 
 class PortfolioPredictionTests(unittest.TestCase):
+    def test_sequential_dst_intervals_require_matching_utc_identity_and_numbering(self):
+        origin = pd.Timestamp("2026-10-25 12:00", tz="Europe/Bucharest")
+        targets = pd.date_range(origin + pd.Timedelta(minutes=15), local_day_end(origin), freq="15min")
+        frame = pd.DataFrame({
+            "Data": targets.tz_localize(None), "Data_UTC": utc_strings(targets),
+            "Interval": delivery_intervals(targets), "Prediction": 0.1,
+        })
+        weather = pd.DataFrame({"period_end": utc_strings(targets), "ghi": 100.0})
+        mismatched_utc = frame.copy()
+        mismatched_utc.loc[0, "Data_UTC"] = utc_strings(targets)[1]
+        mixed = frame.copy()
+        mixed.loc[0, "Interval"] = targets[0].hour * 4 + targets[0].minute // 15 + 1
+        for label, invalid, message in (
+            ("missing_utc", frame.drop(columns="Data_UTC"), "Interval values"),
+            ("mismatched_utc", mismatched_utc, "disagree"),
+            ("mixed_numbering", mixed, "Interval values"),
+            ("wrong_numbering", frame.assign(Interval=frame.Interval + 1), "Interval values"),
+            ("fractional_numbering", frame.assign(Interval=frame.Interval + 0.5), "Interval values"),
+        ):
+            with self.subTest(case=label), self.assertRaisesRegex(PortfolioIntradayInputError, message):
+                predict_portfolio_intraday(
+                    START_FOTOVOLTAICE_INTRADAY_CONFIG, invalid, weather, origin, 0.08,
+                )
+
     def test_start_fotovoltaice_uses_own_unscaled_forecast(self):
         result = predict_portfolio_intraday(
             START_FOTOVOLTAICE_INTRADAY_CONFIG,
@@ -267,6 +295,31 @@ class PortfolioPredictionTests(unittest.TestCase):
 
 
 class PortfolioProductionTests(unittest.TestCase):
+    def test_boundary_and_interior_gaps_over_limit_are_rejected(self):
+        for timestamps in (
+            ("09:45", "09:46"),
+            ("09:59", "10:00"),
+            ("09:52:31", "10:00"),
+            ("09:45", "09:52:29"),
+            ("09:45", "09:52:31", "10:00"),
+        ):
+            readings = production_readings(values=(4.0,) * len(timestamps), timestamps=timestamps)
+            with self.subTest(timestamps=timestamps), self.assertRaisesRegex(
+                PortfolioIntradayInputError, "gap larger than 7.5 minutes"
+            ):
+                calculate_interval_energy(CONFIG, readings, ORIGIN - pd.Timedelta(minutes=15), ORIGIN)
+
+    def test_boundary_gaps_at_limit_and_normal_padding_are_accepted(self):
+        for timestamps in (
+            ("09:45", "09:52:30"),
+            ("09:52:30", "10:00"),
+            ("09:47", "09:52", "09:58"),
+        ):
+            readings = production_readings(values=(4.0,) * len(timestamps), timestamps=timestamps)
+            with self.subTest(timestamps=timestamps):
+                energy = calculate_interval_energy(CONFIG, readings, ORIGIN - pd.Timedelta(minutes=15), ORIGIN)
+                self.assertAlmostEqual(energy, 1.0)
+
     def test_stale_sample_is_not_validated_as_current_production(self):
         stale = production_readings(values=(-0.01,))[0]
         with self.assertRaisesRegex(PortfolioIntradayInputError, 'No .* power samples'):
