@@ -1,0 +1,411 @@
+{
+  "baselines": [
+    {
+      "asset": "Astro",
+      "rows": 673,
+      "first": "2026-11-18 15:30:00+02:00",
+      "last": "2026-11-25 15:30:00+02:00",
+      "models": [
+        {
+          "file": "Astro/rs_xgb_astro_prod_15min_0926.pkl",
+          "sha256": "243d45011081b584e0386d4476411851b2f46d5f6d6eae65d589231fdeee6beb"
+        }
+      ]
+    },
+    {
+      "asset": "Imperial",
+      "rows": 673,
+      "first": "2026-11-18 15:30:00+02:00",
+      "last": "2026-11-25 15:30:00+02:00",
+      "models": [
+        {
+          "file": "Imperial/rs_xgb_imperial_prod_15min_0926.pkl",
+          "sha256": "a5cdf1005dcf8342ee089e174b08f65d0ffa2cba13b9f40e8fb1ff6a3696fd9a"
+        }
+      ]
+    },
+    {
+      "asset": "Kahraman",
+      "rows": 673,
+      "first": "2026-11-18 15:30:00+02:00",
+      "last": "2026-11-25 15:30:00+02:00",
+      "models": [
+        {
+          "file": "Kahraman/rs_xgb_Kahraman_prod_15min_0525.pkl",
+          "sha256": "d87bb66e39ee296dea53b452432838ea63dac03acead75318ab8a8c7f6bcec6a"
+        }
+      ]
+    },
+    {
+      "asset": "SolEn_Ulmeni",
+      "rows": 673,
+      "first": "2026-11-18 15:30:00+02:00",
+      "last": "2026-11-25 15:30:00+02:00",
+      "models": [
+        {
+          "file": "Solar Energy Ulmeni/rs_xgb_ulmeni_prod_15min_0926.pkl",
+          "sha256": "7aaa42b3a12fc08a4034d274da61dc814310c27bd10f4acfb82de0cc9fa84508"
+        }
+      ]
+    },
+    {
+      "asset": "PCSunEn",
+      "rows": 673,
+      "first": "2026-11-18 15:30:00+02:00",
+      "last": "2026-11-25 15:30:00+02:00",
+      "models": [
+        {
+          "file": "PC SunEnergy/rs_xgb_PCSun_prod_15min_0126.pkl",
+          "sha256": "95b9bbf7c94ea2c7e97136263b4781ba0efd40738bef5dda4e30f184d38abf1d"
+        }
+      ]
+    },
+    {
+      "asset": "Elnet",
+      "rows": 672,
+      "first": "2026-11-18 15:45:00+02:00",
+      "last": "2026-11-25 15:30:00+02:00",
+      "models": [
+        {
+          "file": "Elnet/rs_xgb_elnet_prod_15min_0926.pkl",
+          "sha256": "4a36939374205cf0be4697b46d23d8e9f3f923509d49601c16d4f2a8d896bd62"
+        }
+      ]
+    },
+    {
+      "asset": "Horeco",
+      "rows": 672,
+      "first": "2026-11-18 15:45:00+02:00",
+      "last": "2026-11-25 15:30:00+02:00",
+      "models": [
+        {
+          "file": "Horeco/rs_xgb_horeco_prod_15min_0926.pkl",
+          "sha256": "5851f20acb29958b0c487c10acd76c29d5aa327877235493752aeb5742799a03"
+        }
+      ]
+    },
+    {
+      "asset": "Dragosel",
+      "rows": 672,
+      "first": "2026-11-18 15:45:00+02:00",
+      "last": "2026-11-25 15:30:00+02:00",
+      "models": [
+        {
+          "file": "Dragosel/rs_xgb_laslea_prod_15min_0626.pkl",
+          "sha256": "d612ad7fa05511af88f5d0dddced139829f4e7c2dbe00d9a433a3c003cfc86c4"
+        }
+      ]
+    },
+    {
+      "asset": "GESS",
+      "rows": 672,
+      "first": "2026-11-18 15:45:00+02:00",
+      "last": "2026-11-25 15:30:00+02:00",
+      "models": [
+        {
+          "file": "GESS/rs_xgb_gess_prod_15min_0926.pkl",
+          "sha256": "f5b57533aa42220693a52c209b12e16a81ed9a77c1e4af11e136d5d2a196ffed"
+        }
+      ]
+    },
+    {
+      "asset": "NRG",
+      "rows": 672,
+      "first": "2026-11-18 15:45:00+02:00",
+      "last": "2026-11-25 15:30:00+02:00",
+      "models": [
+        {
+          "file": "NRG/rs_xgb_nrg_prod_15min_0326.pkl",
+          "sha256": "a489026a30b957c2ec09e567a85090443cdc6f3c0121e3d203cf950c894ab137"
+        }
+      ]
+    },
+    {
+      "asset": "Sun_Grow_Lucia",
+      "rows": 672,
+      "first": "2026-11-18 15:45:00+02:00",
+      "last": "2026-11-25 15:30:00+02:00",
+      "models": [
+        {
+          "file": "Sun_Grow_Lucia/rs_xgb_sgl_prod_15min_0426.pkl",
+          "sha256": "2af38ab5da32169dea386b2bd5e95f5ad25af7bf063c11bfa31d31b3f8f7373d"
+        }
+      ]
+    },
+    {
+      "asset": "Photovoltaic_Energy_Project",
+      "rows": 672,
+      "first": "2026-11-18 15:45:00+02:00",
+      "last": "2026-11-25 15:30:00+02:00",
+      "models": [
+        {
+          "file": "Photovoltaic_Energy_Project/rs_xgb_PEP_prod_15min_0126.pkl",
+          "sha256": "9898c3f29114127ed504dcca19944301898b5f658969f6acb2bab14d779efc9c"
+        }
+      ]
+    },
+    {
+      "asset": "MM_MV",
+      "rows": 672,
+      "first": "2026-11-18 15:45:00+02:00",
+      "last": "2026-11-25 15:30:00+02:00",
+      "models": [
+        {
+          "file": "MM_MV/rs_xgb_mm&mv_prod_15min_0926.pkl",
+          "sha256": "b4c6feba66c656920fca42eafa06aaf4c8c2a486c09aa6f9eba51dce2e8e6393"
+        }
+      ]
+    },
+    {
+      "asset": "Rosiori",
+      "rows": 672,
+      "first": "2026-11-18 15:45:00+02:00",
+      "last": "2026-11-25 15:30:00+02:00",
+      "models": [
+        {
+          "file": "Rosiori/rs_xgb_rosiori_prod_15min_0926.pkl",
+          "sha256": "5b29eccce0eb63ab33a041ab41b8a904543fca873346bfefba72d798d269ad10"
+        }
+      ]
+    },
+    {
+      "asset": "Necaluxan",
+      "rows": 672,
+      "first": "2026-11-18 15:45:00+02:00",
+      "last": "2026-11-25 15:30:00+02:00",
+      "models": [
+        {
+          "file": "Necaluxan/rs_xgb_necaluxan_prod_15min_1026.pkl",
+          "sha256": "0c09204ffacbda602394e8206bc0483b1b8dccd83a115fc8e37925b1a284c246"
+        }
+      ]
+    },
+    {
+      "asset": "Adrem",
+      "rows": 672,
+      "first": "2026-11-18 15:45:00+02:00",
+      "last": "2026-11-25 15:30:00+02:00",
+      "models": [
+        {
+          "file": "Adrem/rs_xgb_adrem_prod_15min_0926.pkl",
+          "sha256": "4ae6c33a4c2b8d6178c9f02250e3a8c2ce57e6aea13a07a4b037f72987af212e"
+        }
+      ]
+    },
+    {
+      "asset": "Anto",
+      "rows": 672,
+      "first": "2026-11-18 15:45:00+02:00",
+      "last": "2026-11-25 15:30:00+02:00",
+      "models": [
+        {
+          "file": "Anto/rs_xgb_anto_prod_15min_0926.pkl",
+          "sha256": "69d55cd37cecd1e5caa8e9c24569f80ca01ba39ed02253cdbdeea7bcea3c0b38"
+        }
+      ]
+    },
+    {
+      "asset": "Ferma",
+      "rows": 672,
+      "first": "2026-11-18 15:45:00+02:00",
+      "last": "2026-11-25 15:30:00+02:00",
+      "models": [
+        {
+          "file": "Ferma/rs_xgb_ferma_prod_15min_1026.pkl",
+          "sha256": "c78a7456a28005037ec52bf62516a27e45041fb4e92d04675a852795b2554c88"
+        }
+      ]
+    },
+    {
+      "asset": "HNG",
+      "rows": 672,
+      "first": "2026-11-18 15:45:00+02:00",
+      "last": "2026-11-25 15:30:00+02:00",
+      "models": [
+        {
+          "file": "HNG/rs_xgb_hng_prod_15min_1026.pkl",
+          "sha256": "3cb749e7981af65dd0e1bcb5e113facae6d111c537714895d2851156efce23c2"
+        }
+      ]
+    },
+    {
+      "asset": "AnaSun",
+      "rows": 672,
+      "first": "2026-11-18 15:45:00+02:00",
+      "last": "2026-11-25 15:30:00+02:00",
+      "models": [
+        {
+          "file": "AnaSun/rs_xgb_anasun_prod_15min_1026.pkl",
+          "sha256": "b0abf5afdfb0c25774a8d66486f8b7f594ffe9f4e97e1c8747105e72c2746e31"
+        }
+      ]
+    },
+    {
+      "asset": "GCSP",
+      "rows": 672,
+      "first": "2026-11-18 15:45:00+02:00",
+      "last": "2026-11-25 15:30:00+02:00",
+      "models": [
+        {
+          "file": "GCSP/rs_xgb_gcsp_prod_15min_0826.pkl",
+          "sha256": "d3021c8b0f639509a2aeb549e3f86a91bd5171aa7c80d2cdadd6d37939bfda40"
+        }
+      ]
+    },
+    {
+      "asset": "Start_Fotovoltaice",
+      "rows": 672,
+      "first": "2026-11-18 15:45:00+02:00",
+      "last": "2026-11-25 15:30:00+02:00",
+      "models": [
+        {
+          "file": "Start Fotovoltaice/rs_xgb_start_fotovoltaice_prod_15min_1026.pkl",
+          "sha256": "b851d58d5d307e356f849fe502fe7d726a3bac96b14e431e7f5121d52b846298"
+        }
+      ]
+    }
+  ],
+  "corrections": [
+    {
+      "asset": "astro",
+      "status": "blocked",
+      "reason": "missing_samples",
+      "latest_reading_utc": "2026-11-18T04:31:45.742811+00:00"
+    },
+    {
+      "asset": "imperial",
+      "status": "verified",
+      "origin": "2026-11-18 15:30:00",
+      "rows": 33,
+      "actual_mwh": 0.018722190139745767,
+      "baseline_first_mwh": 0.079,
+      "corrected_first_mwh": 0.019,
+      "weight": 1.0
+    },
+    {
+      "asset": "mm_mv",
+      "status": "verified",
+      "origin": "2026-11-18 15:30:00",
+      "rows": 33,
+      "actual_mwh": 0.005870796114751388,
+      "baseline_first_mwh": 0.028,
+      "corrected_first_mwh": 0.006,
+      "weight": 1.0
+    },
+    {
+      "asset": "elnet",
+      "status": "verified",
+      "origin": "2026-11-18 15:30:00",
+      "rows": 33,
+      "actual_mwh": 0.09984391680324124,
+      "baseline_first_mwh": 0.027,
+      "corrected_first_mwh": 0.1,
+      "weight": 1.0
+    },
+    {
+      "asset": "horeco",
+      "status": "verified",
+      "origin": "2026-11-18 15:30:00",
+      "rows": 33,
+      "actual_mwh": 0.11356890774930556,
+      "baseline_first_mwh": 0.01,
+      "corrected_first_mwh": 0.114,
+      "weight": 1.0
+    },
+    {
+      "asset": "hng",
+      "status": "verified",
+      "origin": "2026-11-18 15:30:00",
+      "rows": 33,
+      "actual_mwh": 0.04004167016830973,
+      "baseline_first_mwh": 0.0,
+      "corrected_first_mwh": 0.04,
+      "weight": 1.0
+    },
+    {
+      "asset": "incuba",
+      "status": "blocked",
+      "reason": "missing_samples",
+      "latest_reading_utc": "2026-11-18T09:47:47.816660+00:00"
+    },
+    {
+      "asset": "anto",
+      "status": "verified",
+      "origin": "2026-11-18 15:30:00",
+      "rows": 33,
+      "actual_mwh": 0.0050600420298258335,
+      "baseline_first_mwh": 0.0,
+      "corrected_first_mwh": 0.005,
+      "weight": 1.0
+    },
+    {
+      "asset": "ferma",
+      "status": "verified",
+      "origin": "2026-11-18 15:30:00",
+      "rows": 33,
+      "actual_mwh": 0.14695246679862864,
+      "baseline_first_mwh": 0.023,
+      "corrected_first_mwh": 0.147,
+      "weight": 1.0
+    },
+    {
+      "asset": "necaluxan",
+      "status": "verified",
+      "origin": "2026-11-18 15:30:00",
+      "rows": 33,
+      "actual_mwh": 0.16679310161695973,
+      "baseline_first_mwh": 0.108,
+      "corrected_first_mwh": 0.167,
+      "weight": 1.0
+    },
+    {
+      "asset": "ulmeni",
+      "status": "verified",
+      "origin": "2026-11-18 15:30:00",
+      "rows": 33,
+      "actual_mwh": 0.16291093975375137,
+      "baseline_first_mwh": 0.046,
+      "corrected_first_mwh": 0.163,
+      "weight": 1.0
+    },
+    {
+      "asset": "start_fotovoltaice",
+      "status": "verified",
+      "origin": "2026-11-18 15:30:00",
+      "rows": 33,
+      "actual_mwh": 0.05968005090624389,
+      "baseline_first_mwh": 0.031,
+      "corrected_first_mwh": 0.06,
+      "weight": 1.0
+    },
+    {
+      "asset": "anasun",
+      "status": "verified",
+      "origin": "2026-11-18 15:30:00",
+      "rows": 33,
+      "actual_mwh": 0.10144679587166666,
+      "baseline_first_mwh": 0.04,
+      "corrected_first_mwh": 0.101,
+      "weight": 1.0
+    },
+    {
+      "asset": "renewable_energy_holding",
+      "status": "verified",
+      "origin": "2026-11-18 15:30:00",
+      "rows": 33,
+      "actual_mwh": 0.05658041388296931,
+      "baseline_first_mwh": 0.024,
+      "corrected_first_mwh": 0.057,
+      "weight": 1.0
+    }
+  ],
+  "fresh_weather": true,
+  "checked_at": "2026-11-18T15:30:14.770335+02:00",
+  "export": {
+    "quarters": 672,
+    "hours": 167,
+    "assets": 24,
+    "duplicate_utc": 0
+  },
+  "status": "degraded"
+}
