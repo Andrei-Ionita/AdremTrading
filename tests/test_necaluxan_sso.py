@@ -7,6 +7,7 @@ from power_reading.scrapers.necaluxan_scraper import (
     NecaluxanReadOnlyError,
     NecaluxanScraper,
     _VCOM_LOGIN_DESTINATION_RE,
+    _ExpiredVcomChallenge,
 )
 
 
@@ -69,6 +70,25 @@ class NecaluxanSSOTests(unittest.TestCase):
                 self.scraper._login_vcom(Mock())
         login.assert_called_once()
 
+    def test_expired_challenge_restarts_from_portal_once(self):
+        page = Mock()
+        with patch.object(self.scraper, "_login_vcom_once", side_effect=[
+            _ExpiredVcomChallenge("expired"), None
+        ]) as login:
+            self.scraper._login_vcom(page)
+        self.assertEqual(login.call_count, 2)
+        page.goto.assert_called_once_with(self.scraper.target_url, wait_until="domcontentloaded")
+
+    def test_repeated_expiration_is_not_an_unbounded_login_loop(self):
+        page = Mock()
+        with patch.object(self.scraper, "_login_vcom_once", side_effect=_ExpiredVcomChallenge(
+            "expired"
+        )) as login:
+            with self.assertRaisesRegex(NecaluxanReadOnlyError, "newly issued login challenge"):
+                self.scraper._login_vcom(page)
+        self.assertEqual(login.call_count, 3)
+        self.assertEqual(page.goto.call_count, 2)
+
     def test_sso_waits_past_intermediate_redirect(self):
         page = Mock(url="https://www1.meteocontrol.de/vcom/login-oauth")
         def arrive(*args, **kwargs):
@@ -101,11 +121,31 @@ class NecaluxanSSOTests(unittest.TestCase):
                     """
                 ))
                 page.goto("https://auth.meteocontrol.com/test")
-                self.scraper._complete_meteocontrol_sso(page)
+                with patch.object(self.scraper, "_wait_for_sso_step") as step:
+                    self.scraper._complete_meteocontrol_sso(page)
+                self.assertEqual(step.call_count, 2)
                 self.assertEqual(page.evaluate("submitted"), [
                     {"username": "test-user", "password": None},
                     {"username": "test-user", "password": "test-password"},
                 ])
+            finally:
+                browser.close()
+
+    def test_expired_challenge_is_detected_without_waiting_for_password(self):
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(headless=True)
+            try:
+                page = browser.new_page()
+                page.route("https://auth.meteocontrol.com/**", lambda route: route.fulfill(
+                    content_type="text/html", body="""
+                    <p>Your login attempt timed out. Login will start from the beginning.</p>
+                    <input id="username"><input id="kc-login" type="submit">
+                    """
+                ))
+                page.goto("https://auth.meteocontrol.com/test")
+                for password_step in (True, False):
+                    with self.assertRaises(_ExpiredVcomChallenge):
+                        self.scraper._wait_for_sso_step(page, password_step=password_step)
             finally:
                 browser.close()
 

@@ -40,6 +40,10 @@ class NecaluxanReadOnlyError(RuntimeError):
     pass
 
 
+class _ExpiredVcomChallenge(NecaluxanReadOnlyError):
+    pass
+
+
 class NecaluxanScraper:
     """Read Slatioara live power without interacting with any control commands."""
 
@@ -64,6 +68,7 @@ class NecaluxanScraper:
         self.user_data_dir = Path(user_data_dir)
         self.browser_timeout_ms = browser_timeout_ms
         self.headless = headless
+        self.session_store = None
 
     def scrape_once(self) -> PowerSnapshot:
         self._validate_credentials()
@@ -73,31 +78,54 @@ class NecaluxanScraper:
                 headless=self.headless,
                 args=["--window-size=1800,1100"],
             )
+            saved_session = self._load_session()
             context: BrowserContext = browser.new_context(
                 ignore_https_errors=True,
                 viewport={"width": 1800, "height": 1100},
+                **({"storage_state": saved_session["storage_state"]} if saved_session else {}),
             )
             try:
                 page = context.new_page()
                 page.set_default_timeout(self.browser_timeout_ms)
-                page.goto(self.target_url, wait_until="domcontentloaded")
+                page.goto(saved_session["url"] if saved_session else self.target_url,
+                          wait_until="domcontentloaded")
                 self._login_vcom(page)
                 self._open_plant_cockpit(page)
                 self._open_power_control(page)
+                from power_reading.necaluxan_session import vcom_session_state
+                session = vcom_session_state(context) if self.session_store else None
                 master_page = self._open_bluelog_master(context, page)
                 self._login_bluelog(master_page)
                 power_kw, raw_value = self._read_actual_power(master_page)
+                observed_at = datetime.now(tz=timezone.utc).isoformat()
+                self._save_session(session)
                 return PowerSnapshot(
                     pv_kw=power_kw,
                     load_kw=None,
                     grid_kw=None,
-                    timestamp_utc=datetime.now(tz=timezone.utc).isoformat(),
+                    timestamp_utc=observed_at,
                     source="meteocontrol-bluelog-actual-power",
                     raw_excerpt=f"Actual power {raw_value}",
                 )
             finally:
                 context.close()
                 browser.close()
+
+    def _load_session(self):
+        if self.session_store is None:
+            return None
+        try:
+            return self.session_store.load()
+        except Exception:
+            # A cache failure must not prevent an otherwise valid live login.
+            return None
+
+    def _save_session(self, state) -> None:
+        if self.session_store is not None and state is not None:
+            try:
+                self.session_store.save(state)
+            except Exception:
+                pass
 
     def read_interval_energy(self, *, start: datetime, end: datetime) -> float:
         self._validate_credentials()
@@ -159,11 +187,18 @@ class NecaluxanScraper:
 
     def _login_vcom(self, page) -> None:
         # Redirects can replace the document between a locator check and its use.
-        # Reinspect the current page; never reload the login URL during recovery.
+        # Resume navigation races in place; only an explicit expired challenge
+        # warrants restarting the portal's login flow.
         for attempt in range(3):
             try:
                 self._login_vcom_once(page)
                 return
+            except _ExpiredVcomChallenge as exc:
+                if attempt == 2:
+                    raise NecaluxanReadOnlyError(
+                        "VCOM expired a newly issued login challenge; no current power was read."
+                    ) from exc
+                page.goto(self.target_url, wait_until="domcontentloaded")
             except PlaywrightError as exc:
                 if not _is_navigation_error(exc):
                     raise
@@ -239,11 +274,37 @@ class NecaluxanScraper:
         password = page.locator("input#password")
         if not password.is_visible():
             page.locator("input#kc-login[type='submit']").click()
-            password.wait_for(state="visible")
+            if self._wait_for_sso_step(page, password_step=True) == "authenticated":
+                return
             # Username discovery can replace the form and clear the username.
             username.fill(self.username)
         password.fill(self.password)
         page.locator("input#kc-login[type='submit']").click()
+        self._wait_for_sso_step(page, password_step=False)
+
+    def _wait_for_sso_step(self, page, *, password_step: bool) -> str:
+        result = page.wait_for_function(
+            """({portalPattern, passwordStep}) => {
+                if (new RegExp(portalPattern).test(location.href)) return 'authenticated';
+                if (location.hostname !== 'auth.meteocontrol.com') return false;
+                const text = document.body ? document.body.innerText : '';
+                if (text.includes('Your login attempt timed out. Login will start from the beginning.'))
+                    return 'expired';
+                const password = document.querySelector('input#password');
+                if (passwordStep && password && password.getClientRects().length)
+                    return 'password';
+                return false;
+            }""",
+            arg={"portalPattern": _VCOM_PORTAL_RE.pattern, "passwordStep": password_step},
+            timeout=self.browser_timeout_ms,
+        )
+        try:
+            state = result.json_value()
+            if state == "expired":
+                raise _ExpiredVcomChallenge("VCOM login challenge expired.")
+            return state
+        finally:
+            result.dispose()
 
     def _open_plant_cockpit(self, page) -> None:
         row = page.locator("li[title]", has_text=self.plant_name)

@@ -340,8 +340,9 @@ def _build_scraper(spec: AssetSpec, *, headless: bool):
 
     if spec.asset_type == "necaluxan":
         from .scrapers.necaluxan_scraper import NecaluxanScraper
+        from .necaluxan_session import NecaluxanSessionStore
 
-        return NecaluxanScraper(
+        scraper = NecaluxanScraper(
             target_url=url,
             username=username,
             password=password,
@@ -352,6 +353,8 @@ def _build_scraper(spec: AssetSpec, *, headless: bool):
             headless=headless,
             browser_timeout_ms=_int_env("NECALUXAN_BROWSER_TIMEOUT_MS", 60_000),
         )
+        scraper.session_store = NecaluxanSessionStore(username, password, profile_dir)
+        return scraper
 
     if spec.asset_type in {"isolarcloud", "anasun_isolarcloud"}:
         from .scrapers.isolarcloud_scraper import ISolarCloudScraper
