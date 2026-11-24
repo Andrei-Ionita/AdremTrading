@@ -86,13 +86,10 @@ class VeltolScraper:
                         return
                     self._statistics_snapshot = None
                     try:
-                        if response.status != 200:
-                            raise VeltolTelemetryError('HNG/Veltol statistics request failed.')
-                        self._statistics_snapshot = _veltol_power_snapshot(response.json(), location_id)
+                        self._statistics_snapshot = _veltol_response_snapshot(response, location_id)
                         self._statistics_error = None
-                    except Exception as exc:
-                        self._statistics_error = (exc if isinstance(exc, VeltolTelemetryError) else
-                            VeltolTelemetryError('HNG/Veltol statistics response is invalid.'))
+                    except (VeltolTelemetryError, VeltolDashboardNotReady) as exc:
+                        self._statistics_error = exc
                 page.on('response', capture)
                 self._open_dashboard(page)
                 if self._statistics_snapshot is None:
@@ -265,6 +262,18 @@ class VeltolScraper:
         if unit == "w":
             return value / 1000.0
         return value
+
+
+def _veltol_response_snapshot(response, location_id: int) -> PowerSnapshot:
+    if response.status in (408, 500, 502, 503, 504):
+        raise VeltolDashboardNotReady('HNG/Veltol statistics service is temporarily unavailable.')
+    if response.status != 200:
+        raise VeltolTelemetryError('HNG/Veltol statistics request was rejected.')
+    try:
+        payload = response.json()
+    except Exception as exc:
+        raise VeltolTelemetryError('HNG/Veltol statistics response is invalid.') from exc
+    return _veltol_power_snapshot(payload, location_id)
 
 
 def _veltol_power_snapshot(payload: dict, location_id: int, *, now=None) -> PowerSnapshot:

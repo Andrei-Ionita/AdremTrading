@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 from playwright.sync_api import Error as PlaywrightError
 from power_reading.scrapers.veltol_scraper import (
     VeltolScraper, VeltolDashboardNotReady, VeltolTelemetryError, _veltol_power_snapshot,
+    _veltol_response_snapshot,
 )
 
 
@@ -105,6 +106,24 @@ class VeltolStatisticsTests(unittest.TestCase):
                 with self.assertRaises(type(exc)):
                     scraper.scrape_once()
                 self.assertEqual(attempt.call_count, 1)
+
+    def test_transient_statistics_http_errors_are_retryable(self):
+        for status in (408, 500, 502, 503, 504):
+            response = Mock(status=status)
+            with self.assertRaises(VeltolDashboardNotReady):
+                _veltol_response_snapshot(response, 3068)
+            response.json.assert_not_called()
+
+    def test_rejected_or_rate_limited_requests_are_not_retried(self):
+        for status in (401, 403, 404, 429):
+            with self.assertRaises(VeltolTelemetryError):
+                _veltol_response_snapshot(Mock(status=status), 3068)
+
+    def test_invalid_response_body_is_not_exposed(self):
+        response = Mock(status=200)
+        response.json.side_effect = ValueError('sensitive response body')
+        with self.assertRaisesRegex(VeltolTelemetryError, '^HNG/Veltol statistics response is invalid.$'):
+            _veltol_response_snapshot(response, 3068)
 
 
 if __name__ == '__main__':
