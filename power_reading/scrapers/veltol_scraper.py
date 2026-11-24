@@ -1,13 +1,14 @@
 ﻿from __future__ import annotations
 
 import re
+import math
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
-from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_playwright
+from playwright.sync_api import Error as PlaywrightError, TimeoutError as PlaywrightTimeoutError, sync_playwright
 
 from power_reading.scrapers.fusionsolar_scraper import PowerSnapshot
 
@@ -17,6 +18,14 @@ POWER_PATTERNS = {
     "solar": re.compile(r"(?is)([+-]?[0-9]+(?:[.,][0-9]+)?)\s*(W|kW|MW)\s*Solar\b"),
     "other": re.compile(r"(?is)([+-]?[0-9]+(?:[.,][0-9]+)?)\s*(W|kW|MW)\s*Other\b"),
 }
+
+
+class VeltolDashboardNotReady(RuntimeError):
+    pass
+
+
+class VeltolTelemetryError(RuntimeError):
+    pass
 
 
 class VeltolScraper:
@@ -35,8 +44,31 @@ class VeltolScraper:
         self.user_data_dir = Path(user_data_dir)
         self.browser_timeout_ms = browser_timeout_ms
         self.headless = headless
+        self._capture_live = False
+        self._statistics_snapshot = None
+        self._statistics_error = None
 
     def scrape_once(self) -> PowerSnapshot:
+        for attempt in range(2):
+            try:
+                return self._scrape_once()
+            except (VeltolDashboardNotReady, PlaywrightError) as exc:
+                transient = isinstance(exc, (VeltolDashboardNotReady, PlaywrightTimeoutError)) or any(
+                    code in str(exc) for code in ('ERR_CONNECTION_RESET', 'ERR_CONNECTION_CLOSED', 'ERR_TIMED_OUT')
+                )
+                if not transient or attempt:
+                    raise
+            finally:
+                self._capture_live = False
+
+    def _scrape_once(self) -> PowerSnapshot:
+        location_match = re.fullmatch(r'/locations/(\d+)/?', urlsplit(self.target_url).path)
+        if location_match is None:
+            raise VeltolTelemetryError('HNG/Veltol target location is invalid.')
+        location_id = int(location_match.group(1))
+        self._capture_live = True
+        self._statistics_snapshot = None
+        self._statistics_error = None
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=self.headless)
             context = browser.new_context(
@@ -46,24 +78,28 @@ class VeltolScraper:
             try:
                 page = context.new_page()
                 page.set_default_timeout(self.browser_timeout_ms)
+                def capture(response):
+                    target = urlsplit(self.target_url)
+                    url = urlsplit(response.url)
+                    if ((url.scheme, url.netloc) != (target.scheme, target.netloc)
+                            or url.path != f'/api/locations/{location_id}/statistics'):
+                        return
+                    self._statistics_snapshot = None
+                    try:
+                        if response.status != 200:
+                            raise VeltolTelemetryError('HNG/Veltol statistics request failed.')
+                        self._statistics_snapshot = _veltol_power_snapshot(response.json(), location_id)
+                        self._statistics_error = None
+                    except Exception as exc:
+                        self._statistics_error = (exc if isinstance(exc, VeltolTelemetryError) else
+                            VeltolTelemetryError('HNG/Veltol statistics response is invalid.'))
+                page.on('response', capture)
                 self._open_dashboard(page)
-                text = self._collect_text(page)
-
-                pv_kw = self._extract_kw(text, "solar")
-                grid_kw = self._extract_kw(text, "grid")
-                other_kw = self._extract_kw(text, "other")
-
-                load_kw = abs(other_kw) if other_kw is not None else None
-
-                return PowerSnapshot(
-                    pv_kw=pv_kw,
-                    load_kw=load_kw,
-                    grid_kw=grid_kw,
-                    timestamp_utc=datetime.now(tz=timezone.utc).isoformat(),
-                    source="veltol-text",
-                    raw_excerpt=_compact_excerpt(text),
-                )
+                if self._statistics_snapshot is None:
+                    raise VeltolDashboardNotReady('HNG/Veltol current power did not arrive.')
+                return self._statistics_snapshot
             finally:
+                self._capture_live = False
                 context.close()
                 browser.close()
 
@@ -181,11 +217,18 @@ class VeltolScraper:
 
     def _wait_for_dashboard(self, page) -> None:
         for _ in range(20):
+            if self._capture_live:
+                if self._statistics_snapshot is not None:
+                    return
+                page.wait_for_timeout(1_000)
+                continue
             text = self._collect_text(page)
             if "Solar Production" in text and "Grid" in text and "Solar" in text:
                 return
             page.wait_for_timeout(1_000)
-        raise RuntimeError("HNG/Veltol dashboard did not finish loading.")
+        if self._capture_live and self._statistics_error is not None:
+            raise self._statistics_error
+        raise VeltolDashboardNotReady("HNG/Veltol dashboard did not finish loading.")
 
     def _collect_text(self, page) -> str:
         parts: list[str] = []
@@ -222,6 +265,53 @@ class VeltolScraper:
         if unit == "w":
             return value / 1000.0
         return value
+
+
+def _veltol_power_snapshot(payload: dict, location_id: int, *, now=None) -> PowerSnapshot:
+    try:
+        envelope = payload['data']
+        status = envelope['status']
+        location = status['location']
+        solar = envelope['data']['solar']
+        controllers = status['controllers']
+        if location['id'] != location_id:
+            raise VeltolTelemetryError('HNG/Veltol statistics belong to another location.')
+        if (location.get('isDataAvailable') is not True or not controllers
+                or any(c.get('isConnected') is not True for c in controllers)
+                or solar.get('active') is not True or solar.get('supported') is not True):
+            raise VeltolTelemetryError('HNG/Veltol solar telemetry is disconnected or unavailable.')
+        stamp = solar['measuredAt']
+        if isinstance(stamp, bool) or not isinstance(stamp, (int, float)) or not math.isfinite(stamp):
+            raise VeltolTelemetryError('HNG/Veltol measurement timestamp is invalid.')
+        observed = datetime.fromtimestamp(stamp, tz=timezone.utc)
+        age = ((now or datetime.now(timezone.utc)) - observed).total_seconds()
+        if age > 300 or age < -60:
+            raise VeltolTelemetryError('HNG/Veltol solar measurement is stale or in the future.')
+        measurement = solar['measurements']['solarExport']
+        if measurement.get('type') != 'POWER':
+            raise VeltolTelemetryError('HNG/Veltol solar measurement is not power.')
+        pv_kw = _measurement_kw(measurement)
+        if pv_kw is None or pv_kw < 0:
+            raise VeltolTelemetryError('HNG/Veltol current solar power is invalid.')
+        grid_kw = _measurement_kw(envelope['data'].get('grid', {}).get('basePower', {}))
+        other_kw = _measurement_kw(envelope['data'].get('other', {}).get('basePower', {}))
+        return PowerSnapshot(pv_kw=pv_kw, grid_kw=grid_kw,
+            load_kw=abs(other_kw) if other_kw is not None else None,
+            timestamp_utc=observed.isoformat(), source='veltol-statistics',
+            raw_excerpt=f'Solar {pv_kw:g} kW')
+    except (KeyError, TypeError, ValueError, OverflowError, AttributeError) as exc:
+        raise VeltolTelemetryError('HNG/Veltol statistics response is invalid.') from exc
+
+
+def _measurement_kw(measurement) -> Optional[float]:
+    if not isinstance(measurement, dict):
+        return None
+    value = measurement.get('value')
+    factor = {'W': .001, 'kW': 1.0, 'MW': 1000.0}.get(measurement.get('unit'))
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or factor is None:
+        return None
+    result = value * factor
+    return result if math.isfinite(result) else None
 
 
 def _parse_number(raw: str) -> Optional[float]:
