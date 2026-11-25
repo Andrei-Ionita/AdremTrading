@@ -3,11 +3,12 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
-from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_playwright
 
 from power_reading.scrapers.fusionsolar_scraper import (
     FusionSolarAuthenticationError,
     FusionSolarVerificationRequired,
+    FusionSolarConsentRequired,
     FusionSolarScraper,
     PowerSnapshot,
 )
@@ -201,6 +202,41 @@ class FusionSolarAuthenticationTests(unittest.TestCase):
         page.locator.return_value.count.return_value = 1
         with self.assertRaises(FusionSolarVerificationRequired):
             self.scraper()._wait_for_authenticated_page(page)
+
+    def test_updated_agreements_are_not_an_auth_retry(self):
+        scraper = self.scraper()
+        with patch.object(scraper, '_scrape_once', side_effect=FusionSolarConsentRequired('review required')) as read:
+            with self.assertRaises(FusionSolarConsentRequired):
+                scraper.scrape_once()
+        self.assertEqual(read.call_count, 1)
+
+    def test_update_notice_is_reported_without_clicking_agree(self):
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(headless=True)
+            try:
+                page = browser.new_page()
+                page.route('https://example.test/**', lambda route: route.fulfill(
+                    content_type='text/html', body='''
+                    <h2>Update Notice</h2>
+                    <p>To provide better services, we have updated our Privacy Statement and User Agreement.</p>
+                    <p>Please read the Privacy Statement carefully and agree to the User Agreement.</p>
+                    <button onclick="window.accepted=true">Agree</button>
+                    <script>window.accepted=false;</script>
+                    '''))
+                page.goto('https://example.test/uniportal/pvmswebsite/cloud.html#/home/list')
+                with self.assertRaisesRegex(FusionSolarConsentRequired, 'review and acceptance'):
+                    self.scraper(plant_name='CEF HORECO Costesti')._wait_for_plant_list(page)
+                self.assertFalse(page.evaluate('window.accepted'))
+            finally:
+                browser.close()
+
+    def test_consent_result_handle_is_disposed(self):
+        page = Mock(url='https://example.test/uniportal/pvmswebsite/cloud.html#/home/list')
+        handle = page.wait_for_function.return_value
+        handle.json_value.return_value = 'consent-required'
+        with self.assertRaises(FusionSolarConsentRequired):
+            self.scraper(plant_name='CEF HORECO Costesti')._wait_for_plant_list(page)
+        handle.dispose.assert_called_once()
 
 
 if __name__ == '__main__':

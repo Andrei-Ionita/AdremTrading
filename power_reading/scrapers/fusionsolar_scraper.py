@@ -72,6 +72,10 @@ class FusionSolarVerificationRequired(RuntimeError):
     """Interactive verification must be completed before automatic reads resume."""
 
 
+class FusionSolarConsentRequired(RuntimeError):
+    """The account owner must review and accept updated portal agreements."""
+
+
 class FusionSolarScraper:
     def __init__(
         self,
@@ -558,14 +562,25 @@ class FusionSolarScraper:
         if not plant_name or not any(route in page.url for route in ("#/home/", "#/view/station/")):
             return
         try:
-            page.wait_for_function("""(plant) => {
+            result = page.wait_for_function("""(plant) => {
                 const text = (document.body.innerText || '').toLowerCase();
+                if (text.includes('update notice') &&
+                    text.includes('we have updated our privacy statement and user agreement') &&
+                    text.includes('please read the privacy statement')) return 'consent-required';
                 const overview = location.hash.startsWith('#/view/station/') &&
                     text.includes(plant) && ['active power', 'output power', 'current power'].some(label => text.includes(label));
                 return overview || Array.from(document.querySelectorAll('table tbody tr')).some(row =>
                     (row.textContent || '').toLowerCase().includes(plant));
             }
             """, arg=plant_name, timeout=15_000)
+            try:
+                if result.json_value() == 'consent-required':
+                    raise FusionSolarConsentRequired(
+                        'FusionSolar requires review and acceptance of its updated Privacy Statement '
+                        'and User Agreement in this account before power readings can resume.'
+                    )
+            finally:
+                result.dispose()
         except PlaywrightTimeoutError:
             if "login.action" in page.url.lower() or "/pvmswebsite/" not in urlsplit(page.url).path:
                 raise FusionSolarAuthenticationError(
